@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="nl" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MySeasons</title>
+  <meta name="description" content="Persoonlijke seizoenstracker voor Cambuur en het Nederlandse betaald voetbal.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/app.css">
+  <script>
+    // Thema zo vroeg mogelijk zetten, zodat er geen witte flits is bij dim/donker.
+    (function () {
+      var pref = 'light';
+      try { pref = localStorage.getItem('ms-theme') || 'light'; } catch (e) {}
+      var resolved = pref === 'system'
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : pref;
+      document.documentElement.setAttribute('data-theme', resolved);
+    })();
+  </script>
+</head>
+<body>
+  <div id="app" class="app">
+    <div class="boot" aria-live="polite">
+      <span class="wordmark">MySeasons</span>
+    </div>
+  </div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

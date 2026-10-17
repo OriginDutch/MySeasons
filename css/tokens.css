@@ -1,0 +1,60 @@
+/* ==========================================================================
+   Design tokens — Swiss grid
+   Drie thema's: light (standaard), dim, dark. "Systeem" kiest light/dark
+   via prefers-color-scheme en zet dan zelf data-theme (zie js/theme.js).
+   ========================================================================== */
+
+:root,
+:root[data-theme="light"] {
+  --bg: #FFFFFF;
+  --ink: #111111;
+  --muted: #5E6168;
+  --hairline: #E3E4E7;
+  --rule: #111111;
+  --accent: #FF4A1C;        /* alleen voor vlakken, lijnen en tekst >= 24px */
+  --accent-text: #C2330F;   /* accent als kleine tekst (contrast >= 4.5:1) */
+  --surface-hover: #F4F4F5;
+  --inverse-bg: #111111;
+  --inverse-ink: #FFFFFF;
+  --danger: #A12A0C;
+  color-scheme: light;
+}
+
+:root[data-theme="dim"] {
+  --bg: #23272E;
+  --ink: #E8EAED;
+  --muted: #A3A9B3;
+  --hairline: #3A4049;
+  --rule: #E8EAED;
+  --accent: #FF6A42;
+  --accent-text: #FF8A68;
+  --surface-hover: #2C3139;
+  --inverse-bg: #E8EAED;
+  --inverse-ink: #23272E;
+  --danger: #FF8A68;
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0B0B0C;
+  --ink: #F2F2F3;
+  --muted: #9B9DA3;
+  --hairline: #26272A;
+  --rule: #F2F2F3;
+  --accent: #FF5A2E;
+  --accent-text: #FF7A55;
+  --surface-hover: #161618;
+  --inverse-bg: #F2F2F3;
+  --inverse-ink: #0B0B0C;
+  --danger: #FF7A55;
+  color-scheme: dark;
+}
+
+:root {
+  --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --gutter: 20px;
+  --nav-h: 58px;
+  --content-max: 720px;
+  --tap: 44px;
+}

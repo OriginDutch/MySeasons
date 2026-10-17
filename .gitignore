@@ -1,0 +1,13 @@
+# Lokale bestanden
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+node_modules/
+
+# Nooit committen: data-exports en geheimen
+*.json.bak
+cambuur_tracker_data*.json
+.env
+.env.*
