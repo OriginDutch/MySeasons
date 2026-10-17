@@ -4,6 +4,7 @@
 import { esc, icons, toast } from './ui.js';
 import { getThemePref, setThemePref } from './theme.js';
 import { signOutUser, testConnection } from './firebase.js';
+import { health } from './api.js';
 import { APP_VERSION, APP_PHASE } from './version.js';
 
 function head({ kicker, title, back }) {
@@ -127,6 +128,9 @@ export const views = {
           <div class="status-line" id="conn-status"><span class="dot"></span><span>Nog niet getest</span></div>
           <p class="muted" id="conn-help" style="font-size: 12px"></p>
           <div><button class="btn" type="button" data-action="test-conn">Verbinding testen</button></div>
+          <div class="status-line" id="api-status" style="margin-top: 8px"><span class="dot"></span><span>Highlightly-Worker: nog niet getest</span></div>
+          <p class="muted" id="api-help" style="font-size: 12px"></p>
+          <div><button class="btn" type="button" data-action="test-api">API testen</button></div>
         </section>
 
         <section class="section" aria-labelledby="sec-app">
@@ -162,6 +166,29 @@ export const views = {
         if (action === 'install') {
           const accepted = await ctx.promptInstall();
           if (accepted) toast('MySeasons wordt geïnstalleerd');
+        }
+
+        if (action === 'test-api') {
+          const status = root.querySelector('#api-status');
+          const help = root.querySelector('#api-help');
+          btn.disabled = true;
+          status.innerHTML = '<span class="dot"></span><span>Bezig met testen…</span>';
+          help.textContent = '';
+          try {
+            await health();
+            status.innerHTML = '<span class="dot dot--ok"></span><span>Worker bereikbaar, je hebt toegang</span>';
+          } catch (err) {
+            status.innerHTML = `<span class="dot dot--warn"></span><span>${esc(err.message)}</span>`;
+            const hints = {
+              0: 'Kan de Worker niet bereiken. Is hij gedeployd, en staat de code erin?',
+              401: 'De Worker accepteert je login niet. Staat de juiste code erin?',
+              403: 'ALLOWED_UID in de Worker komt niet overeen met je UID hierboven.',
+              500: 'Zet HIGHLIGHTLY_KEY en ALLOWED_UID in de Worker onder Settings → Variables and Secrets.',
+            };
+            help.textContent = hints[err.status] || (err.detail ? String(err.detail) : '');
+          } finally {
+            btn.disabled = false;
+          }
         }
 
         if (action === 'test-conn') {
