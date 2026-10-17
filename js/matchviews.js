@@ -302,6 +302,7 @@ export const matchViews = {
         const btn = e.target.closest('[data-action="fetch-match"]');
         if (btn) handleFetch(btn, ctx, btn.dataset.id);
       });
+      mountSwipe(root);
     },
   },
 };
@@ -400,20 +401,55 @@ function lineupsBlock(m) {
     </section>`;
 }
 
-function playersBlock(m) {
-  const list = m.detail.players && m.detail.players[TEAM];
-  if (!list || !list.length) return '';
+function playerTable(list) {
   const played = list.filter((p) => p.minutes > 0).sort((a, b) => (a.sub - b.sub) || (b.minutes - a.minutes));
   return `
+    <table class="table">
+      <thead><tr><th>Speler</th><th>Min</th><th>G</th><th>A</th><th>Kaart</th><th>Cijfer</th></tr></thead>
+      <tbody>${played.map((p) => `<tr>
+        <td>${esc(p.name)}${p.captain ? ' <span class="muted">(c)</span>' : ''}${p.sub ? ' <span class="muted">· in</span>' : ''}</td>
+        <td class="mono">${p.minutes}</td><td class="mono">${p.goals || ''}</td><td class="mono">${p.assists || ''}</td>
+        <td>${p.red ? '<span class="card card--red" aria-label="rood"></span>' : p.yellow ? '<span class="card card--yellow" aria-label="geel"></span>' : ''}</td>
+        <td class="mono">${p.rating !== null ? p.rating.toFixed(1) : '–'}</td></tr>`).join('')}</tbody>
+    </table>`;
+}
+
+function playersBlock(m) {
+  const all = m.detail.players || {};
+  // Eigen club eerst, daarna de tegenstander.
+  const teams = [m.homeTeam, m.awayTeam]
+    .filter((t) => t && all[t.id] && all[t.id].length)
+    .sort((a, b) => (b.id === TEAM) - (a.id === TEAM));
+  if (!teams.length) return '';
+  const count = (t) => all[t.id].filter((p) => p.minutes > 0).length;
+  return `
     <section class="section">
-      <div class="section__label"><span>Spelers · ${esc(MAIN_CLUB.name)}</span><span>${played.length} gespeeld</span></div>
-      <div class="table-wrap"><table class="table">
-        <thead><tr><th>Speler</th><th>Min</th><th>G</th><th>A</th><th>Kaart</th><th>Cijfer</th></tr></thead>
-        <tbody>${played.map((p) => `<tr>
-          <td>${esc(p.name)}${p.captain ? ' <span class="muted">(c)</span>' : ''}${p.sub ? ' <span class="muted">· in</span>' : ''}</td>
-          <td class="mono">${p.minutes}</td><td class="mono">${p.goals || ''}</td><td class="mono">${p.assists || ''}</td>
-          <td>${p.red ? '<span class="card card--red"></span>' : p.yellow ? '<span class="card card--yellow"></span>' : ''}</td>
-          <td class="mono">${p.rating !== null ? p.rating.toFixed(1) : '–'}</td></tr>`).join('')}</tbody>
-      </table></div>
+      <div class="section__label"><span>Spelers</span><span>${teams.length > 1 ? 'veeg voor de tegenstander →' : ''}</span></div>
+      ${teams.length > 1 ? `<div class="swipe-tabs" role="tablist">${teams.map((t, i) => `
+        <button type="button" role="tab" class="swipe-tab" data-swipe-to="${i}" aria-selected="${i === 0}">${esc(t.name)} <span class="mono muted">${count(t)}</span></button>`).join('')}
+      </div>` : ''}
+      <div class="swipe" data-swipe>${teams.map((t) => `
+        <div class="swipe__panel" role="tabpanel" aria-label="${esc(t.name)}">${playerTable(all[t.id])}</div>`).join('')}
+      </div>
     </section>`;
+}
+
+// Tabjes en veeg-paneel synchroon houden.
+function mountSwipe(root) {
+  root.querySelectorAll('[data-swipe]').forEach((track) => {
+    const section = track.closest('.section');
+    const tabs = [...section.querySelectorAll('[data-swipe-to]')];
+    if (!tabs.length) return;
+    const setActive = (i) => tabs.forEach((t, j) => t.setAttribute('aria-selected', String(i === j)));
+    tabs.forEach((tab) => tab.addEventListener('click', () => {
+      const i = Number(tab.dataset.swipeTo);
+      track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' });
+      setActive(i);
+    }));
+    let raf = 0;
+    track.addEventListener('scroll', () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setActive(Math.round(track.scrollLeft / track.clientWidth)));
+    }, { passive: true });
+  });
 }

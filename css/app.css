@@ -347,3 +347,17 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .card { display: inline-block; width: 9px; height: 12px; border-radius: 1px; }
 .card--yellow { background: #F5C518; }
 .card--red { background: #D8261A; }
+
+/* Veegbaar blok (spelers per team) */
+.swipe-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--hairline); }
+.swipe-tab {
+  min-height: var(--tap); padding: 0 14px 0 0; margin-right: 14px;
+  font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.swipe-tab[aria-selected="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+.swipe {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
+}
+.swipe::-webkit-scrollbar { display: none; }
+.swipe__panel { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; }
