@@ -454,3 +454,23 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .crowd__row .muted { font-size: 12px; }
 .crowd__num { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
 .field-row--min { grid-template-columns: 1fr 1fr; }
+
+/* ---------- Fase 3c: selectie en spelers ---------- */
+.segmented--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.player-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 112px; gap: 8px; align-items: center; }
+.player-head { display: flex; justify-content: flex-end; font-size: 10px; color: var(--muted); padding: 0 0 4px; }
+.player-head span { width: 37px; text-align: center; }
+.player-head span:first-child { display: none; }
+.player-row__num { color: var(--muted); font-size: 13px; text-align: right; }
+.player-row__stats { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; font-size: 14px; }
+.plain-link { color: inherit; text-decoration: none; border-bottom: 1px solid var(--hairline); }
+.player-hero { display: flex; align-items: baseline; gap: 12px; }
+.player-hero__num { font-size: 56px; font-weight: 700; letter-spacing: -0.05em; line-height: 1; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--rule); }
+@media (min-width: 700px) { .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.tile { display: grid; gap: 2px; padding: 12px 8px 12px 0; border-bottom: 1px solid var(--hairline); }
+.tile__num { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; }
+.tile__label { font-size: 12px; }
+.tile__sub { font-size: 11px; }
+.log-row { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.log-row__end { display: flex; gap: 8px; align-items: center; font-size: 13px; }

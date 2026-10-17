@@ -1,3 +1,3 @@
 // Ophogen bij elke release, samen met CACHE_VERSION in sw.js.
-export const APP_VERSION = '0.5.2';
-export const APP_PHASE = 'Fase 3 · aanvullen en correcties';
+export const APP_VERSION = '0.6.0';
+export const APP_PHASE = 'Fase 3 · selectie en spelers';

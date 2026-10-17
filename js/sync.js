@@ -83,3 +83,22 @@ export async function fetchMatch(id) {
     if (calls) await countCalls(calls);
   }
 }
+
+/** Gespeelde officiële wedstrijden (geen oefenduels) zonder details. */
+export function missingDetails(list) {
+  return list.filter((m) => m.status === 'finished' && !m.detail && m.league && !/friendl/i.test(m.league.name));
+}
+
+/**
+ * Haalt de details op van alle wedstrijden in `list`, één voor één. Kost 3 calls per wedstrijd.
+ * Stopt bij de eerste fout (bijv. quotum op); wat al binnen is, blijft bewaard.
+ */
+export async function fetchMany(list, onProgress) {
+  let done = 0;
+  for (const m of list) {
+    await fetchMatch(m.id);
+    done++;
+    if (onProgress) onProgress(done, list.length);
+  }
+  return done;
+}

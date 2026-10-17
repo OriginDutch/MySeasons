@@ -17,7 +17,7 @@ const nl = (v) => Number(v).toLocaleString('nl-NL');
 
 // ---------- Bouwstenen ----------
 
-function crest(t, size = 28) {
+export function crest(t, size = 28) {
   if (!t) return '';
   const fallback = esc((t.name || '?').slice(0, 3).toUpperCase());
   return t.logo
@@ -25,7 +25,7 @@ function crest(t, size = 28) {
     : `<span class="crest crest--txt" style="width:${size}px;height:${size}px">${fallback}</span>`;
 }
 
-function head({ kicker, title, back, action }) {
+export function head({ kicker, title, back, action }) {
   return `
     <header class="page-head">
       <div class="page-head__titles">
@@ -55,7 +55,7 @@ function scoreText(m) {
 const syncButton = (label = 'Synchroniseren') =>
   `<button class="btn" type="button" data-action="sync-season">${icons.refresh}<span>${esc(label)}</span></button>`;
 
-async function runWithButton(btn, busyText, work) {
+export async function runWithButton(btn, busyText, work) {
   const label = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = `<span>${esc(busyText)}</span>`;
@@ -67,7 +67,7 @@ async function runWithButton(btn, busyText, work) {
   }
 }
 
-function explain(err) {
+export function explain(err) {
   if (err && err.status === 429) return 'Je API-quotum voor vandaag is op. Morgen weer.';
   if (err && err.status === 0) return 'Geen verbinding met de Worker. Ben je online?';
   return (err && err.message) || 'Onbekende fout';
@@ -94,7 +94,7 @@ async function handleFetch(btn, ctx, id) {
 }
 
 /** Alle wedstrijden met jouw correcties erover, plus het aantal afwijkingen. */
-async function correctedList() {
+export async function correctedList() {
   const [list, notes] = await Promise.all([getAllMatches(), getAllNotes()]);
   let total = 0; let conflicts = 0;
   const out = list.map((m) => {
@@ -569,13 +569,13 @@ function lineupsBlock(m) {
     </section>`;
 }
 
-function playerTable(list) {
+function playerTable(list, link) {
   const played = list.filter((p) => p.minutes > 0).sort((a, b) => (a.sub - b.sub) || (b.minutes - a.minutes));
   return `
     <table class="table">
       <thead><tr><th>Speler</th><th>Min</th><th>G</th><th>A</th><th>Kaart</th><th>Cijfer</th></tr></thead>
       <tbody>${played.map((p) => `<tr>
-        <td>${esc(p.name)}${p.captain ? ' <span class="muted">(c)</span>' : ''}${p.sub ? ' <span class="muted">· in</span>' : ''}</td>
+        <td>${link ? `<a class="plain-link" href="#/speler/${p.id}">${esc(p.name)}</a>` : esc(p.name)}${p.captain ? ' <span class="muted">(c)</span>' : ''}${p.sub ? ' <span class="muted">· in</span>' : ''}</td>
         <td class="mono">${p.minutes}</td><td class="mono">${p.goals || ''}</td><td class="mono">${p.assists || ''}</td>
         <td>${p.red ? '<span class="card card--red" aria-label="rood"></span>' : p.yellow ? '<span class="card card--yellow" aria-label="geel"></span>' : ''}</td>
         <td class="mono">${p.rating !== null ? p.rating.toFixed(1) : '–'}</td></tr>`).join('')}</tbody>
@@ -597,7 +597,7 @@ function playersBlock(m) {
         <button type="button" role="tab" class="swipe-tab" data-swipe-to="${i}" aria-selected="${i === 0}">${esc(t.name)} <span class="mono muted">${count(t)}</span></button>`).join('')}
       </div>` : ''}
       <div class="swipe" data-swipe>${teams.map((t) => `
-        <div class="swipe__panel" role="tabpanel" aria-label="${esc(t.name)}">${playerTable(all[t.id])}</div>`).join('')}
+        <div class="swipe__panel" role="tabpanel" aria-label="${esc(t.name)}">${playerTable(all[t.id], t.id === TEAM)}</div>`).join('')}
       </div>
     </section>`;
 }

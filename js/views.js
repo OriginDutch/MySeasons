@@ -4,6 +4,7 @@
 import { esc, icons, toast } from './ui.js';
 import { matchViews } from './matchviews.js';
 import { editorViews } from './editor.js';
+import { playerViews } from './playerviews.js';
 import { getCallsToday, getAllMatches, getAllNotes } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
 import { getThemePref, setThemePref } from './theme.js';
@@ -33,16 +34,7 @@ function empty(title, text) {
 export const views = {
   ...matchViews,
   ...editorViews,
-
-  selectie: {
-    title: 'Selectie',
-    render() {
-      return `
-        ${head({ kicker: 'MySeasons / Cambuur', title: 'Selectie' })}
-        <section class="section">${empty('Nog leeg', 'Spelers en spelerspagina’s komen in fase 5.')}</section>`;
-    },
-  },
-
+  ...playerViews,
 
   meer: {
     title: 'Meer',
