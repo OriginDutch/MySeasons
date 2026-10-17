@@ -65,3 +65,8 @@ export function hl(path, params) {
 export function viNews(tag) {
   return call('/news/vi', tag ? { tag } : undefined);
 }
+
+/** RSSSF-seizoenspagina via de Worker (ned2025 = seizoen 2024/25). Kost geen Highlightly-quotum. */
+export function rsssf(year) {
+  return call(`/rsssf/ned${year}`);
+}

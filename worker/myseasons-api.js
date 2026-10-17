@@ -5,7 +5,9 @@
 // 2. Stuurt alleen toegestane Highlightly-aanvragen door, met de key die hier als secret staat.
 // 3. Haalt VI-nieuws op (/news/vi, of per club /news/vi?tag=sc-cambuur) en geeft alleen
 //    kop, teaser, link, datum en tags terug.
-// 4. Zet CORS-headers zodat alleen de MySeasons-app hem kan gebruiken.
+// 4. Haalt een RSSSF-seizoenspagina voor Nederland op (/rsssf/ned2025), ongewijzigd als tekst.
+//    RSSSF staat kopiëren toe met bronvermelding (Karel Stokkermans / RSSSF); de app toont die.
+// 5. Zet CORS-headers zodat alleen de MySeasons-app hem kan gebruiken.
 //
 // Instellen in Cloudflare (Settings → Variables and Secrets):
 //   HIGHLIGHTLY_KEY  (type Secret)  je Highlightly API-key
@@ -128,6 +130,23 @@ async function viNews(tag) {
   return parseFeed(await res.text());
 }
 
+// ---------- RSSSF ----------
+
+async function rsssfPage(year) {
+  const url = `https://www.rsssf.org/tablesn/ned${year}.html`;
+  const res = await fetch(url, {
+    cf: { cacheTtl: 86400, cacheEverything: true },
+    headers: { 'User-Agent': 'MySeasons/1.0 (persoonlijke seizoenstracker; eenmalig per seizoen)' },
+  });
+  if (!res.ok) throw Object.assign(new Error(`RSSSF gaf ${res.status}`), { status: res.status });
+  const buf = await res.arrayBuffer();
+  const type = res.headers.get('Content-Type') || '';
+  const charset = (type.match(/charset=([\w-]+)/i) || [])[1] || 'windows-1252';
+  let text;
+  try { text = new TextDecoder(charset).decode(buf); } catch { text = new TextDecoder('windows-1252').decode(buf); }
+  return { url, text };
+}
+
 // ---------- Firebase ID-token controleren ----------
 
 let jwksCache = { keys: null, expiresAt: 0 };
@@ -226,6 +245,19 @@ export default {
         return json({ items: await viNews(tag), tag: tag || null, fetchedAt: new Date().toISOString() }, 200, origin, { 'Cache-Control': 'no-store' });
       } catch (err) {
         return json({ error: 'VI-feed niet bereikbaar', detail: err.message }, 502, origin);
+      }
+    }
+
+    // RSSSF-seizoenspagina: alleen /rsssf/nedJJJJ, geen Highlightly-call.
+    const rs = url.pathname.match(/^\/rsssf\/ned(\d{4})$/);
+    if (rs) {
+      const year = Number(rs[1]);
+      if (year < 1956 || year > 2040) return json({ error: 'Onbekend seizoen' }, 400, origin);
+      try {
+        const page = await rsssfPage(year);
+        return json({ ...page, fetchedAt: new Date().toISOString() }, 200, origin, { 'Cache-Control': 'no-store' });
+      } catch (err) {
+        return json({ error: 'RSSSF niet bereikbaar', detail: err.message }, err.status === 404 ? 404 : 502, origin);
       }
     }
 
