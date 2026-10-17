@@ -374,14 +374,18 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .st-pts { font-weight: 600; }
 .stand tr.is-me td { background: var(--surface-hover); font-weight: 600; }
 .stand tr.is-me .st-pos { color: var(--ink); box-shadow: inset 3px 0 0 var(--accent); }
-.stand tr.zone--playoff .st-pos { box-shadow: inset 3px 0 0 #E8A317; }
-.stand tr.zone--down .st-pos { box-shadow: inset 3px 0 0 #D8261A; }
-.stand tr.is-me.zone--down .st-pos, .stand tr.is-me.zone--playoff .st-pos { box-shadow: inset 3px 0 0 var(--accent); }
+:root { --z-cl: #1F5FD6; --z-clq: #6E95E6; --z-el: #7C3AED; --z-po: #2E9E5B; --z-playoff: #E8A317; --z-down: #D8261A; }
+.stand tr[class*="zone--"] .st-pos { box-shadow: inset 3px 0 0 var(--z); }
+.stand tr.zone--cl { --z: var(--z-cl); } .stand tr.zone--clq { --z: var(--z-clq); }
+.stand tr.zone--el { --z: var(--z-el); } .stand tr.zone--po { --z: var(--z-po); }
+.stand tr.zone--playoff { --z: var(--z-playoff); } .stand tr.zone--down { --z: var(--z-down); }
+.stand tr.is-me .st-pos, .stand tr.is-me[class*="zone--"] .st-pos { box-shadow: inset 3px 0 0 var(--z, var(--accent)), inset 6px 0 0 var(--accent); }
 .st-wide { display: none; }
 @media (min-width: 560px) { .st-wide { display: table-cell; } }
-.zone-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); }
+.zone-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; color: var(--muted); }
 .zone-key { display: inline-block; width: 3px; height: 12px; margin-right: 6px; vertical-align: -1px; }
-.zone-key--playoff { background: #E8A317; }
-.zone-key--down { background: #D8261A; }
+.zone-key--cl { background: var(--z-cl); } .zone-key--clq { background: var(--z-clq); }
+.zone-key--el { background: var(--z-el); } .zone-key--po { background: var(--z-po); }
+.zone-key--playoff { background: var(--z-playoff); } .zone-key--down { background: var(--z-down); }
 .big-num--sub { font-size: 28px; }
 .ordinal { font-size: 20px; vertical-align: super; letter-spacing: 0; }

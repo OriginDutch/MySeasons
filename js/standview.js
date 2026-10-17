@@ -1,7 +1,7 @@
 // Ranglijst: volledige stand (Stats-scherm) en een mini-stand rond de eigen club (Home).
 
 import { esc } from './ui.js';
-import { MAIN_CLUB, ZONES } from './config.js';
+import { MAIN_CLUB, ZONES, ZONE_NOTE } from './config.js';
 
 const TEAM = MAIN_CLUB.id;
 
@@ -58,7 +58,9 @@ export function standTable(rows, leagueId, { withZones = true } = {}) {
 export function zoneLegend(leagueId) {
   const z = ZONES[leagueId];
   if (!z) return '';
-  return `<div class="zone-legend">${z.map((x) => `<span><i class="zone-key zone-key--${x.kind}"></i>${esc(x.label)}</span>`).join('')}</div>`;
+  const note = ZONE_NOTE[leagueId];
+  return `<div class="zone-legend">${z.map((x) => `<span><i class="zone-key zone-key--${x.kind}"></i>${esc(x.label)}</span>`).join('')}</div>
+    ${note ? `<p class="muted" style="font-size:12px">${esc(note)}</p>` : ''}`;
 }
 
 /** Twee plekken boven en onder de eigen club. */
