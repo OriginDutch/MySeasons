@@ -83,6 +83,26 @@ function currentRoute() {
 
 let routeToken = 0;
 
+// Spoor van bezochte schermen binnen de app, zodat de terugknop teruggaat
+// naar waar je vandaan kwam (en je scrollpositie daar terugkrijgt).
+const trail = [];
+function trackNavigation() {
+  const hash = location.hash || '#/home';
+  const top = trail[trail.length - 1];
+  if (top && top.hash === hash) return null;
+  const prev = trail[trail.length - 2];
+  if (prev && prev.hash === hash) { trail.pop(); return prev.scroll; }
+  trail.push({ hash, scroll: 0 });
+  return 0;
+}
+
+document.addEventListener('click', (e) => {
+  const back = e.target.closest('.back-btn');
+  if (!back || trail.length < 2) return; // geen app-geschiedenis: gewone link naar het hoofdscherm
+  e.preventDefault();
+  history.back();
+});
+
 async function route({ keepScroll = false } = {}) {
   if (!currentUser) return;
   if (!document.getElementById('view')) renderShell();
@@ -113,12 +133,22 @@ async function route({ keepScroll = false } = {}) {
   if (view.mount) view.mount(fresh, ctx, args);
 
   document.title = key === 'home' ? 'MySeasons' : `${view.title} · MySeasons`;
-  if (!keepScroll) window.scrollTo(0, 0);
+  if (!keepScroll) window.scrollTo(0, restoreScroll || 0);
+  restoreScroll = 0;
 }
+
+let restoreScroll = 0;
 
 ctx.refresh = () => route({ keepScroll: true });
 
-window.addEventListener('hashchange', () => route());
+window.addEventListener('hashchange', () => {
+  restoreScroll = trackNavigation() || 0;
+  route();
+});
+window.addEventListener('scroll', () => {
+  const top = trail[trail.length - 1];
+  if (top) top.scroll = window.scrollY;
+}, { passive: true });
 
 // ---------- Installatie (PWA) ----------
 
@@ -173,6 +203,7 @@ watchAuth((user) => {
   currentUser = user;
   if (user) {
     renderShell();
+    if (!trail.length) trackNavigation();
     route();
   } else {
     renderLogin();
