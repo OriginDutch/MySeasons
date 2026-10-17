@@ -7,8 +7,34 @@
 
 import { db } from './firebase.js';
 import {
-  collection, doc, getDoc, getDocs, setDoc, writeBatch, increment,
+  collection, doc, getDoc, getDocs, setDoc, writeBatch, increment, deleteField,
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
+
+// ---------- Handwerk per wedstrijd: matchNotes/{id} ----------
+// { attendance, note, corrections: { [key]: { api, mine, at } }, updatedAt }
+
+export async function getNotes(id) {
+  const snap = await getDoc(doc(db, 'matchNotes', String(id)));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function getAllNotes() {
+  const snap = await getDocs(collection(db, 'matchNotes'));
+  const out = {};
+  snap.docs.forEach((d) => { out[d.id] = d.data(); });
+  return out;
+}
+
+export function saveNotes(id, partial) {
+  return setDoc(doc(db, 'matchNotes', String(id)), { ...partial, updatedAt: new Date().toISOString() }, { merge: true });
+}
+
+/** changes: { key: value | null }. null verwijdert die correctie. */
+export function saveCorrections(id, changes) {
+  const corrections = {};
+  Object.entries(changes).forEach(([k, v]) => { corrections[k] = v === null ? deleteField() : v; });
+  return setDoc(doc(db, 'matchNotes', String(id)), { corrections, updatedAt: new Date().toISOString() }, { merge: true });
+}
 
 export async function getAllMatches() {
   const snap = await getDocs(collection(db, 'matches'));

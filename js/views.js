@@ -3,7 +3,9 @@
 
 import { esc, icons, toast } from './ui.js';
 import { matchViews } from './matchviews.js';
-import { getCallsToday } from './store.js';
+import { editorViews } from './editor.js';
+import { getCallsToday, getAllMatches, getAllNotes } from './store.js';
+import { applyCorrections, correctionSummary } from './corrections.js';
 import { getThemePref, setThemePref } from './theme.js';
 import { signOutUser, testConnection } from './firebase.js';
 import { health } from './api.js';
@@ -30,6 +32,7 @@ function empty(title, text) {
 
 export const views = {
   ...matchViews,
+  ...editorViews,
 
   selectie: {
     title: 'Selectie',
@@ -43,7 +46,16 @@ export const views = {
 
   meer: {
     title: 'Meer',
-    render() {
+    async render() {
+      let total = 0; let conflicts = 0;
+      try {
+        const [list, notes] = await Promise.all([getAllMatches(), getAllNotes()]);
+        list.forEach((m) => {
+          if (!notes[m.id]) return;
+          const c = correctionSummary(applyCorrections(m, notes[m.id]).statuses);
+          total += c.total; conflicts += c.conflicts;
+        });
+      } catch { /* offline: telling onbekend */ }
       return `
         ${head({ kicker: 'MySeasons', title: 'Meer' })}
         <section class="section">
@@ -52,9 +64,10 @@ export const views = {
               <span class="list-row__main"><span class="list-row__title">Instellingen</span><span class="list-row__sub">Thema, account, verbinding</span></span>
               ${icons.chevron}
             </a>
-            <div class="list-row" aria-disabled="true">
-              <span class="list-row__main"><span class="list-row__title muted">Afwijkingen</span><span class="list-row__sub">Komt zodra er wedstrijddata is</span></span>
-            </div>
+            <a class="list-row" href="#/afwijkingen">
+              <span class="list-row__main"><span class="list-row__title">Afwijkingen</span><span class="list-row__sub">${total ? `${total} eigen ${total === 1 ? 'correctie' : 'correcties'}${conflicts ? ` · <strong class="accent-text">${conflicts} conflict</strong>` : ''}` : 'Jouw correcties op Highlightly-data'}</span></span>
+              ${icons.chevron}
+            </a>
           </nav>
         </section>
         <section class="section">

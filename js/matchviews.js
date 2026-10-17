@@ -2,7 +2,9 @@
 
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, SYNC_SUGGEST_DAYS, CURRENT_SEASON } from './config.js';
-import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings } from './store.js';
+import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes } from './store.js';
+import { applyCorrections, correctionSummary, goalCheck } from './corrections.js';
+import { editEvent, editScore, editNotes } from './editor.js';
 import { syncSeason, fetchMatch, syncStandings, COST } from './sync.js';
 import { rowsFor, standTable, zoneLegend, miniStand } from './standview.js';
 import {
@@ -88,6 +90,46 @@ async function handleFetch(btn, ctx, id) {
   } catch (err) {
     toast(explain(err));
   }
+}
+
+/** Alle wedstrijden met jouw correcties erover, plus het aantal afwijkingen. */
+async function correctedList() {
+  const [list, notes] = await Promise.all([getAllMatches(), getAllNotes()]);
+  let total = 0; let conflicts = 0;
+  const out = list.map((m) => {
+    const n = notes[m.id];
+    if (!n) return m;
+    const { match, statuses } = applyCorrections(m, n);
+    const c = correctionSummary(statuses);
+    total += c.total; conflicts += c.conflicts;
+    return { ...match, notes: n };
+  });
+  return { list: out, total, conflicts };
+}
+
+function fillCard(m) {
+  if (!m || m.status !== 'finished') return '';
+  const n = m.notes || {};
+  if (n.attendance != null || n.note) return '';
+  const age = (Date.now() - Date.parse(m.date)) / 864e5;
+  if (age > 10) return '';
+  return `
+    <section class="section">
+      <a class="action-card" href="#/wedstrijd/${m.id}">
+        <span class="action-card__kicker">Te doen</span>
+        <span class="action-card__title">${esc(opponentOf(m, TEAM) ? opponentOf(m, TEAM).name : 'Laatste wedstrijd')} aanvullen</span>
+        <span class="muted">Toeschouwers en een notitie bij ${matchTitle(m)} · ${esc(scoreText(m))}</span>
+      </a>
+    </section>`;
+}
+
+function devBar(total, conflicts, href) {
+  if (!total) return '';
+  return `<a class="dev-flag ${conflicts ? 'dev-flag--conflict' : ''}" href="${href}">
+    <span class="fix-dot"></span>
+    <span>${conflicts ? `${conflicts} ${conflicts === 1 ? 'veld' : 'velden'} met conflict` : `${total} ${total === 1 ? 'veld wijkt' : 'velden wijken'} af van Highlightly`}</span>
+    <span class="dev-flag__go">Bekijken</span>
+  </a>`;
 }
 
 // ---------- Home ----------
@@ -195,7 +237,7 @@ export const matchViews = {
   home: {
     title: 'Home',
     async render() {
-      const [list, meta, calls] = await Promise.all([getAllMatches(), getMeta('sync'), getCallsToday()]);
+      const [{ list, total, conflicts }, meta, calls] = await Promise.all([correctedList(), getMeta('sync'), getCallsToday()]);
       const league = mainLeague(list);
       const standings = league ? await getStandings(league.id, CURRENT_SEASON) : null;
       const kicker = `MySeasons / ${league ? league.name + ' ' : ''}2026–27`;
@@ -212,6 +254,8 @@ export const matchViews = {
       }
       return `
         ${head({ kicker, title: MAIN_CLUB.name })}
+        ${conflicts ? `<section class="section">${devBar(total, conflicts, '#/afwijkingen')}</section>` : ''}
+        ${fillCard(lastMatch(list))}
         <section class="section">
           <div class="section__label"><span>01 — Volgende</span><span>${(() => { const n = nextMatch(list); return n ? esc(compName(n)) : ''; })()}</span></div>
           ${nextBlock(nextMatch(list))}
@@ -295,7 +339,7 @@ export const matchViews = {
   wedstrijden: {
     title: 'Wedstrijden',
     async render() {
-      const list = sortByDate(await getAllMatches());
+      const list = sortByDate((await correctedList()).list);
       if (!list.length) {
         return `${head({ kicker: 'MySeasons / 2026–27', title: 'Wedstrijden' })}
           <section class="section"><div class="empty"><span class="empty__title">Nog leeg</span>
@@ -331,38 +375,63 @@ export const matchViews = {
     title: 'Wedstrijd',
     navKey: 'wedstrijden',
     async render(ctx, args) {
-      const m = await getMatch(args[0]);
-      if (!m) {
+      const [apiM, notes] = await Promise.all([getMatch(args[0]), getNotes(args[0])]);
+      if (!apiM) {
         return `${head({ kicker: 'Wedstrijden', title: 'Niet gevonden', back: 'wedstrijden' })}
           <section class="section"><p class="muted">Deze wedstrijd staat niet (meer) in je data.</p></section>`;
       }
+      const { match: m, statuses } = applyCorrections(apiM, notes);
+      const sum = correctionSummary(statuses);
+      const n = notes || {};
       const r = resultFor(m, TEAM);
       const d = m.detail;
+      const goalsOff = m.status === 'finished' ? goalCheck(m) : null;
       const kicker = `${compName(m)}${m.round && !/friendl/i.test(m.round) ? ' · ' + shortRound(m.round) : ''} · ${dayShort(m.date)}`;
       return `
         ${head({ kicker, title: m.status === 'finished' ? (r === 'W' ? 'Winst' : r === 'V' ? 'Verlies' : 'Gelijk') : timeOf(m.date), back: 'wedstrijden' })}
         <section class="section">
           <div class="score-big">
             <div class="score-big__team">${crest(m.homeTeam, 48)}<span>${esc(m.homeTeam.name)}</span></div>
-            <div class="score-big__score">${m.score ? `${m.score.home}<span class="muted">–</span>${m.score.away}` : '<span class="muted">vs</span>'}</div>
+            ${m.score && m.status === 'finished'
+              ? `<button class="score-big__score score-big__score--edit" type="button" data-action="edit-score" aria-label="Uitslag corrigeren">${m.score.home}<span class="muted">–</span>${m.score.away}${m.scoreCorrected ? '<span class="fix-dot" title="Door jou aangepast"></span>' : ''}</button>`
+              : `<div class="score-big__score">${m.score ? `${m.score.home}<span class="muted">–</span>${m.score.away}` : '<span class="muted">vs</span>'}</div>`}
             <div class="score-big__team">${crest(m.awayTeam, 48)}<span>${esc(m.awayTeam.name)}</span></div>
           </div>
           ${m.penalties ? `<p class="muted" style="text-align:center">Strafschoppen ${m.penalties.home}–${m.penalties.away}</p>` : ''}
+          ${devBar(sum.total, sum.conflicts, `#/afwijkingen/${m.id}`)}
+          ${goalsOff ? `<p class="warn-line">De uitslag is ${m.score.home}–${m.score.away}, maar de goals in de tijdlijn tellen op tot ${goalsOff.home}–${goalsOff.away}. Klopt er iets niet?</p>` : ''}
           ${d ? `<dl class="kv">
             ${d.venue && d.venue.name ? `<dt>Stadion</dt><dd>${esc(d.venue.name)}${d.venue.city ? ', ' + esc(d.venue.city) : ''}</dd>` : ''}
             ${d.referee ? `<dt>Scheidsrechter</dt><dd>${esc(d.referee)}</dd>` : ''}
             <dt>Aftrap</dt><dd>${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</dd>
+            ${n.attendance != null ? `<dt>Toeschouwers</dt><dd class="mono">${n.attendance.toLocaleString('nl-NL')}</dd>` : ''}
           </dl>` : `<p class="muted">${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</p>`}
           ${m.status === 'finished'
             ? `<div><button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${d ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button></div>`
             : '<p class="muted" style="font-size:12px">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
         </section>
+        ${m.status === 'finished' ? notesBlock(n) : ''}
         ${d ? timeline(m) + statsBlock(m) + lineupsBlock(m) + playersBlock(m) : ''}`;
     },
-    mount(root, ctx) {
-      root.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action="fetch-match"]');
-        if (btn) handleFetch(btn, ctx, btn.dataset.id);
+    mount(root, ctx, args) {
+      const id = args[0];
+      root.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const a = btn.dataset.action;
+        if (a === 'fetch-match') return handleFetch(btn, ctx, btn.dataset.id);
+        // Altijd vers lezen: zo werk je op de laatste API-data en correcties.
+        const [apiM, notes] = await Promise.all([getMatch(id), getNotes(id)]);
+        if (!apiM) return;
+        let changed = false;
+        try {
+          if (a === 'edit-score') changed = await editScore(apiM, notes, ctx.refresh);
+          if (a === 'edit-event') changed = await editEvent(apiM, notes, btn.dataset.sig, ctx.refresh);
+          if (a === 'edit-notes') changed = await editNotes(apiM, notes);
+        } catch (err) {
+          toast(`Opslaan lukte niet: ${err.message || err}`);
+        }
+        if (changed) ctx.refresh();
       });
       mountSwipe(root);
     },
@@ -382,6 +451,17 @@ function nameIndex(m) {
   return idx;
 }
 
+function notesBlock(n) {
+  const has = n.attendance != null || n.note;
+  return `
+    <section class="section">
+      <div class="section__label"><span>Jouw aanvulling</span><span>${has ? '' : 'nog leeg'}</span></div>
+      ${n.note ? `<p class="note-text">${esc(n.note)}</p>` : ''}
+      ${!has ? '<p class="muted" style="font-size:13px">Toeschouwers en een notitie komen niet uit de API. Die vul je zelf in.</p>' : ''}
+      <div><button class="btn ${has ? '' : 'btn--primary'}" type="button" data-action="edit-notes">${has ? 'Aanvulling bewerken' : 'Aanvullen'}</button></div>
+    </section>`;
+}
+
 function timeline(m) {
   const ev = m.detail.events || [];
   if (!ev.length) return '';
@@ -396,14 +476,17 @@ function timeline(m) {
   const word = { goal: 'Goal', yellow: 'Geel', red: 'Rood', sub: 'Wissel', other: '' };
   return `
     <section class="section">
-      <div class="section__label"><span>Tijdlijn</span><span>${esc(m.homeTeam.name)} links · ${esc(m.awayTeam.name)} rechts</span></div>
+      <div class="section__label"><span>Tijdlijn</span><span>tik op een moment om te corrigeren</span></div>
       <ol class="timeline">${ev.map((e) => {
         const k = kind(e.type);
         const side = e.teamId === homeId ? 'home' : 'away';
-        return `<li class="tl tl--${side} tl--${k}">
-          <span class="tl__min mono">${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'</span>
-          <span class="tl__body"><span class="tl__badge tl__badge--${k}">${word[k] || esc(e.type)}</span> ${label(e)}</span>
-        </li>`;
+        const editable = k !== 'other' && e._sig;
+        const dot = e._fix && e._fix.length ? '<span class="fix-dot" title="Door jou aangepast"></span>' : '';
+        const inner = `<span class="tl__min mono">${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'</span>
+          <span class="tl__body"><span class="tl__badge tl__badge--${k}">${word[k] || esc(e.type)}</span> ${label(e)}${dot}</span>`;
+        return `<li class="tl tl--${side} tl--${k}">${editable
+          ? `<button type="button" class="tl__btn" data-action="edit-event" data-sig="${esc(e._sig)}">${inner}</button>`
+          : inner}</li>`;
       }).join('')}</ol>
     </section>`;
 }
