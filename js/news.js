@@ -2,7 +2,11 @@
 // We tonen alleen kop, teaser en een link naar vi.nl.
 
 import { viNews } from './api.js';
-import { getNews, saveNews } from './store.js';
+import { getNews, saveNews, getMeta, setMeta } from './store.js';
+import { MAIN_CLUB } from './config.js';
+
+// VI-slugs per club (vi.nl/clubs/<slug>). Cambuur staat vast; de rest leert de app uit de algemene feed.
+const KNOWN_SLUGS = { [MAIN_CLUB.id]: 'sc-cambuur' };
 
 const KEY = 'ms-news-fetched';
 const EVERY_MS = 15 * 60 * 1000;
@@ -25,9 +29,10 @@ function idOf(link) {
 }
 
 /** teams: [{ id, name }]. Geeft de items die bij minstens één team horen, met hun team-id's. */
-export function matchNews(items, teams) {
+export function matchNews(items, teams, forTeamId = null) {
   return items.map((it) => {
     const clubs = teams.filter((t) => (it.categories || []).some((c) => tagMatches(c, t.name))).map((t) => t.id);
+    if (forTeamId && !clubs.includes(forTeamId)) clubs.push(forTeamId); // uit de clubfeed: hoort sowieso bij die club
     if (!clubs.length) return null;
     const date = Date.parse(it.pubDate);
     return {
@@ -45,14 +50,35 @@ function lastFetch() {
  * Haalt de feed op (hooguit eens per kwartier, tenzij force) en bewaart wat bij je clubs hoort.
  * Fouten zijn niet erg: dan tonen we wat er al bewaard is.
  */
-export async function refreshNews(teams, { force = false } = {}) {
+export async function refreshNews(teams, { force = false, focus = [MAIN_CLUB.id] } = {}) {
   if (!force && Date.now() - lastFetch() < EVERY_MS) return { fetched: false };
   try {
+    // 1. Algemene feed: nieuws over alle clubs uit je programma, en VI-slugs leren.
     const res = await viNews();
-    const found = matchNews((res && res.items) || [], teams);
-    await saveNews(found);
+    const items = (res && res.items) || [];
+    const saved = (await getMeta('viSlugs').catch(() => null)) || {};
+    const slugs = { ...saved, ...KNOWN_SLUGS };
+    let learned = false;
+    items.forEach((it) => (it.clubs || []).forEach((c) => {
+      const t = teams.find((x) => tagMatches(c.name, x.name));
+      if (t && !slugs[t.id]) { slugs[t.id] = c.slug; learned = true; }
+    }));
+    if (learned) await setMeta('viSlugs', slugs).catch(() => {});
+    const found = matchNews(items, teams);
+
+    // 2. Clubfeeds voor de clubs die er nu toe doen (Cambuur en de volgende tegenstander).
+    for (const id of focus) {
+      if (!slugs[id]) continue;
+      try {
+        const r = await viNews(slugs[id]);
+        found.push(...matchNews((r && r.items) || [], teams, id));
+      } catch { /* clubfeed mislukt: algemene feed is er nog */ }
+    }
+
+    const unique = [...new Map(found.map((n) => [n.id, n])).values()];
+    await saveNews(unique);
     try { localStorage.setItem(KEY, String(Date.now())); } catch { /* niet erg */ }
-    return { fetched: true, found: found.length };
+    return { fetched: true, found: unique.length, mine: unique.filter((n) => n.clubs.includes(MAIN_CLUB.id)).length };
   } catch (err) {
     return { fetched: false, error: err };
   }

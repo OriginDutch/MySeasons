@@ -3,7 +3,8 @@
 // Doet vier dingen:
 // 1. Checkt of de aanvraag van jou komt (Firebase ID-token + jouw UID).
 // 2. Stuurt alleen toegestane Highlightly-aanvragen door, met de key die hier als secret staat.
-// 3. Haalt de VI-nieuwsfeed op (/news/vi) en geeft alleen kop, teaser, link, datum en tags terug.
+// 3. Haalt VI-nieuws op (/news/vi, of per club /news/vi?tag=sc-cambuur) en geeft alleen
+//    kop, teaser, link, datum en tags terug.
 // 4. Zet CORS-headers zodat alleen de MySeasons-app hem kan gebruiken.
 //
 // Instellen in Cloudflare (Settings → Variables and Secrets):
@@ -73,7 +74,7 @@ function b64urlToJson(s) {
 
 // ---------- VI-nieuws ----------
 
-const VI_FEED = 'https://www.vi.nl/feed/nieuws';
+const VI_FEED = 'https://www.vi.nl/feed/news.xml';
 
 function decodeEntities(s) {
   return s
@@ -97,10 +98,14 @@ function parseFeed(xml) {
   while ((m = re.exec(xml)) && items.length < 60) {
     const block = m[1];
     const categories = [];
-    const cre = /<category(?:\s[^>]*)?>([\s\S]*?)<\/category>/g;
+    const clubs = [];
+    const cre = /<category(?:\s+domain="([^"]*)")?[^>]*>([\s\S]*?)<\/category>/g;
     let c;
     while ((c = cre.exec(block))) {
-      categories.push(decodeEntities(c[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1')).trim());
+      const name = decodeEntities(c[2].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1')).trim();
+      categories.push(name);
+      const slug = (c[1] || '').match(/\/clubs\/([a-z0-9-]+)\/?$/);
+      if (slug) clubs.push({ name, slug: slug[1] });
     }
     const link = tagText(block, 'link');
     if (!/^https:\/\/(www\.)?vi\.nl\//.test(link)) continue;
@@ -110,13 +115,15 @@ function parseFeed(xml) {
       link,
       pubDate: tagText(block, 'pubDate'),
       categories,
+      clubs,
     });
   }
   return items;
 }
 
-async function viNews() {
-  const res = await fetch(VI_FEED, { cf: { cacheTtl: 600, cacheEverything: true }, headers: { 'User-Agent': 'MySeasons/1.0 (persoonlijke app)' } });
+async function viNews(tag) {
+  const url = tag ? `${VI_FEED}?tag=${encodeURIComponent(tag)}` : VI_FEED;
+  const res = await fetch(url, { cf: { cacheTtl: 600, cacheEverything: true }, headers: { 'User-Agent': 'MySeasons/1.0 (persoonlijke app)' } });
   if (!res.ok) throw new Error(`VI gaf ${res.status}`);
   return parseFeed(await res.text());
 }
@@ -213,8 +220,10 @@ export default {
 
     // VI-nieuws: geen Highlightly-call, kost geen quotum.
     if (url.pathname === '/news/vi') {
+      const tag = url.searchParams.get('tag');
+      if (tag && !/^[a-z0-9-]{2,40}$/.test(tag)) return json({ error: 'Ongeldige tag' }, 400, origin);
       try {
-        return json({ items: await viNews(), fetchedAt: new Date().toISOString() }, 200, origin, { 'Cache-Control': 'no-store' });
+        return json({ items: await viNews(tag), tag: tag || null, fetchedAt: new Date().toISOString() }, 200, origin, { 'Cache-Control': 'no-store' });
       } catch (err) {
         return json({ error: 'VI-feed niet bereikbaar', detail: err.message }, 502, origin);
       }

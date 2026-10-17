@@ -196,6 +196,7 @@ export const magazineViews = {
       const nextOpp = next ? opponentOf(next, TEAM) : null;
       const news = await newsFor([TEAM, ...(nextOpp ? [nextOpp.id] : [])], 3).catch(() => []);
       this._teams = teams;
+      this._focus = [TEAM, ...(nextOpp ? [nextOpp.id] : [])];
       return `
         <div class="mag">
           ${masthead(team)}
@@ -218,7 +219,7 @@ export const magazineViews = {
       });
       // Nieuws op de achtergrond verversen (hooguit eens per kwartier).
       if (this._teams && root.querySelector('[data-news]')) {
-        refreshNews(this._teams).then((r) => {
+        refreshNews(this._teams, { focus: this._focus }).then((r) => {
           if (r.error && r.error.status === 404) { if (!newsUnavailable) { newsUnavailable = true; ctx.refresh(); } return; }
           if (r.fetched && r.found) ctx.refresh();
         });
@@ -260,10 +261,12 @@ magazineViews.nieuws = {
       if (!btn) return;
       btn.disabled = true;
       const { list } = await correctedList();
-      const r = await refreshNews(knownTeams(list), { force: true });
+      const next = nextMatch(list);
+      const opp = next ? opponentOf(next, TEAM) : null;
+      const r = await refreshNews(knownTeams(list), { force: true, focus: [TEAM, ...(opp ? [opp.id] : [])] });
       btn.disabled = false;
       if (r.error) toast(r.error.status === 404 ? 'De Worker kent /news/vi nog niet. Plak eerst de nieuwe Worker-code.' : `Nieuws ophalen lukte niet: ${r.error.message}`);
-      else toast(r.found ? `${r.found} berichten over je clubs gevonden` : 'Niets nieuws over je clubs');
+      else toast(r.found ? `${r.found} berichten gevonden, waarvan ${r.mine} over ${MAIN_CLUB.name}` : 'Niets nieuws over je clubs');
       ctx.refresh();
     });
   },
