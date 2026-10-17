@@ -114,17 +114,23 @@ export async function editEvent(apiMatch, notes, sig, refresh) {
   if (!fields) { toast('Dit soort moment kun je (nog) niet corrigeren'); return false; }
 
   const body = fields.map(([f, label]) => {
+    if (f === 'extra') return '';
     if (f === 'minute') {
-      return `<label class="field"><span>Minuut</span><input name="minute" type="number" inputmode="numeric" min="0" max="130" value="${shown.minute ?? ''}"></label>`;
+      return `<div class="field-row field-row--min">
+        <label class="field"><span>Minuut</span><input name="minute" type="number" inputmode="numeric" min="0" max="130" value="${shown.minute ?? ''}"></label>
+        <label class="field"><span>+ blessuretijd</span><input name="extra" type="number" inputmode="numeric" min="1" max="30" placeholder="—" value="${shown.extra ?? ''}"></label>
+      </div>`;
     }
     return personSelect(f, label[0].toUpperCase() + label.slice(1), shownMatch, shown.teamId, fieldValue(shown, f), { allowNone: f === 'assist' });
-  }).join('') + `<p class="muted sheet__note">Highlightly: ${fields.map(([f, l]) => `${esc(l)} ${esc(display(fieldValue(apiEv, f)))}`).join(' · ')}</p>`;
+  }).join('') + `<p class="muted sheet__note">Highlightly: ${fields.filter(([f]) => f !== 'extra' || apiEv.extra).map(([f, l]) => `${esc(l)} ${esc(display(fieldValue(apiEv, f), f))}`).join(' · ')}</p>`;
 
   const data = await openSheet({
     title: `${KIND_LABEL[kind]} corrigeren`,
     body,
     validate: (fd) => {
       if (fd.has('minute') && Number.isNaN(intIn(fd.get('minute'), 0, 130))) return 'Minuut moet een heel getal tussen 0 en 130 zijn.';
+      if (fd.has('extra') && Number.isNaN(intIn(fd.get('extra'), 1, 30))) return 'Blessuretijd moet tussen 1 en 30 minuten zijn, of leeg.';
+      if (fd.get('extra') && !fd.get('minute')) return 'Vul ook de minuut in, bijvoorbeeld 45 of 90.';
       if (fd.has('player') && !fd.get('player')) return 'Kies een speler.';
       if (kind === 'sub' && fd.get('in') && fd.get('in') === fd.get('out')) return 'Erin en eruit kunnen niet dezelfde speler zijn.';
       if (kind === 'goal' && fd.get('assist') && fd.get('assist') === fd.get('player')) return 'Schutter en assist zijn dezelfde speler.';
@@ -135,7 +141,7 @@ export async function editEvent(apiMatch, notes, sig, refresh) {
 
   const entries = fields.map(([f]) => ({
     key: keyOf(sig, f),
-    value: f === 'minute' ? intIn(data.get('minute'), 0, 130) : readPerson(data.get(f), shownMatch),
+    value: f === 'minute' ? intIn(data.get('minute'), 0, 130) : f === 'extra' ? intIn(data.get('extra'), 1, 30) : readPerson(data.get(f), shownMatch),
   }));
   return commit(apiMatch, notes, entries, refresh);
 }
@@ -225,11 +231,11 @@ function itemHtml(m, s) {
   const typo = looksLikeTypo(s.now ?? s.api, s.mine);
   const values = s.status === 'conflict'
     ? (s.now === undefined
-      ? `<span>Highlightly heeft dit moment niet meer</span><span>Jij: <strong>${esc(display(s.mine))}</strong></span>`
-      : `<span>Highlightly toen: ${esc(display(s.api))} · nu: <strong>${esc(display(s.now))}</strong></span><span>Jij: <strong>${esc(display(s.mine))}</strong></span>`)
+      ? `<span>Highlightly heeft dit moment niet meer</span><span>Jij: <strong>${esc(display(s.mine, s.field))}</strong></span>`
+      : `<span>Highlightly toen: ${esc(display(s.api, s.field))} · nu: <strong>${esc(display(s.now, s.field))}</strong></span><span>Jij: <strong>${esc(display(s.mine, s.field))}</strong></span>`)
     : s.status === 'redundant'
-      ? `<span>Highlightly is het nu met je eens: <strong>${esc(display(s.mine))}</strong></span>`
-      : `<span>Highlightly: ${esc(display(s.api))}</span><span>Jij: <strong>${esc(display(s.mine))}</strong></span>`;
+      ? `<span>Highlightly is het nu met je eens: <strong>${esc(display(s.mine, s.field))}</strong></span>`
+      : `<span>Highlightly: ${esc(display(s.api, s.field))}</span><span>Jij: <strong>${esc(display(s.mine, s.field))}</strong></span>`;
   return `<label class="dev" data-type="${FILTER_OF[s.kind] || 'overig'}" data-status="${s.status}">
     <input type="checkbox" name="pick" value="${esc(m.id + '|' + s.key)}">
     <span class="dev__main">

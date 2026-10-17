@@ -172,7 +172,7 @@ function scorers(m) {
   const goals = m.detail.events.filter((e) => /goal/i.test(e.type) && !/missed/i.test(e.type));
   if (!goals.length) return '';
   return `<ul class="scorers">${goals.map((g) => `
-    <li><span class="mono muted">${g.minute ?? ''}'</span> ${esc(g.player || '?')}${/own/i.test(g.type) ? ' <span class="muted">(e.d.)</span>' : ''}${/penalty/i.test(g.type) ? ' <span class="muted">(pen.)</span>' : ''} <span class="muted">· ${esc(g.teamId === (m.homeTeam && m.homeTeam.id) ? m.homeTeam.name : m.awayTeam.name)}</span></li>`).join('')}</ul>`;
+    <li><span class="mono muted">${g.minute ?? ''}${g.extra ? '+' + g.extra : ''}'</span> ${esc(g.player || '?')}${/own/i.test(g.type) ? ' <span class="muted">(e.d.)</span>' : ''}${/penalty/i.test(g.type) ? ' <span class="muted">(pen.)</span>' : ''} <span class="muted">· ${esc(g.teamId === (m.homeTeam && m.homeTeam.id) ? m.homeTeam.name : m.awayTeam.name)}</span></li>`).join('')}</ul>`;
 }
 
 function bestPlayer(m) {

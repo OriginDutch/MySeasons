@@ -8,10 +8,10 @@
 // Tot je beslist, blijft jouw waarde gelden.
 
 export const EVENT_FIELDS = {
-  goal: [['player', 'schutter'], ['assist', 'assist'], ['minute', 'minuut']],
-  yellow: [['player', 'speler'], ['minute', 'minuut']],
-  red: [['player', 'speler'], ['minute', 'minuut']],
-  sub: [['in', 'speler erin'], ['out', 'speler eruit'], ['minute', 'minuut']],
+  goal: [['player', 'schutter'], ['assist', 'assist'], ['minute', 'minuut'], ['extra', 'blessuretijd']],
+  yellow: [['player', 'speler'], ['minute', 'minuut'], ['extra', 'blessuretijd']],
+  red: [['player', 'speler'], ['minute', 'minuut'], ['extra', 'blessuretijd']],
+  sub: [['in', 'speler erin'], ['out', 'speler eruit'], ['minute', 'minuut'], ['extra', 'blessuretijd']],
 };
 
 export function kindOf(type) {
@@ -60,6 +60,7 @@ export function fieldValue(e, field) {
     case 'in': return person(e.inId, e.inName);
     case 'out': return person(e.outId, e.outName);
     case 'minute': return e.minute ?? null;
+    case 'extra': return e.extra ?? null;
     default: return null;
   }
 }
@@ -70,6 +71,7 @@ export function setField(e, field, v) {
   if (field === 'in') { e.inId = v ? v.id : null; e.inName = v ? v.name : null; }
   if (field === 'out') { e.outId = v ? v.id : null; e.outName = v ? v.name : null; }
   if (field === 'minute') { e.minute = v; }
+  if (field === 'extra') { e.extra = v; }
 }
 
 export function same(a, b) {
@@ -83,7 +85,8 @@ export function same(a, b) {
   return a === b;
 }
 
-export function display(v) {
+export function display(v, field) {
+  if (field === 'extra') return v ? `+${v}` : 'geen';
   if (v === null || v === undefined) return 'geen';
   if (typeof v === 'object' && 'home' in v) return `${v.home}–${v.away}`;
   if (typeof v === 'object') return v.name || '?';
@@ -109,7 +112,7 @@ export function describe(match, key) {
   const ev = indexEvents(match.detail && match.detail.events).get(p.sig);
   const when = ev ? `${ev.minute ?? '?'}${ev.extra ? '+' + ev.extra : ''}'` : `#${nth}`;
   const team = [match.homeTeam, match.awayTeam].find((t) => t && String(t.id) === teamId);
-  return { kind, what: `${KIND_LABEL[kind]} ${when}${team ? ' ' + team.name : ''} · ${label ? label[1] : p.field}` };
+  return { kind, field: p.field, what: `${KIND_LABEL[kind]} ${when}${team ? ' ' + team.name : ''} · ${label ? label[1] : p.field}` };
 }
 
 /**

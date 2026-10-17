@@ -453,3 +453,4 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .crowd__row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--hairline); font-size: 14px; }
 .crowd__row .muted { font-size: 12px; }
 .crowd__num { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.field-row--min { grid-template-columns: 1fr 1fr; }
