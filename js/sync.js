@@ -2,12 +2,34 @@
 
 import { hl } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
-import { normalizeListMatch, normalizeDetail } from './normalize.js';
-import { saveMatches, saveMatchDetail, setMeta, countCalls } from './store.js';
+import { normalizeListMatch, normalizeDetail, normalizeStandings } from './normalize.js';
+import { saveMatches, saveMatchDetail, saveStandings, setMeta, countCalls } from './store.js';
+import { mainLeague } from './season.js';
 
-export const COST = { season: 2, match: 3 };
+export const COST = { season: 3, match: 3, standings: 1 };
 
-/** Programma + uitslagen van de hoofdclub dit seizoen. Kost 2 calls (thuis + uit). */
+/** Stand van één competitie. Kost 1 call. */
+async function fetchAndSaveStandings(leagueId, season) {
+  const raw = await hl('/standings', { leagueId, season });
+  const data = normalizeStandings(raw);
+  await saveStandings(leagueId, season, { ...data, fetchedAt: new Date().toISOString() });
+  return data;
+}
+
+export async function syncStandings(leagueId, season = CURRENT_SEASON) {
+  let calls = 0;
+  try {
+    calls++;
+    return await fetchAndSaveStandings(leagueId, season);
+  } finally {
+    await countCalls(calls);
+  }
+}
+
+/**
+ * Programma + uitslagen van de hoofdclub dit seizoen, en daarna de stand
+ * van de hoofdcompetitie. Kost 3 calls (thuis, uit, stand).
+ */
 export async function syncSeason() {
   const teamId = MAIN_CLUB.id;
   let calls = 0;
@@ -21,6 +43,16 @@ export async function syncSeason() {
     const list = unique.map(normalizeListMatch);
     await saveMatches(list);
     await setMeta('sync', { lastSeasonSync: new Date().toISOString(), season: CURRENT_SEASON, matchCount: list.length });
+
+    const league = mainLeague(list);
+    if (league) {
+      calls++;
+      try {
+        await fetchAndSaveStandings(league.id, CURRENT_SEASON);
+      } catch (err) {
+        console.warn('Stand ophalen mislukt', err); // programma is wel binnen; stand later opnieuw
+      }
+    }
     return list.length;
   } finally {
     if (calls) await countCalls(calls);

@@ -136,6 +136,7 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 /* ---------- Knoppen ---------- */
 
 .btn {
+  text-decoration: none;
   min-height: var(--tap);
   padding: 0 16px;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -361,3 +362,26 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 }
 .swipe::-webkit-scrollbar { display: none; }
 .swipe__panel { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; }
+
+/* Stand */
+.segmented--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.crest--sm { width: 20px; height: 20px; font-size: 7px; }
+.stand td, .stand th { padding-left: 3px; padding-right: 3px; }
+.stand th:nth-child(n+3), .stand td:nth-child(n+3) { text-align: right; }
+.st-pos { width: 24px; color: var(--muted); }
+.st-club { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.st-club span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-pts { font-weight: 600; }
+.stand tr.is-me td { background: var(--surface-hover); font-weight: 600; }
+.stand tr.is-me .st-pos { color: var(--ink); box-shadow: inset 3px 0 0 var(--accent); }
+.stand tr.zone--playoff .st-pos { box-shadow: inset 3px 0 0 #E8A317; }
+.stand tr.zone--down .st-pos { box-shadow: inset 3px 0 0 #D8261A; }
+.stand tr.is-me.zone--down .st-pos, .stand tr.is-me.zone--playoff .st-pos { box-shadow: inset 3px 0 0 var(--accent); }
+.st-wide { display: none; }
+@media (min-width: 560px) { .st-wide { display: table-cell; } }
+.zone-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); }
+.zone-key { display: inline-block; width: 3px; height: 12px; margin-right: 6px; vertical-align: -1px; }
+.zone-key--playoff { background: #E8A317; }
+.zone-key--down { background: #D8261A; }
+.big-num--sub { font-size: 28px; }
+.ordinal { font-size: 20px; vertical-align: super; letter-spacing: 0; }

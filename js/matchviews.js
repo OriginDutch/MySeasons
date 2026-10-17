@@ -1,9 +1,10 @@
 // Schermen met wedstrijddata: Home, Wedstrijden en de wedstrijdpagina.
 
 import { esc, icons, toast } from './ui.js';
-import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
-import { getAllMatches, getMatch, getMeta, getCallsToday } from './store.js';
-import { syncSeason, fetchMatch, COST } from './sync.js';
+import { MAIN_CLUB, SYNC_SUGGEST_DAYS, CURRENT_SEASON } from './config.js';
+import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings } from './store.js';
+import { syncSeason, fetchMatch, syncStandings, COST } from './sync.js';
+import { rowsFor, standTable, zoneLegend, miniStand } from './standview.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
   dayShort, dayLong, timeOf, monthOf, relativeDay, shortRound,
@@ -135,16 +136,19 @@ function lastBlock(m) {
     ${m.detail ? '' : `<button class="btn btn--primary" type="button" data-action="fetch-match" data-id="${m.id}">Details ophalen · ${COST.match} calls</button>`}`;
 }
 
-function seasonBlock(list, league) {
+function seasonBlock(list, league, standings) {
   if (!league) return '';
   const s = leagueSummary(list, TEAM, league.id);
   if (!s.played) return '';
   const streak = s.unbeaten >= 2 ? `${s.unbeaten} duels ongeslagen` : s.winless >= 3 ? `${s.winless} duels zonder zege` : null;
+  const g = standings && standings.groups && standings.groups[0];
+  const me = g ? rowsFor(g, 'total').find((r) => r.team.id === TEAM) : null;
+  const points = me ? me.pts : s.points; // stand van de API telt puntenaftrek mee
   return `
     <section class="section">
       <div class="section__label"><span>03 — Seizoen</span><span>${esc(league.name)} · ${s.played} duels</span></div>
       <div class="stat-row">
-        <div><span class="big-num">${s.points}</span><span class="muted"> pt</span></div>
+        <div>${me ? `<span class="big-num">${me.pos}<span class="ordinal">e</span></span> ` : ''}<span class="big-num ${me ? 'big-num--sub' : ''}">${points}</span><span class="muted"> pt</span></div>
         <div class="mono">${s.w}–${s.d}–${s.l}<br><span class="muted">${s.gf}:${s.ga}</span></div>
         <div class="form">${s.form.map((r) => `<span class="form__tile form__tile--${r}">${r}</span>`).join('')}</div>
       </div>
@@ -152,6 +156,7 @@ function seasonBlock(list, league) {
         ${streak ? `<div class="fact"><span class="fact__num">${s.unbeaten >= 2 ? s.unbeaten : s.winless}</span><span>${esc(streak)}</span></div>` : ''}
         <div class="fact"><span class="fact__num">${s.awayPts}</span><span>punten uit, tegen ${s.homePts} thuis</span></div>
       </div>
+      ${g ? `${miniStand(standings, league.id)}<div><a class="link-btn" href="#/stats">Hele stand</a></div>` : ''}
     </section>`;
 }
 
@@ -192,6 +197,7 @@ export const matchViews = {
     async render() {
       const [list, meta, calls] = await Promise.all([getAllMatches(), getMeta('sync'), getCallsToday()]);
       const league = mainLeague(list);
+      const standings = league ? await getStandings(league.id, CURRENT_SEASON) : null;
       const kicker = `MySeasons / ${league ? league.name + ' ' : ''}2026–27`;
       if (!list.length) {
         return `
@@ -214,7 +220,7 @@ export const matchViews = {
           <div class="section__label"><span>02 — Laatste</span></div>
           ${lastBlock(lastMatch(list))}
         </section>
-        ${seasonBlock(list, league)}
+        ${seasonBlock(list, league, standings)}
         ${roundsBlock(list, league)}
         ${syncFooter(meta, calls)}`;
     },
@@ -224,6 +230,62 @@ export const matchViews = {
         if (!btn) return;
         if (btn.dataset.action === 'sync-season') handleSync(btn, ctx);
         if (btn.dataset.action === 'fetch-match') handleFetch(btn, ctx, btn.dataset.id);
+      });
+    },
+  },
+
+  // ---------- Stats: stand ----------
+
+  stats: {
+    title: 'Stand',
+    async render() {
+      const list = await getAllMatches();
+      const league = mainLeague(list);
+      const kicker = `MySeasons / ${league ? league.name + ' ' : ''}2026–27`;
+      if (!league) {
+        return `${head({ kicker, title: 'Stand' })}
+          <section class="section"><div class="empty"><span class="empty__title">Nog geen competitie</span>
+          <p class="muted">Synchroniseer eerst het seizoen op Home.</p><div><a class="btn" href="#/home">Naar Home</a></div></div></section>`;
+      }
+      const st = await getStandings(league.id, CURRENT_SEASON);
+      const g = st && st.groups && st.groups[0];
+      const refresh = `<button class="btn" type="button" data-action="sync-standings" data-league="${league.id}">${icons.refresh}<span>Stand bijwerken · ${COST.standings} call</span></button>`;
+      if (!g) {
+        return `${head({ kicker, title: 'Stand' })}
+          <section class="section"><div class="empty"><span class="empty__title">Stand nog niet opgehaald</span>
+          <p class="muted">Haal de actuele ${esc(league.name)}-stand op.</p><div>${refresh}</div></div></section>`;
+      }
+      const modes = [['total', 'Totaal'], ['home', 'Thuis'], ['away', 'Uit']];
+      return `
+        ${head({ kicker, title: 'Stand' })}
+        <section class="section">
+          <fieldset class="segmented segmented--3" style="margin:0;padding:0">
+            <legend class="visually-hidden">Weergave</legend>
+            ${modes.map(([v, l], i) => `<input type="radio" name="stand-mode" id="sm-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sm-${v}">${l}</label>`).join('')}
+          </fieldset>
+          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), league.id, { withZones: v === 'total' })}</div>`).join('')}
+          ${zoneLegend(league.id)}
+        </section>
+        <section class="section">
+          <div class="section__label"><span>Bijgewerkt</span><span>${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
+          <p class="muted" style="font-size:12px">De stand wordt ook bijgewerkt als je het seizoen synchroniseert.</p>
+          <div>${refresh}</div>
+        </section>`;
+    },
+    mount(root, ctx) {
+      root.querySelectorAll('input[name="stand-mode"]').forEach((input) => input.addEventListener('change', () => {
+        root.querySelectorAll('[data-stand-mode]').forEach((el) => { el.hidden = el.dataset.standMode !== input.value; });
+      }));
+      root.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-action="sync-standings"]');
+        if (!btn) return;
+        try {
+          await runWithButton(btn, 'Ophalen…', () => syncStandings(Number(btn.dataset.league)));
+          toast(`Stand bijgewerkt · ${COST.standings} call`);
+          ctx.refresh();
+        } catch (err) {
+          toast(explain(err));
+        }
       });
     },
   },

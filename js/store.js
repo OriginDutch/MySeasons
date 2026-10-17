@@ -36,6 +36,17 @@ export async function saveMatchDetail(id, base, detail, raw) {
   await batch.commit();
 }
 
+const standingsId = (leagueId, season) => `${leagueId}_${season}`;
+
+export async function getStandings(leagueId, season) {
+  const snap = await getDoc(doc(db, 'standings', standingsId(leagueId, season)));
+  return snap.exists() ? snap.data() : null;
+}
+
+export function saveStandings(leagueId, season, data) {
+  return setDoc(doc(db, 'standings', standingsId(leagueId, season)), data);
+}
+
 export async function getMeta(name) {
   const snap = await getDoc(doc(db, 'meta', name));
   return snap.exists() ? snap.data() : null;

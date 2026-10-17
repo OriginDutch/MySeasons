@@ -123,6 +123,31 @@ export function normalizeBoxScore(raw) {
   return out;
 }
 
+function standLine(s) {
+  if (!s) return null;
+  const n = (v) => num(v) ?? 0;
+  return { played: n(s.games), w: n(s.wins), d: n(s.draws), l: n(s.loses), gf: n(s.scoredGoals), ga: n(s.receivedGoals) };
+}
+
+/** /standings → { league, groups: [{ name, rows: [...] }] }. Punten komen van de API (puntenaftrek zit erin). */
+export function normalizeStandings(raw) {
+  const r = one(raw) || {};
+  return {
+    league: r.league ? { id: r.league.id, name: r.league.name, season: r.league.season } : null,
+    groups: (r.groups || []).map((g) => ({
+      name: g.name || '',
+      rows: (g.standings || []).map((s) => ({
+        position: num(s.position),
+        points: num(s.points) ?? 0,
+        team: { id: s.team.id, name: s.team.name, logo: s.team.logo || null },
+        total: standLine(s.total),
+        home: standLine(s.home),
+        away: standLine(s.away),
+      })).sort((a, b) => a.position - b.position),
+    })),
+  };
+}
+
 /** Detail + lineups + box score → het `detail`-deel van een wedstrijddocument. */
 export function normalizeDetail(detailRaw, lineupsRaw, boxRaw) {
   const d = one(detailRaw) || {};

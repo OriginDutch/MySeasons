@@ -40,14 +40,6 @@ export const views = {
     },
   },
 
-  stats: {
-    title: 'Stats',
-    render() {
-      return `
-        ${head({ kicker: 'MySeasons / 2026–27', title: 'Statistieken' })}
-        <section class="section">${empty('Nog leeg', 'Statistieken, vergelijkingen en records komen in fase 7.')}</section>`;
-    },
-  },
 
   meer: {
     title: 'Meer',
