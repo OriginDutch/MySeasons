@@ -138,6 +138,7 @@ function newsBlock(items, teams) {
         <p class="muted" style="font-size:13px">${newsUnavailable
           ? 'Nieuws komt zodra de Worker is bijgewerkt met de nieuwe code.'
           : `Nog geen VI-nieuws over ${esc(MAIN_CLUB.name)} of de volgende tegenstander gezien. De app kijkt elk kwartier.`}</p>
+        <div><a class="link-btn" href="#/nieuws">Al het nieuws</a></div>
       </section>`;
   }
   return `

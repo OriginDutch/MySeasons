@@ -546,3 +546,8 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .news-item__teaser { font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .news-item__meta { font-size: 11px; }
 .news-item:hover .news-item__title { text-decoration: underline; }
+
+/* App-gevoel: geen tekstselectie (en dus geen zoekbalk van Google) bij lang drukken.
+   Invoervelden en je eigen notities blijven selecteerbaar. */
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }

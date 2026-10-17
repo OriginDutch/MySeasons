@@ -105,7 +105,7 @@ export const views = {
           <dl class="kv">
             <dt>Naam</dt><dd>${esc(user.displayName || '—')}</dd>
             <dt>E-mail</dt><dd>${esc(user.email || '—')}</dd>
-            <dt>UID</dt><dd class="mono" style="font-size: 12px">${esc(user.uid)}</dd>
+            <dt>UID</dt><dd class="mono selectable" style="font-size: 12px">${esc(user.uid)}</dd>
           </dl>
           <div style="display: flex; gap: 8px; flex-wrap: wrap">
             <button class="btn" type="button" data-action="copy-uid">UID kopiëren</button>
