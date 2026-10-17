@@ -1,6 +1,6 @@
 // Home als clubmagazine: te-doen, voorbeschouwing, verhalen, vorige week, seizoen.
 
-import { esc, icons } from './ui.js';
+import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import { getMeta, getCallsToday, getStandings } from './store.js';
 import { COST } from './sync.js';
@@ -9,6 +9,7 @@ import {
 } from './matchviews.js';
 import { preview, seasonStories, matchReport } from './stories.js';
 import { buildSquad } from './players.js';
+import { refreshNews, newsFor } from './news.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
   dayShort, timeOf, relativeDay, shortRound, crowdSummary,
@@ -100,6 +101,53 @@ function lastWeek(m, rep) {
     </section>`;
 }
 
+export function ago(iso) {
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (min < 1) return 'net';
+  if (min < 60) return `${min} min geleden`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `${h} uur geleden`;
+  const d = Math.round(h / 24);
+  return d === 1 ? 'gisteren' : d < 7 ? `${d} dagen geleden` : dayShort(iso);
+}
+
+/** Alle clubs uit je programma: Cambuur plus elke tegenstander. */
+export function knownTeams(list) {
+  const map = new Map();
+  list.forEach((m) => [m.homeTeam, m.awayTeam].forEach((t) => { if (t && t.id) map.set(t.id, { id: t.id, name: t.name }); }));
+  if (!map.has(TEAM)) map.set(TEAM, { id: TEAM, name: MAIN_CLUB.name });
+  return [...map.values()];
+}
+
+export function newsItem(n, teams) {
+  const tags = n.clubs.map((id) => (teams.find((t) => t.id === id) || {}).name).filter(Boolean);
+  return `<a class="news-item" href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">
+    <span class="news-item__title">${esc(n.title)}</span>
+    ${n.teaser ? `<span class="news-item__teaser muted">${esc(n.teaser)}</span>` : ''}
+    <span class="news-item__meta mono muted">${esc(ago(n.date))} · ${esc(tags.join(', '))} · lees op vi.nl ↗</span>
+  </a>`;
+}
+
+let newsUnavailable = false;
+
+function newsBlock(items, teams) {
+  if (!items.length) {
+    return `
+      <section class="mag-section" data-news>
+        <div class="mag-section__head"><h2>Nieuws</h2><span class="mono muted">via VI</span></div>
+        <p class="muted" style="font-size:13px">${newsUnavailable
+          ? 'Nieuws komt zodra de Worker is bijgewerkt met de nieuwe code.'
+          : `Nog geen VI-nieuws over ${esc(MAIN_CLUB.name)} of de volgende tegenstander gezien. De app kijkt elk kwartier.`}</p>
+      </section>`;
+  }
+  return `
+    <section class="mag-section" data-news>
+      <div class="mag-section__head"><h2>Nieuws</h2><span class="mono muted">via VI</span></div>
+      <div class="news-list">${items.map((n) => newsItem(n, teams)).join('')}</div>
+      <div><a class="link-btn" href="#/nieuws">Meer nieuws</a></div>
+    </section>`;
+}
+
 function seasonStrip(list, league, standings) {
   if (!league) return '';
   const s = leagueSummary(list, TEAM, league.id);
@@ -143,6 +191,10 @@ export const magazineViews = {
       const topScorer = players.slice().sort((a, b) => b.goals - a.goals)[0] || null;
       const crowd = league ? crowdSummary(list, TEAM, league.id) : {};
       const stories = seasonStories(list, league, standings, { topScorer, homeAvg: crowd.homeAvg, homeCount: crowd.homeCount });
+      const teams = knownTeams(list);
+      const nextOpp = next ? opponentOf(next, TEAM) : null;
+      const news = await newsFor([TEAM, ...(nextOpp ? [nextOpp.id] : [])], 3).catch(() => []);
+      this._teams = teams;
       return `
         <div class="mag">
           ${masthead(team)}
@@ -151,6 +203,7 @@ export const magazineViews = {
           ${cover(next, preview(next, list, league, standings))}
           ${storiesRow(stories)}
           ${lastWeek(last, matchReport(last))}
+          ${newsBlock(news, teams)}
           ${seasonStrip(list, league, standings)}
           <div class="mag-pad">${syncFooter(meta, calls)}</div>
         </div>`;
@@ -162,6 +215,55 @@ export const magazineViews = {
         if (btn.dataset.action === 'sync-season') handleSync(btn, ctx);
         if (btn.dataset.action === 'fetch-match') handleFetch(btn, ctx, btn.dataset.id);
       });
+      // Nieuws op de achtergrond verversen (hooguit eens per kwartier).
+      if (this._teams && root.querySelector('[data-news]')) {
+        refreshNews(this._teams).then((r) => {
+          if (r.error && r.error.status === 404) { if (!newsUnavailable) { newsUnavailable = true; ctx.refresh(); } return; }
+          if (r.fetched && r.found) ctx.refresh();
+        });
+      }
     },
+  },
+};
+
+const NEWS_FILTERS = [['club', MAIN_CLUB.name], ['all', 'Alle clubs']];
+
+magazineViews.nieuws = {
+  title: 'Nieuws',
+  navKey: 'home',
+  async render() {
+    const { list } = await correctedList();
+    const teams = knownTeams(list);
+    const all = await newsFor(teams.map((t) => t.id), 200).catch(() => []);
+    const mine = all.filter((n) => n.clubs.includes(TEAM));
+    const head = `<header class="page-head"><div class="page-head__titles">
+      <a class="back-btn" href="#/home" aria-label="Terug">${icons.back}</a>
+      <span class="page-head__kicker">Home / Nieuws · via VI</span><h1 class="page-head__title">Nieuws</h1></div>
+      <button class="btn" type="button" data-action="news-refresh">${icons.refresh}<span>Ververs</span></button></header>`;
+    return `${head}
+      <section class="section">
+        <div class="chips" role="radiogroup">${NEWS_FILTERS.map(([v, l], i) => `<label class="chip"><input type="radio" name="news-f" value="${v}" ${i === 0 ? 'checked' : ''}><span>${esc(l)} <span class="mono">${v === 'club' ? mine.length : all.length}</span></span></label>`).join('')}</div>
+        <p class="muted" style="font-size:12px">Alleen kop en teaser; het artikel lees je op vi.nl. Bewaard wordt alleen nieuws over clubs uit je programma.</p>
+      </section>
+      <section class="section">
+        <div class="news-list" data-news-list="club">${mine.length ? mine.map((n) => newsItem(n, teams)).join('') : '<p class="muted">Nog niets bewaard.</p>'}</div>
+        <div class="news-list" data-news-list="all" hidden>${all.length ? all.map((n) => newsItem(n, teams)).join('') : '<p class="muted">Nog niets bewaard.</p>'}</div>
+      </section>`;
+  },
+  mount(root, ctx) {
+    root.querySelectorAll('input[name="news-f"]').forEach((i) => i.addEventListener('change', () => {
+      root.querySelectorAll('[data-news-list]').forEach((el) => { el.hidden = el.dataset.newsList !== i.value; });
+    }));
+    root.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-action="news-refresh"]');
+      if (!btn) return;
+      btn.disabled = true;
+      const { list } = await correctedList();
+      const r = await refreshNews(knownTeams(list), { force: true });
+      btn.disabled = false;
+      if (r.error) toast(r.error.status === 404 ? 'De Worker kent /news/vi nog niet. Plak eerst de nieuwe Worker-code.' : `Nieuws ophalen lukte niet: ${r.error.message}`);
+      else toast(r.found ? `${r.found} berichten over je clubs gevonden` : 'Niets nieuws over je clubs');
+      ctx.refresh();
+    });
   },
 };

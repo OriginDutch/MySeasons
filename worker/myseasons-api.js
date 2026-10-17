@@ -1,9 +1,10 @@
 // MySeasons API — Cloudflare Worker
 //
-// Doet drie dingen:
+// Doet vier dingen:
 // 1. Checkt of de aanvraag van jou komt (Firebase ID-token + jouw UID).
 // 2. Stuurt alleen toegestane Highlightly-aanvragen door, met de key die hier als secret staat.
-// 3. Zet CORS-headers zodat alleen de MySeasons-app hem kan gebruiken.
+// 3. Haalt de VI-nieuwsfeed op (/news/vi) en geeft alleen kop, teaser, link, datum en tags terug.
+// 4. Zet CORS-headers zodat alleen de MySeasons-app hem kan gebruiken.
 //
 // Instellen in Cloudflare (Settings → Variables and Secrets):
 //   HIGHLIGHTLY_KEY  (type Secret)  je Highlightly API-key
@@ -68,6 +69,56 @@ function b64urlToBytes(s) {
 
 function b64urlToJson(s) {
   return JSON.parse(new TextDecoder().decode(b64urlToBytes(s)));
+}
+
+// ---------- VI-nieuws ----------
+
+const VI_FEED = 'https://www.vi.nl/feed/nieuws';
+
+function decodeEntities(s) {
+  return s
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&quot;/g, '"').replace(/&apos;|&#039;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+}
+
+function tagText(block, tag) {
+  const m = block.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'i'));
+  if (!m) return '';
+  const raw = m[1].replace(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/, '$1');
+  return decodeEntities(raw.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+
+function parseFeed(xml) {
+  const items = [];
+  const re = /<item>([\s\S]*?)<\/item>/g;
+  let m;
+  while ((m = re.exec(xml)) && items.length < 60) {
+    const block = m[1];
+    const categories = [];
+    const cre = /<category(?:\s[^>]*)?>([\s\S]*?)<\/category>/g;
+    let c;
+    while ((c = cre.exec(block))) {
+      categories.push(decodeEntities(c[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/, '$1')).trim());
+    }
+    const link = tagText(block, 'link');
+    if (!/^https:\/\/(www\.)?vi\.nl\//.test(link)) continue;
+    items.push({
+      title: tagText(block, 'title'),
+      teaser: tagText(block, 'description').slice(0, 280),
+      link,
+      pubDate: tagText(block, 'pubDate'),
+      categories,
+    });
+  }
+  return items;
+}
+
+async function viNews() {
+  const res = await fetch(VI_FEED, { cf: { cacheTtl: 600, cacheEverything: true }, headers: { 'User-Agent': 'MySeasons/1.0 (persoonlijke app)' } });
+  if (!res.ok) throw new Error(`VI gaf ${res.status}`);
+  return parseFeed(await res.text());
 }
 
 // ---------- Firebase ID-token controleren ----------
@@ -158,6 +209,15 @@ export default {
     // Gezondheidscheck: geen Highlightly-call, kost geen quotum.
     if (url.pathname === '/health') {
       return json({ ok: true, uid: user.sub }, 200, origin);
+    }
+
+    // VI-nieuws: geen Highlightly-call, kost geen quotum.
+    if (url.pathname === '/news/vi') {
+      try {
+        return json({ items: await viNews(), fetchedAt: new Date().toISOString() }, 200, origin, { 'Cache-Control': 'no-store' });
+      } catch (err) {
+        return json({ error: 'VI-feed niet bereikbaar', detail: err.message }, 502, origin);
+      }
     }
 
     // Doorsturen naar Highlightly: /hl/<pad>

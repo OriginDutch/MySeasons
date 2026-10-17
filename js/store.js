@@ -113,3 +113,18 @@ export async function getPlayers() {
 export function savePlayer(id, partial) {
   return setDoc(doc(db, 'players', String(id)), { ...partial, updatedAt: new Date().toISOString() }, { merge: true });
 }
+
+// ---------- Nieuws: news/{id} ----------
+// Alleen kop, teaser, link, datum en clubs. Zo blijft clubnieuws bewaard als de feed doorschuift.
+
+export async function getNews() {
+  const snap = await getDocs(collection(db, 'news'));
+  return snap.docs.map((d) => d.data());
+}
+
+export async function saveNews(items) {
+  if (!items.length) return;
+  const batch = writeBatch(db);
+  items.forEach((n) => batch.set(doc(db, 'news', n.id), n, { merge: true }));
+  await batch.commit();
+}

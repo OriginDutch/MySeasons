@@ -60,3 +60,8 @@ export function health() {
 export function hl(path, params) {
   return call('/hl' + path, params);
 }
+
+/** VI-nieuws via de Worker: kop, teaser, link, datum en tags. Kost geen Highlightly-quotum. */
+export function viNews() {
+  return call('/news/vi');
+}
