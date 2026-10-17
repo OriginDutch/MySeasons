@@ -19,9 +19,22 @@ function resolve(pref) {
   return pref;
 }
 
+// Clubkleuren: standaard aan, per apparaat uit te zetten.
+const CLUB_KEY = 'ms-club';
+
+export function getClubColors() {
+  try { return localStorage.getItem(CLUB_KEY) !== 'off'; } catch { return true; }
+}
+
+export function setClubColors(on) {
+  try { localStorage.setItem(CLUB_KEY, on ? 'on' : 'off'); } catch { /* alleen deze sessie */ }
+  applyTheme();
+}
+
 export function applyTheme(pref = getThemePref()) {
   const resolved = resolve(pref);
   document.documentElement.setAttribute('data-theme', resolved);
+  document.documentElement.setAttribute('data-club', getClubColors() ? 'on' : 'off');
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && bg) meta.setAttribute('content', bg);

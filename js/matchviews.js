@@ -38,16 +38,16 @@ export function head({ kicker, title, back, action }) {
     </header>`;
 }
 
-function compName(m) {
+export function compName(m) {
   if (!m.league) return '';
   return /friendl/i.test(m.league.name) ? 'Oefenwedstrijd' : m.league.name;
 }
 
-function matchTitle(m) {
+export function matchTitle(m) {
   return `${esc(m.homeTeam ? m.homeTeam.name : '?')} – ${esc(m.awayTeam ? m.awayTeam.name : '?')}`;
 }
 
-function scoreText(m) {
+export function scoreText(m) {
   if (!m.score) return '';
   const pen = m.penalties ? ` <span class="muted">(${m.penalties.home}–${m.penalties.away} pen.)</span>` : '';
   return `${m.score.home}–${m.score.away}${pen}`;
@@ -74,7 +74,7 @@ export function explain(err) {
   return (err && err.message) || 'Onbekende fout';
 }
 
-async function handleSync(btn, ctx) {
+export async function handleSync(btn, ctx) {
   try {
     const n = await runWithButton(btn, 'Bezig…', () => syncSeason());
     toast(`${n} wedstrijden bijgewerkt · ${COST.season} calls`);
@@ -84,7 +84,7 @@ async function handleSync(btn, ctx) {
   }
 }
 
-async function handleFetch(btn, ctx, id) {
+export async function handleFetch(btn, ctx, id) {
   try {
     await runWithButton(btn, 'Ophalen…', () => fetchMatch(id));
     toast(`Wedstrijd opgehaald · ${COST.match} calls`);
@@ -125,7 +125,7 @@ function fillCard(m) {
     </section>`;
 }
 
-function devBar(total, conflicts, href) {
+export function devBar(total, conflicts, href) {
   if (!total) return '';
   return `<a class="dev-flag ${conflicts ? 'dev-flag--conflict' : ''}" href="${href}">
     <span class="fix-dot"></span>
@@ -243,7 +243,7 @@ function roundsBlock(list, league) {
     </section>`;
 }
 
-function syncFooter(meta, calls) {
+export function syncFooter(meta, calls) {
   const last = meta && meta.lastSeasonSync;
   const ageDays = last ? (Date.now() - Date.parse(last)) / 864e5 : Infinity;
   const stale = ageDays >= SYNC_SUGGEST_DAYS;

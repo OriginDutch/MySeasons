@@ -58,3 +58,57 @@
   --content-max: 720px;
   --tap: 44px;
 }
+
+/* ==========================================================================
+   Magazine-tokens. Neutraal: afgeleid van het thema hierboven.
+   Met clubkleuren (data-club="on") overschreven per club en per thema.
+   ========================================================================== */
+:root {
+  --on-accent: #FFFFFF;
+  --band: var(--inverse-bg);
+  --band-ink: var(--inverse-ink);
+  --band-muted: var(--inverse-ink);
+  --tag: var(--accent);
+  --tag-ink: #FFFFFF;
+  --figure: var(--ink);
+  --btn: var(--inverse-bg);
+  --btn-ink: var(--inverse-ink);
+  --crest-bg: var(--surface-hover);
+  --crest-ink: var(--ink);
+  --win: var(--inverse-bg);
+  --win-ink: var(--inverse-ink);
+  --draw: var(--surface-hover);
+  --draw-ink: var(--ink);
+  --photo: #2B2C30;
+  --card: var(--bg);
+}
+
+/* SC Cambuur: blauw #0A3A8C, geel #FFD100, navy #0A2A66 */
+:root[data-club="on"][data-theme="light"],
+:root[data-club="on"]:not([data-theme]) {
+  --accent: #0A3A8C; --accent-text: #0A3A8C; --on-accent: #FFFFFF;
+  --band: #0A3A8C; --band-ink: #FFFFFF; --band-muted: #C9D6F2;
+  --tag: #FFD100; --tag-ink: #0A2A66; --figure: #0A3A8C;
+  --btn: #0A3A8C; --btn-ink: #FFFFFF;
+  --crest-bg: #FFD100; --crest-ink: #0A2A66;
+  --win: #0A3A8C; --win-ink: #FFFFFF; --draw: #FFE873; --draw-ink: #0A2A66;
+  --photo: #12306E; --card: #FFFFFF;
+}
+:root[data-club="on"][data-theme="dim"] {
+  --accent: #FFD100; --accent-text: #FFD84D; --on-accent: #0A2A66;
+  --band: #12306E; --band-ink: #FFFFFF; --band-muted: #C9D6F2;
+  --tag: #FFD100; --tag-ink: #0A2A66; --figure: #FFD84D;
+  --btn: #FFD100; --btn-ink: #0A2A66;
+  --crest-bg: #FFD100; --crest-ink: #0A2A66;
+  --win: #FFD100; --win-ink: #0A2A66; --draw: #3F4A63; --draw-ink: #E8EAED;
+  --photo: #0E2A63; --card: #2A2F37;
+}
+:root[data-club="on"][data-theme="dark"] {
+  --accent: #FFD100; --accent-text: #FFD84D; --on-accent: #0A2A66;
+  --band: #0E2A63; --band-ink: #FFFFFF; --band-muted: #C9D6F2;
+  --tag: #FFD100; --tag-ink: #0A2A66; --figure: #FFD84D;
+  --btn: #FFD100; --btn-ink: #0A2A66;
+  --crest-bg: #FFD100; --crest-ink: #0A2A66;
+  --win: #FFD100; --win-ink: #0A2A66; --draw: #2B3550; --draw-ink: #F2F2F3;
+  --photo: #0E2A63; --card: #131315;
+}

@@ -5,9 +5,10 @@ import { esc, icons, toast } from './ui.js';
 import { matchViews } from './matchviews.js';
 import { editorViews } from './editor.js';
 import { playerViews } from './playerviews.js';
+import { magazineViews } from './magazine.js';
 import { getCallsToday, getAllMatches, getAllNotes } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
-import { getThemePref, setThemePref } from './theme.js';
+import { getThemePref, setThemePref, getClubColors, setClubColors } from './theme.js';
 import { signOutUser, testConnection } from './firebase.js';
 import { health } from './api.js';
 import { APP_VERSION, APP_PHASE } from './version.js';
@@ -35,6 +36,7 @@ export const views = {
   ...matchViews,
   ...editorViews,
   ...playerViews,
+  ...magazineViews,
 
   meer: {
     title: 'Meer',
@@ -90,6 +92,12 @@ export const views = {
               <label for="theme-${value}">${label}</label>`).join('')}
           </fieldset>
           <p class="muted" style="font-size: 12px">Systeem volgt de licht/donker-instelling van je telefoon.</p>
+          <fieldset class="segmented" style="border-color: var(--rule); margin: 8px 0 0; padding: 0; grid-template-columns: repeat(2, minmax(0, 1fr));">
+            <legend class="visually-hidden">Clubkleuren</legend>
+            <input type="radio" name="club" id="club-on" value="on" ${getClubColors() ? 'checked' : ''}><label for="club-on">Clubkleuren</label>
+            <input type="radio" name="club" id="club-off" value="off" ${getClubColors() ? '' : 'checked'}><label for="club-off">Neutraal</label>
+          </fieldset>
+          <p class="muted" style="font-size: 12px">Clubkleuren kleuren de app in de kleuren van de club die je bekijkt.</p>
         </section>
 
         <section class="section" aria-labelledby="sec-account">
@@ -126,6 +134,9 @@ export const views = {
     mount(root, ctx) {
       root.querySelectorAll('input[name="theme"]').forEach((input) => {
         input.addEventListener('change', () => setThemePref(input.value));
+      });
+      root.querySelectorAll('input[name="club"]').forEach((input) => {
+        input.addEventListener('change', () => setClubColors(input.value === 'on'));
       });
 
       root.addEventListener('click', async (e) => {
