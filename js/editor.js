@@ -7,6 +7,7 @@ import {
   buildChanges, display, looksLikeTypo,
 } from './corrections.js';
 import { sortByDate, dayShort } from './season.js';
+import { MAIN_CLUB } from './config.js';
 
 // ---------- Sheet (onderkant op mobiel, midden op desktop) ----------
 
@@ -174,15 +175,29 @@ async function commit(apiMatch, notes, entries, refresh) {
 
 export async function editNotes(m, notes) {
   const n = notes || {};
+  const awayIsMe = m.awayTeam && m.awayTeam.id === MAIN_CLUB.id;
+  const awayLabel = awayIsMe ? `Waarvan ${MAIN_CLUB.name}-fans (uitvak)` : `Waarvan ${m.awayTeam ? m.awayTeam.name : 'uit'}-fans (uitvak)`;
   const data = await openSheet({
     title: 'Wedstrijd aanvullen',
-    body: `<label class="field"><span>Toeschouwers</span><input name="attendance" type="number" inputmode="numeric" min="0" max="100000" placeholder="bijv. 10250" value="${n.attendance ?? ''}"></label>
+    body: `<label class="field"><span>Toeschouwers (totaal)</span><input name="attendance" type="number" inputmode="numeric" min="0" max="100000" placeholder="bijv. 10250" value="${n.attendance ?? ''}"></label>
+      <label class="field"><span>${esc(awayLabel)}</span><input name="awayFans" type="number" inputmode="numeric" min="0" max="100000" placeholder="leeg = onbekend" value="${n.awayFans ?? ''}"></label>
       <label class="field"><span>Notitie</span><textarea name="note" rows="4" maxlength="2000" placeholder="Sfeer, opvallende momenten, waar je zat…">${esc(n.note || '')}</textarea></label>`,
-    validate: (fd) => Number.isNaN(intIn(fd.get('attendance'), 0, 100000)) ? 'Toeschouwers moet een heel getal zijn (0 t/m 100.000).' : null,
+    validate: (fd) => {
+      const t = intIn(fd.get('attendance'), 0, 100000);
+      const a = intIn(fd.get('awayFans'), 0, 100000);
+      if (Number.isNaN(t)) return 'Toeschouwers moet een heel getal zijn (0 t/m 100.000).';
+      if (Number.isNaN(a)) return 'Uitvak moet een heel getal zijn (0 t/m 100.000).';
+      if (t !== null && a !== null && a > t) return 'Het uitvak kan niet groter zijn dan het totaal.';
+      return null;
+    },
   });
   if (!data) return false;
-  const next = { attendance: intIn(data.get('attendance'), 0, 100000), note: String(data.get('note') || '').trim() || null };
-  if (next.attendance === (n.attendance ?? null) && next.note === (n.note || null)) { toast('Niets veranderd'); return false; }
+  const next = {
+    attendance: intIn(data.get('attendance'), 0, 100000),
+    awayFans: intIn(data.get('awayFans'), 0, 100000),
+    note: String(data.get('note') || '').trim() || null,
+  };
+  if (next.attendance === (n.attendance ?? null) && next.awayFans === (n.awayFans ?? null) && next.note === (n.note || null)) { toast('Niets veranderd'); return false; }
   await saveNotes(m.id, next);
   toast('Opgeslagen');
   return true;

@@ -9,10 +9,11 @@ import { syncSeason, fetchMatch, syncStandings, COST } from './sync.js';
 import { rowsFor, standTable, zoneLegend, miniStand } from './standview.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
-  dayShort, dayLong, timeOf, monthOf, relativeDay, shortRound,
+  dayShort, dayLong, timeOf, monthOf, relativeDay, shortRound, crowdSummary,
 } from './season.js';
 
 const TEAM = MAIN_CLUB.id;
+const nl = (v) => Number(v).toLocaleString('nl-NL');
 
 // ---------- Bouwstenen ----------
 
@@ -110,7 +111,7 @@ async function correctedList() {
 function fillCard(m) {
   if (!m || m.status !== 'finished') return '';
   const n = m.notes || {};
-  if (n.attendance != null || n.note) return '';
+  if (n.attendance != null || n.awayFans != null || n.note) return '';
   const age = (Date.now() - Date.parse(m.date)) / 864e5;
   if (age > 10) return '';
   return `
@@ -130,6 +131,24 @@ function devBar(total, conflicts, href) {
     <span>${conflicts ? `${conflicts} ${conflicts === 1 ? 'veld' : 'velden'} met conflict` : `${total} ${total === 1 ? 'veld wijkt' : 'velden wijken'} af van Highlightly`}</span>
     <span class="dev-flag__go">Bekijken</span>
   </a>`;
+}
+
+function crowdBlock(list, league) {
+  const c = crowdSummary(list, TEAM, league.id);
+  const vs = (m) => esc((opponentOf(m, TEAM) || {}).name || '?');
+  const rows = [];
+  if (c.homeAvg !== null) rows.push(['Gemiddeld thuis', nl(c.homeAvg), `${c.homeCount} ${c.homeCount === 1 ? 'duel' : 'duels'} ingevuld`]);
+  if (c.homeTop) rows.push(['Drukste thuis', nl(c.homeTop.notes.attendance), `tegen ${vs(c.homeTop)}`]);
+  if (c.fansTotal !== null) rows.push([`Meegereisde ${esc(MAIN_CLUB.name)}-fans`, nl(c.fansTotal), `gem. ${nl(c.fansAvg)} over ${c.fansCount} ${c.fansCount === 1 ? 'uitduel' : 'uitduels'}`]);
+  if (c.fansTop) rows.push(['Grootste uitvak', nl(c.fansTop.notes.awayFans), `bij ${vs(c.fansTop)}`]);
+  if (c.awayTop) rows.push(['Drukste uitstadion', nl(c.awayTop.notes.attendance), `bij ${vs(c.awayTop)}`]);
+  return `
+    <section class="section">
+      <div class="section__label"><span>Publiek</span><span>${esc(league.name)}</span></div>
+      ${rows.length ? `<div class="crowd">${rows.map(([l, v, sub]) => `<div class="crowd__row"><span>${l}<br><span class="muted">${sub}</span></span><span class="mono crowd__num">${v}</span></div>`).join('')}</div>
+      <p class="muted" style="font-size:12px">Alleen competitieduels met een ingevuld aantal. Leeg telt niet mee als 0.</p>`
+      : '<p class="muted" style="font-size:13px">Nog geen toeschouwers ingevuld. Dat doe je per wedstrijd onder “Aanvullen”.</p>'}
+    </section>`;
 }
 
 // ---------- Home ----------
@@ -182,6 +201,7 @@ function seasonBlock(list, league, standings) {
   if (!league) return '';
   const s = leagueSummary(list, TEAM, league.id);
   if (!s.played) return '';
+  const crowd = crowdSummary(list, TEAM, league.id);
   const streak = s.unbeaten >= 2 ? `${s.unbeaten} duels ongeslagen` : s.winless >= 3 ? `${s.winless} duels zonder zege` : null;
   const g = standings && standings.groups && standings.groups[0];
   const me = g ? rowsFor(g, 'total').find((r) => r.team.id === TEAM) : null;
@@ -197,6 +217,7 @@ function seasonBlock(list, league, standings) {
       <div class="facts">
         ${streak ? `<div class="fact"><span class="fact__num">${s.unbeaten >= 2 ? s.unbeaten : s.winless}</span><span>${esc(streak)}</span></div>` : ''}
         <div class="fact"><span class="fact__num">${s.awayPts}</span><span>punten uit, tegen ${s.homePts} thuis</span></div>
+        ${crowd.homeAvg !== null ? `<div class="fact"><span class="fact__num">${nl(crowd.homeAvg)}</span><span>gemiddeld thuis, over ${crowd.homeCount} ${crowd.homeCount === 1 ? 'duel' : 'duels'}</span></div>` : ''}
       </div>
       ${g ? `${miniStand(standings, league.id)}<div><a class="link-btn" href="#/stats">Hele stand</a></div>` : ''}
     </section>`;
@@ -283,7 +304,7 @@ export const matchViews = {
   stats: {
     title: 'Stand',
     async render() {
-      const list = await getAllMatches();
+      const { list } = await correctedList();
       const league = mainLeague(list);
       const kicker = `MySeasons / ${league ? league.name + ' ' : ''}2026–27`;
       if (!league) {
@@ -310,6 +331,7 @@ export const matchViews = {
           ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), league.id, { withZones: v === 'total' })}</div>`).join('')}
           ${zoneLegend(league.id)}
         </section>
+        ${crowdBlock(list, league)}
         <section class="section">
           <div class="section__label"><span>Bijgewerkt</span><span>${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
           <p class="muted" style="font-size:12px">De stand wordt ook bijgewerkt als je het seizoen synchroniseert.</p>
@@ -404,7 +426,8 @@ export const matchViews = {
             ${d.venue && d.venue.name ? `<dt>Stadion</dt><dd>${esc(d.venue.name)}${d.venue.city ? ', ' + esc(d.venue.city) : ''}</dd>` : ''}
             ${d.referee ? `<dt>Scheidsrechter</dt><dd>${esc(d.referee)}</dd>` : ''}
             <dt>Aftrap</dt><dd>${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</dd>
-            ${n.attendance != null ? `<dt>Toeschouwers</dt><dd class="mono">${n.attendance.toLocaleString('nl-NL')}</dd>` : ''}
+            ${n.attendance != null ? `<dt>Toeschouwers</dt><dd class="mono">${nl(n.attendance)}</dd>` : ''}
+            ${n.awayFans != null ? `<dt>Uitvak</dt><dd><span class="mono">${nl(n.awayFans)}</span> <span class="muted">${esc(m.awayTeam.name)}</span></dd>` : ''}
           </dl>` : `<p class="muted">${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</p>`}
           ${m.status === 'finished'
             ? `<div><button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${d ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button></div>`
@@ -452,7 +475,7 @@ function nameIndex(m) {
 }
 
 function notesBlock(n) {
-  const has = n.attendance != null || n.note;
+  const has = n.attendance != null || n.awayFans != null || n.note;
   return `
     <section class="section">
       <div class="section__label"><span>Jouw aanvulling</span><span>${has ? '' : 'nog leeg'}</span></div>

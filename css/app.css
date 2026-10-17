@@ -449,3 +449,7 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 @media (min-width: 900px) { .dev-bar { bottom: 16px; } }
 .dev-bar__all { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-right: auto; min-height: var(--tap); }
 .dev-bar__all input { width: 18px; height: 18px; accent-color: var(--accent); }
+.crowd { display: grid; }
+.crowd__row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--hairline); font-size: 14px; }
+.crowd__row .muted { font-size: 12px; }
+.crowd__num { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }

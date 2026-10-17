@@ -111,3 +111,27 @@ export function shortRound(round) {
   if (/regular season/i.test(round || '') && n) return `R${n}`;
   return round || '';
 }
+
+/**
+ * Publiek. Alleen gespeelde competitiewedstrijden met een ingevuld aantal tellen mee:
+ * leeg is onbekend, niet 0. Thuis en uit worden nooit door elkaar gemiddeld.
+ */
+export function crowdSummary(list, teamId, leagueId) {
+  const games = list.filter((m) => m.status === 'finished' && m.league && m.league.id === leagueId && m.notes);
+  const home = games.filter((m) => isHome(m, teamId) && m.notes.attendance != null);
+  const away = games.filter((m) => !isHome(m, teamId));
+  const fans = away.filter((m) => m.notes.awayFans != null);
+  const awayCrowd = away.filter((m) => m.notes.attendance != null);
+  const sum = (arr, k) => arr.reduce((t, m) => t + m.notes[k], 0);
+  const top = (arr, k) => arr.slice().sort((a, b) => b.notes[k] - a.notes[k])[0] || null;
+  return {
+    homeAvg: home.length ? Math.round(sum(home, 'attendance') / home.length) : null,
+    homeCount: home.length,
+    homeTop: top(home, 'attendance'),
+    fansTotal: fans.length ? sum(fans, 'awayFans') : null,
+    fansAvg: fans.length ? Math.round(sum(fans, 'awayFans') / fans.length) : null,
+    fansCount: fans.length,
+    fansTop: top(fans, 'awayFans'),
+    awayTop: top(awayCrowd, 'attendance'),
+  };
+}
