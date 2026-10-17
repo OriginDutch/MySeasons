@@ -1,6 +1,9 @@
 // Selectie en spelerspagina's.
 
 import { esc, toast } from './ui.js';
+import { savePlayer } from './store.js';
+import { autoShort } from './names.js';
+import { openSheet } from './editor.js';
 import { MAIN_CLUB } from './config.js';
 import { COST, missingDetails, fetchMany } from './sync.js';
 import { buildSquad, playerFacts, LINES, LINE_SHORT } from './players.js';
@@ -85,8 +88,8 @@ export const playerViews = {
   selectie: {
     title: 'Selectie',
     async render() {
-      const { list } = await correctedList();
-      const { players, matches } = buildSquad(list, TEAM);
+      const { list, profiles } = await correctedList();
+      const { players, matches } = buildSquad(list, TEAM, profiles);
       const kicker = `MySeasons / ${MAIN_CLUB.name} 2026–27`;
       if (!players.length) {
         return `${head({ kicker, title: 'Selectie' })}
@@ -121,10 +124,33 @@ export const playerViews = {
   speler: {
     title: 'Speler',
     navKey: 'selectie',
+    mount(root, ctx) {
+      root.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-action="edit-name"]');
+        if (!btn) return;
+        const { id, api, full, short } = btn.dataset;
+        const data = await openSheet({
+          title: 'Naam aanpassen',
+          body: `<label class="field"><span>Volledige naam</span><input name="full" maxlength="60" autocomplete="off" placeholder="${esc(api)}" value="${esc(full)}"></label>
+            <label class="field"><span>Korte naam (tijdlijn, opstellingen)</span><input name="short" maxlength="30" autocomplete="off" placeholder="${esc(autoShort(full || api))}" value="${esc(short)}"></label>
+            <p class="muted sheet__note">Leeg laten = automatisch. Highlightly noemt hem: ${esc(api)}</p>`,
+        });
+        if (!data) return;
+        const next = { fullName: String(data.get('full') || '').trim() || null, shortName: String(data.get('short') || '').trim() || null };
+        if (next.fullName === (full || null) && next.shortName === (short || null)) { toast('Niets veranderd'); return; }
+        try {
+          await savePlayer(id, next);
+          toast('Naam opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await savePlayer(id, { fullName: full || null, shortName: short || null }); ctx.refresh(); } });
+          ctx.refresh();
+        } catch (err) {
+          toast(`Opslaan lukte niet: ${err.message || err}`);
+        }
+      });
+    },
     async render(ctx, args) {
       const id = Number(args[0]);
-      const { list } = await correctedList();
-      const { players } = buildSquad(list, TEAM);
+      const { list, profiles } = await correctedList();
+      const { players } = buildSquad(list, TEAM, profiles);
       const p = players.find((x) => x.id === id);
       if (!p) {
         return `${head({ kicker: 'Selectie', title: 'Niet gevonden', back: 'selectie' })}
@@ -145,6 +171,8 @@ export const playerViews = {
         <section class="section">
           <div class="player-hero"><span class="player-hero__num">${p.number ?? '–'}</span>
             <span class="muted">${esc(LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
+          <p class="muted" style="font-size:12px;margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>
+          <div><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}">Naam aanpassen</button></div>
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>
         ${facts.length ? `<section class="section"><div class="section__label"><span>Feitjes</span></div>

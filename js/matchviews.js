@@ -2,7 +2,8 @@
 
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, SYNC_SUGGEST_DAYS, CURRENT_SEASON } from './config.js';
-import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes } from './store.js';
+import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers } from './store.js';
+import { applyNames } from './names.js';
 import { applyCorrections, correctionSummary, goalCheck } from './corrections.js';
 import { editEvent, editScore, editNotes } from './editor.js';
 import { syncSeason, fetchMatch, syncStandings, COST } from './sync.js';
@@ -95,17 +96,17 @@ async function handleFetch(btn, ctx, id) {
 
 /** Alle wedstrijden met jouw correcties erover, plus het aantal afwijkingen. */
 export async function correctedList() {
-  const [list, notes] = await Promise.all([getAllMatches(), getAllNotes()]);
+  const [list, notes, profiles] = await Promise.all([getAllMatches(), getAllNotes(), getPlayers()]);
   let total = 0; let conflicts = 0;
   const out = list.map((m) => {
     const n = notes[m.id];
-    if (!n) return m;
+    if (!n) return applyNames(JSON.parse(JSON.stringify(m)), profiles);
     const { match, statuses } = applyCorrections(m, n);
     const c = correctionSummary(statuses);
     total += c.total; conflicts += c.conflicts;
-    return { ...match, notes: n };
+    return applyNames({ ...match, notes: n }, profiles);
   });
-  return { list: out, total, conflicts };
+  return { list: out, total, conflicts, profiles };
 }
 
 function fillCard(m) {
@@ -397,12 +398,13 @@ export const matchViews = {
     title: 'Wedstrijd',
     navKey: 'wedstrijden',
     async render(ctx, args) {
-      const [apiM, notes] = await Promise.all([getMatch(args[0]), getNotes(args[0])]);
+      const [apiM, notes, profiles] = await Promise.all([getMatch(args[0]), getNotes(args[0]), getPlayers()]);
       if (!apiM) {
         return `${head({ kicker: 'Wedstrijden', title: 'Niet gevonden', back: 'wedstrijden' })}
           <section class="section"><p class="muted">Deze wedstrijd staat niet (meer) in je data.</p></section>`;
       }
-      const { match: m, statuses } = applyCorrections(apiM, notes);
+      const { match: corrected, statuses } = applyCorrections(apiM, notes);
+      const m = applyNames(corrected, profiles);
       const sum = correctionSummary(statuses);
       const n = notes || {};
       const r = resultFor(m, TEAM);

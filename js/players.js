@@ -6,6 +6,7 @@
 
 import { kindOf } from './corrections.js';
 import { sortByDate, resultFor } from './season.js';
+import { bestApiName, fullName, shortName } from './names.js';
 
 export const LINES = [
   ['Goalkeeper', 'Keepers'],
@@ -24,13 +25,13 @@ function sideOf(m, teamId) {
 }
 
 /** list: wedstrijden mét correcties toegepast. Geeft { players: [...], matches: n }. */
-export function buildSquad(list, teamId) {
+export function buildSquad(list, teamId, profiles = {}) {
   const games = sortByDate(list.filter((m) => m.detail && m.status === 'finished' && official(m)));
   const map = new Map();
   const get = (id) => {
     if (!map.has(id)) {
       map.set(id, {
-        id, names: [], numbers: {}, positions: {},
+        id, rawNames: [], numbers: {}, positions: {},
         squads: 0, apps: 0, starts: 0, subIns: 0, minutes: 0,
         goals: 0, assists: 0, penalties: 0, yellow: 0, red: 0, ratings: [], log: [],
       });
@@ -46,7 +47,7 @@ export function buildSquad(list, teamId) {
     const add = (p) => {
       if (!p || !p.id) return;
       const e = entries.get(p.id) || { id: p.id };
-      if (p.name) e.name = p.name;
+      if (p.apiName || p.name) e.name = p.apiName || p.name; // Highlightly-spelling, niet jouw korte naam
       if (p.number != null) e.number = p.number;
       if (p.position) e.position = p.position;
       entries.set(p.id, e);
@@ -68,7 +69,7 @@ export function buildSquad(list, teamId) {
       const b = box.find((x) => x.id === e.id) || {};
       const min = b.minutes || 0;
       const started = starters.has(e.id);
-      if (e.name) p.names.push(e.name);
+      if (e.name) p.rawNames.push(e.name);
       if (e.number != null) p.numbers[e.number] = (p.numbers[e.number] || 0) + 1;
       if (e.position) p.positions[e.position] = (p.positions[e.position] || 0) + 1;
       p.squads++;
@@ -88,12 +89,14 @@ export function buildSquad(list, teamId) {
 
   const top = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1])[0];
   const players = [...map.values()].map((p) => {
-    const name = p.names.slice().sort((a, b) => b.length - a.length)[0] || '?';
+    const apiName = bestApiName(p.rawNames);
+    const prof = profiles[p.id];
+    const name = fullName(prof, apiName);
     const latest = p.log.length ? p.log[p.log.length - 1] : null;
     const num = top(p.numbers);
     const pos = top(p.positions);
     return {
-      id: p.id, name, number: num ? Number(num[0]) : null, position: pos ? pos[0] : '',
+      id: p.id, name, short: shortName(prof, apiName), apiName, profile: prof || null, number: num ? Number(num[0]) : null, position: pos ? pos[0] : '',
       squads: p.squads, apps: p.apps, starts: p.starts, subIns: p.subIns, minutes: p.minutes,
       goals: p.goals, assists: p.assists, penalties: p.penalties, yellow: p.yellow, red: p.red,
       rating: p.ratings.length ? p.ratings.reduce((t, r) => t + r, 0) / p.ratings.length : null,

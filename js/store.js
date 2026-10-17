@@ -99,3 +99,17 @@ export async function getCallsToday() {
   const q = await getMeta('quota');
   return q && q.day === today() ? q.count || 0 : 0;
 }
+
+// ---------- Spelersprofielen: players/{id} ----------
+// { fullName, shortName, updatedAt }. Later ook contract, marktwaarde, blessures.
+
+export async function getPlayers() {
+  const snap = await getDocs(collection(db, 'players'));
+  const out = {};
+  snap.docs.forEach((d) => { out[d.id] = d.data(); });
+  return out;
+}
+
+export function savePlayer(id, partial) {
+  return setDoc(doc(db, 'players', String(id)), { ...partial, updatedAt: new Date().toISOString() }, { merge: true });
+}
