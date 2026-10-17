@@ -1,7 +1,9 @@
-// Schermen van fase 2. De echte inhoud (wedstrijden, selectie, stats) volgt in latere fases;
-// tot die tijd tonen deze schermen een rustige lege staat.
+// Schermen. Home, Wedstrijden en de wedstrijdpagina staan in matchviews.js;
+// Selectie en Stats tonen tot hun fase een rustige lege staat.
 
 import { esc, icons, toast } from './ui.js';
+import { matchViews } from './matchviews.js';
+import { getCallsToday } from './store.js';
 import { getThemePref, setThemePref } from './theme.js';
 import { signOutUser, testConnection } from './firebase.js';
 import { health } from './api.js';
@@ -27,26 +29,7 @@ function empty(title, text) {
 }
 
 export const views = {
-  home: {
-    title: 'Home',
-    render() {
-      return `
-        ${head({ kicker: 'MySeasons / 2026–27', title: 'Cambuur' })}
-        <section class="section">
-          <div class="section__label"><span>01 — Volgende</span><span>Eredivisie</span></div>
-          ${empty('Nog geen wedstrijden', 'In fase 3 haalt de app het seizoen op bij Highlightly.')}
-        </section>`;
-    },
-  },
-
-  wedstrijden: {
-    title: 'Wedstrijden',
-    render() {
-      return `
-        ${head({ kicker: 'MySeasons / 2026–27', title: 'Wedstrijden' })}
-        <section class="section">${empty('Nog leeg', 'Programma, uitslagen en wedstrijdpagina’s komen in fase 3 en 4.')}</section>`;
-    },
-  },
+  ...matchViews,
 
   selectie: {
     title: 'Selectie',
@@ -92,8 +75,10 @@ export const views = {
   instellingen: {
     title: 'Instellingen',
     navKey: 'meer',
-    render(ctx) {
+    async render(ctx) {
       const pref = getThemePref();
+      let calls = 0;
+      try { calls = await getCallsToday(); } catch { /* offline of rules: telling onbekend */ }
       const opts = [['light', 'Licht'], ['dim', 'Dim'], ['dark', 'Donker'], ['system', 'Systeem']];
       const user = ctx.user;
       return `
@@ -131,6 +116,7 @@ export const views = {
           <div class="status-line" id="api-status" style="margin-top: 8px"><span class="dot"></span><span>Highlightly-Worker: nog niet getest</span></div>
           <p class="muted" id="api-help" style="font-size: 12px"></p>
           <div><button class="btn" type="button" data-action="test-api">API testen</button></div>
+          <p class="muted" style="font-size: 12px">API-calls vandaag (eigen telling): ${calls} van 100.</p>
         </section>
 
         <section class="section" aria-labelledby="sec-app">

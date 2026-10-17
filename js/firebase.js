@@ -37,6 +37,7 @@ export const auth = getAuth(app);
 // Offline cache in IndexedDB, gedeeld tussen meerdere tabbladen.
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  ignoreUndefinedProperties: true,
 });
 
 const provider = new GoogleAuthProvider();

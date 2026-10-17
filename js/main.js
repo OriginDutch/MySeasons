@@ -71,35 +71,54 @@ function renderShell() {
     <div class="shell"><main class="view" id="view"></main></div>`;
 }
 
-function currentRoute() {
-  const key = (location.hash.replace(/^#\/?/, '').split('/')[0] || 'home').toLowerCase();
-  return views[key] ? key : 'home';
+function parseHash() {
+  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  const key = (parts[0] || 'home').toLowerCase();
+  return { key: views[key] ? key : 'home', args: parts.slice(1) };
 }
 
-function route() {
+function currentRoute() {
+  return parseHash().key;
+}
+
+let routeToken = 0;
+
+async function route({ keepScroll = false } = {}) {
   if (!currentUser) return;
   if (!document.getElementById('view')) renderShell();
-  const key = currentRoute();
+  const { key, args } = parseHash();
   const view = views[key];
   const navKey = view.navKey || key;
+  const token = ++routeToken;
 
   document.querySelectorAll('[data-nav]').forEach((a) => {
     if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
 
+  let html;
+  try {
+    html = await view.render(ctx, args);
+  } catch (err) {
+    console.error(err);
+    html = `<div class="empty"><span class="empty__title">Er ging iets mis</span><p class="muted">${esc(err.message || String(err))}</p></div>`;
+  }
+  if (token !== routeToken) return; // intussen naar een ander scherm genavigeerd
+
   // Vervang het view-element zodat oude event listeners verdwijnen.
   const old = document.getElementById('view');
   const fresh = old.cloneNode(false);
-  fresh.innerHTML = view.render(ctx);
+  fresh.innerHTML = html;
   old.replaceWith(fresh);
-  if (view.mount) view.mount(fresh, ctx);
+  if (view.mount) view.mount(fresh, ctx, args);
 
   document.title = key === 'home' ? 'MySeasons' : `${view.title} · MySeasons`;
-  window.scrollTo(0, 0);
+  if (!keepScroll) window.scrollTo(0, 0);
 }
 
-window.addEventListener('hashchange', route);
+ctx.refresh = () => route({ keepScroll: true });
+
+window.addEventListener('hashchange', () => route());
 
 // ---------- Installatie (PWA) ----------
 
