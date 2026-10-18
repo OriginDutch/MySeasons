@@ -2,10 +2,21 @@ name: Deploy Worker
 on:
   push:
     branches: [main]
-    paths: ['worker/**', 'wrangler.toml', '.github/workflows/worker-deploy.yml']
+    paths: ['worker/**', 'wrangler.toml', 'tools/check.mjs', '.github/workflows/worker-deploy.yml']
   workflow_dispatch:
 jobs:
+  check:
+    name: Releasecontrole
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i --no-save --no-package-lock acorn@8.14.0
+      - run: node tools/check.mjs
   deploy:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
