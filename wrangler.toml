@@ -11,7 +11,7 @@ keep_vars = true # ALLOWED_UID uit het dashboard niet weggooien bij een deploy
 # Nachtploeg: brievenbus en wachtrij. Het id komt uit Cloudflare → Storage & Databases → KV.
 [[kv_namespaces]]
 binding = "MS_KV"
-id = "VUL_KV_ID_IN"
+id = "86e36cdf309e4aaf89e5714f128711e2"
 
 # Wekker: elke minuut; de Worker bepaalt zelf of er gedraaid wordt (stand Uit / Gratis / Turbo).
 [triggers]
