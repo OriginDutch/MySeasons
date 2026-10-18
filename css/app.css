@@ -833,4 +833,6 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .clubpick__opt { display: flex; align-items: center; gap: 8px; padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--hairline); }
 .clubpick__opt:hover, .clubpick__opt:focus-visible { background: var(--surface-hover); }
 .clubpick__chosen { font-size: 12px; display: flex; align-items: center; gap: 6px; margin-top: 4px; }
-.transfer-club { display: inline-flex; align-items: center; gap: 6px; vertical-align: -3px; }
+.transfer-row .list-row__title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.transfer-club { display: inline-flex; align-items: center; gap: 6px; }
+.transfer-club .crest { width: 18px; height: 18px; flex: none; }
