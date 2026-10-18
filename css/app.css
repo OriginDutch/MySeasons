@@ -771,7 +771,7 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 }
 .desk-only-block { display: none; }
 @media (min-width: 1100px) {
-  .view[data-view="selectie"] .mob-only, .view[data-view="selectie"] fieldset.segmented { display: none; }
+  .view[data-view="selectie"] .mob-only, .view[data-view="selectie"] fieldset.segmented:not(.sq-group-toggle) { display: none; }
   .view[data-view="selectie"] .desk-only-block { display: block; }
   .sq-table { width: 100%; border-collapse: collapse; font-size: 15px; }
   .sq-table th { text-align: right; font-weight: 500; font-size: 12px; color: var(--muted); border-bottom: 2px solid var(--rule); padding: 0; }
@@ -812,3 +812,6 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
   .sq-table tbody tr.sq-group { cursor: default; }
   .sq-table tbody tr.sq-group:hover th { background: none; }
 }
+.sq-tools { display: flex; justify-content: flex-end; }
+.sq-group-toggle { width: 260px; }
+.segmented--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

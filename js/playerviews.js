@@ -294,7 +294,7 @@ function squadTable(players, profiles) {
 const LINE_LABEL = Object.fromEntries(LINES.map(([k, l]) => [k, l]));
 function groupRows(table) {
   table.querySelectorAll('tr.sq-group').forEach((r) => r.remove());
-  if (table.dataset.sortKey !== 'pos' || table.dataset.sortDir !== 'asc') return;
+  if (table.dataset.group === 'flat') return;
   const body = table.tBodies[0];
   const rows = [...body.rows];
   let last = null;
@@ -310,16 +310,22 @@ function groupRows(table) {
   });
 }
 
-function sortTable(table, key) {
+const GROUP_KEY = 'ms-sq-group';
+const groupPref = () => { try { return localStorage.getItem(GROUP_KEY) === 'flat' ? 'flat' : 'lines'; } catch { return 'lines'; } };
+
+function sortTable(table, key, { keepDir = false } = {}) {
   const type = (COLS.find((c) => c[0] === key) || [])[2] || 'num';
-  const same = table.dataset.sortKey === key;
+  const same = table.dataset.sortKey === key && !keepDir;
   // Standaardrichting: namen/nummers/positie oplopend, stats aflopend.
-  const asc = same ? table.dataset.sortDir !== 'asc' : ['nr', 'name', 'pos', 'age'].includes(key);
+  const asc = keepDir ? table.dataset.sortDir === 'asc' : same ? table.dataset.sortDir !== 'asc' : ['nr', 'name', 'pos', 'age'].includes(key);
   table.dataset.sortKey = key; table.dataset.sortDir = asc ? 'asc' : 'desc';
   const body = table.tBodies[0];
   table.querySelectorAll('tr.sq-group').forEach((r) => r.remove());
   const rows = [...body.rows];
+  const grouped = table.dataset.group !== 'flat';
+  const lineOf = (r) => Math.floor(Number(r.dataset.pos) / 100);
   rows.sort((a, b) => {
+    if (grouped && lineOf(a) !== lineOf(b)) return lineOf(a) - lineOf(b);
     const x = a.dataset[key]; const y = b.dataset[key];
     const c = type === 'text' ? x.localeCompare(y, 'nl') : Number(x) - Number(y);
     return (asc ? c : -c) || Number(a.dataset.pos) - Number(b.dataset.pos);
@@ -484,7 +490,11 @@ export const playerViews = {
         </section>
         ${missingBlock(list)}
         <div class="mob-only">${SORTS.map(([v], i) => `<div data-sq="${v}" ${i === 0 ? '' : 'hidden'}>${squadList(players, v)}</div>`).join('')}</div>
-        <section class="section desk-only-block">${squadTable(players, profiles)}<p class="muted" style="font-size:12px">Klik op een kolom om te sorteren. Duels: tussen haakjes de invalbeurten.</p></section>
+        <section class="section desk-only-block">
+          <div class="sq-tools"><fieldset class="segmented segmented--2 sq-group-toggle" style="margin:0;padding:0"><legend class="visually-hidden">Indeling</legend>
+            <input type="radio" name="sq-group" id="sqg-lines" value="lines" ${groupPref() === 'lines' ? 'checked' : ''}><label for="sqg-lines">Per linie</label>
+            <input type="radio" name="sq-group" id="sqg-flat" value="flat" ${groupPref() === 'flat' ? 'checked' : ''}><label for="sqg-flat">Eén lijst</label></fieldset></div>
+          ${squadTable(players, profiles)}<p class="muted" style="font-size:12px">Klik op een kolom om te sorteren, nog een keer draait de volgorde om. Duels: tussen haakjes de invalbeurten.</p></section>
         ${extra.map(([k, label]) => `<section class="section"><details class="fold" ${isCurrentSeason() ? '' : 'open'}>
           <summary class="section__label"><span>${esc(label)}</span><span>${groups[k].length}</span></summary>
           <div class="mob-only">${statHead}<div class="list">${groups[k].map((p) => rowHtml(p, 'all')).join('')}</div></div>
@@ -492,7 +502,11 @@ export const playerViews = {
         <section class="section"><a class="link-btn" href="#/archief">Alle spelers uit je archief</a></section>`;
     },
     mount(root, ctx) {
-      root.querySelectorAll('.sq-table').forEach(groupRows);
+      root.querySelectorAll('.sq-table').forEach((t) => { t.dataset.group = groupPref(); sortTable(t, t.dataset.sortKey || 'pos', { keepDir: true }); });
+      root.querySelectorAll('input[name="sq-group"]').forEach((i) => i.addEventListener('change', () => {
+        try { localStorage.setItem(GROUP_KEY, i.value); } catch { /* niet erg */ }
+        root.querySelectorAll('.sq-table').forEach((t) => { t.dataset.group = i.value; sortTable(t, t.dataset.sortKey || 'pos', { keepDir: true }); });
+      }));
       root.addEventListener('click', (e) => {
         const th = e.target.closest('.sq-table th[data-key]');
         if (th) { sortTable(th.closest('table'), th.dataset.key); return; }
