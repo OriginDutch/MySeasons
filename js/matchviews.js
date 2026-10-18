@@ -11,10 +11,10 @@ import { tokens } from './rsssf.js';
 import { coachOn, coachName } from './coaches.js';
 import { getCoaches, getClubMarks } from './store.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
-import { applyCorrections, correctionSummary, goalCheck } from './corrections.js';
+import { applyCorrections, correctionSummary, goalCheck, kindOf } from './corrections.js';
 import { editEvent, editScore, editNotes } from './editor.js';
 import { syncSeason, fetchMatch, syncStandings, syncLeague, COST } from './sync.js';
-import { rowsFor, standTable, zoneLegend, miniStand, periodRows } from './standview.js';
+import { rowsFor, standTable, zoneLegend, miniStand, periodRows, formMap } from './standview.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
   dayShort, dayLong, timeOf, monthOf, relativeDay, shortRound, crowdSummary, penOutcome,
@@ -148,6 +148,32 @@ export function devBar(total, conflicts, href) {
     <span>${conflicts ? `${conflicts} ${conflicts === 1 ? 'veld' : 'velden'} met conflict` : `${total} ${total === 1 ? 'veld wijkt' : 'velden wijken'} af van Highlightly`}</span>
     <span class="dev-flag__go">Bekijken</span>
   </a>`;
+}
+
+// ---------- Wedstrijdlijst: extra kolommen op desktop ----------
+
+const surname = (n) => { const p = String(n || '').trim().split(/\s+/); return p.length > 1 ? p.slice(/^(van|de|den|der|el|al)$/i.test(p[p.length - 2]) ? -2 : -1).join(' ') : p[0] || '?'; };
+
+/** Doelpuntenmakers van Cambuur (met minuut), toeschouwers, trainer en thuis/uit. Alleen zichtbaar vanaf 1100px. */
+function matchMore(m, coaches) {
+  const n = m.notes || {};
+  const home = isHome(m, TEAM);
+  const goals = m.detail && m.detail.events
+    ? m.detail.events.filter((e) => kindOf(e.type) === 'goal' && ((e.teamId === TEAM && !/own/i.test(e.type)) || (e.teamId !== TEAM && /own/i.test(e.type))))
+    : [];
+  const byName = new Map();
+  goals.forEach((e) => {
+    const k = /own/i.test(e.type) ? 'e.d.' : surname(e.player);
+    byName.set(k, [...(byName.get(k) || []), `${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'`]);
+  });
+  const scorers = [...byName].map(([k, mins]) => `${esc(k)} <span class="muted">${mins.join(', ')}</span>`).join(' · ');
+  const coach = coachName(coachOn(coaches, m.date, n.coachId));
+  const bits = [
+    `<span class="mm__venue ${n.neutral ? '' : home ? 'is-home' : ''}">${n.neutral ? 'neutraal' : home ? 'thuis' : 'uit'}</span>`,
+    scorers ? `<span class="mm__goals">⚽ ${scorers}</span>` : m.status === 'finished' && m.detail ? '<span class="mm__goals muted">geen Cambuur-goals</span>' : '',
+  ].filter(Boolean).join('');
+  const meta = [n.attendance != null ? `${nl(n.attendance)} toesch.` : '', coach ? esc(coach) : ''].filter(Boolean).join(' · ');
+  return `<span class="match-row__more">${bits}${meta ? `<span class="mm__meta muted">${meta}</span>` : ''}</span>`;
 }
 
 // ---------- Periodes en nacompetitie (regelmotor) ----------
@@ -437,19 +463,22 @@ export const matchViews = {
       return `
         ${head({ kicker, title: 'Stand' })}
         ${flag}
+        <div class="stats-grid"><div class="stats-main">
         <section class="section">
           ${fromRsssf ? `<p class="muted" style="font-size:12px;margin:0">Eindstand ${esc(seasonLabel())} · ${esc(st.credit)}</p>` : ''}
           <fieldset class="segmented segmented--3" style="margin:0;padding:0" ${fromRsssf ? 'hidden' : ''}>
             <legend class="visually-hidden">Weergave</legend>
             ${modes.map(([v, l], i) => `<input type="radio" name="stand-mode" id="sm-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sm-${v}">${l}</label>`).join('')}
           </fieldset>
-          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks })}</div>`).join('')}
+          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks, form: v === 'total' && lmUse.length ? formMap(lmUse) : null })}</div>`).join('')}
           ${zones ? zoneLegend(zones, rules) : ''}
         </section>
+        </div><aside class="stats-side">
         ${zones && rules.periods ? periodsBlock(zones, rules, lmUse, marks) : ''}
         ${zones && rules.playoff ? bracketBlock(rules, rowsFor(g, 'total'), zones, rs) : ''}
         ${pastPlayoffsBlock(rs, league.id)}
         ${crowdBlock(list, league)}
+        </aside></div>
         <section class="section">
           <div class="section__label"><span>Bijgewerkt</span><span>${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
           ${st.source === 'live' ? '<p class="muted" style="font-size:12px">Zelf berekend uit alle uitslagen: de stand van Highlightly loopt achter tot een speelronde klaar is. Puntenaftrek is meegenomen.</p>' : ''}
@@ -492,7 +521,8 @@ export const matchViews = {
   wedstrijden: {
     title: 'Wedstrijden',
     async render() {
-      const list = sortByDate((await correctedList()).list);
+      const [{ list: raw }, coaches] = await Promise.all([correctedList(), getCoaches().catch(() => [])]);
+      const list = sortByDate(raw);
       if (!list.length) {
         return `${head({ kicker: `MySeasons / ${seasonLabel()}`, title: 'Wedstrijden' })}
           <section class="section"><div class="empty"><span class="empty__title">Nog leeg</span>
@@ -515,6 +545,7 @@ export const matchViews = {
                 <span class="match-row__date mono">${esc(dayShort(m.date))}</span>
                 <span class="list-row__main"><span class="list-row__title">${matchTitle(m)}</span>
                   <span class="list-row__sub">${esc(compName(m))}${m.round && !/friendl/i.test(m.round) ? ' · ' + esc(shortRound(m.round)) : ''}${m.detail ? ' · details ✓' : ''}</span></span>
+                ${matchMore(m, coaches)}
                 <span class="match-row__end mono">${m.status === 'finished' ? `${scoreText(m)} ${resultChip(m)}` : m.status === 'postponed' ? '<span class="muted">uitgesteld</span>' : esc(timeOf(m.date))}</span>
               </a>`;
             }).join('')}</div>

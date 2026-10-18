@@ -134,6 +134,7 @@ async function route({ keepScroll = false } = {}) {
   // Vervang het view-element zodat oude event listeners verdwijnen.
   const old = document.getElementById('view');
   const fresh = old.cloneNode(false);
+  fresh.dataset.view = key; // voor desktop-breedtes per scherm
   fresh.innerHTML = pastSeasonBar() + html;
   old.replaceWith(fresh);
   if (view.mount) view.mount(fresh, ctx, args);

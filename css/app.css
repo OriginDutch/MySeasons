@@ -373,7 +373,7 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .stand td.st-pos, .stand th:first-child { width: 34px; padding-left: 12px; box-sizing: border-box; }
 .stand td:last-child, .stand th:last-child { padding-right: 12px; }
 .st-pos { color: var(--muted); }
-.st-club { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.st-club { min-width: 0; max-width: 0; width: 100%; }
 .st-club span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-pts { font-weight: 600; }
 .stand tr.is-me td { background: var(--surface-hover); font-weight: 600; }
@@ -733,3 +733,76 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 :root { --z-elq: #A78BFA; --z-eclq: #14B8A6; }
 .stand tr.zone--elq { --z: var(--z-elq); } .stand tr.zone--eclq { --z: var(--z-eclq); }
 .zone-key--elq { background: var(--z-elq); } .zone-key--eclq { background: var(--z-eclq); }
+
+/* ==========================================================================
+   Desktop-ronde: vanaf 1100px breder en groter. Mobiel blijft ongewijzigd.
+   ========================================================================== */
+/* W/G/V in de gewone letter: de mono-W leek op een kroontje. */
+.result, .strip__res, .form__tile, .round span:first-child { font-family: var(--font-sans); }
+.result { font-size: 12px; font-weight: 800; }
+
+/* Koppen: regels in balans, clubnamen blijven heel (zie nb() in ui.js). */
+.cover__title, .report__title, .page-head__title, .story__text, .mag-section__head h2 { text-wrap: balance; }
+
+@media (min-width: 1100px) {
+  html, body { font-size: 15px; }
+  .view { max-width: 1180px; }
+  .view[data-view="wedstrijd"], .view[data-view="speler"], .view[data-view="club"] { max-width: 980px; }
+  .page-head__title { font-size: 46px; }
+  .page-head__kicker { font-size: 12px; }
+  .section__label { font-size: 12px; }
+  .list-row { padding-top: 14px; padding-bottom: 14px; }
+  .list-row__title { font-size: 16px; }
+  .list-row__sub { font-size: 13px; }
+  .match-row__date { font-size: 13px; }
+  .match-row__end { font-size: 16px; }
+  .result { font-size: 14px; }
+  .muted[style*="font-size:12px"], .muted[style*="font-size: 12px"] { font-size: 13px !important; }
+  .muted[style*="font-size:13px"] { font-size: 14px !important; }
+}
+.match-row__more { display: none; }
+@media (min-width: 1100px) {
+  .view[data-view="wedstrijden"] .match-row { grid-template-columns: 110px minmax(240px, 1.1fr) minmax(0, 1.6fr) 130px; gap: 16px; align-items: center; }
+  .match-row__more { display: grid; gap: 4px; font-size: 13px; min-width: 0; }
+  .mm__venue { display: inline-block; width: fit-content; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 1px 6px; border: 1px solid var(--hairline); color: var(--muted); }
+  .mm__venue.is-home { border-color: var(--accent); color: var(--accent-text); }
+  .mm__goals { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mm__meta { font-size: 12px; }
+}
+.desk-only-block { display: none; }
+@media (min-width: 1100px) {
+  .view[data-view="selectie"] .mob-only, .view[data-view="selectie"] fieldset.segmented { display: none; }
+  .view[data-view="selectie"] .desk-only-block { display: block; }
+  .sq-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .sq-table th { text-align: right; font-weight: 500; font-size: 12px; color: var(--muted); border-bottom: 2px solid var(--rule); padding: 0; }
+  .sq-table th button { width: 100%; text-align: inherit; padding: 8px 10px; font-family: var(--font-mono); letter-spacing: .02em; }
+  .sq-table th[aria-sort] button { color: var(--ink); }
+  .sq-table th[aria-sort="ascending"] button::after { content: ' ↑'; }
+  .sq-table th[aria-sort="descending"] button::after { content: ' ↓'; }
+  .sq-table th:nth-child(-n+3) { text-align: left; }
+  .sq-table td { padding: 8px 10px; border-bottom: 1px solid var(--hairline); text-align: right; vertical-align: middle; }
+  .sq-table td:nth-child(-n+3) { text-align: left; }
+  .sq-table tbody tr { cursor: pointer; }
+  .sq-table tbody tr:hover td { background: var(--surface-hover); }
+  .sq-nr { color: var(--muted); width: 44px; }
+  .sq-name a { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+  .sq-name__txt { display: grid; gap: 4px; }
+  .sq-name__n { font-weight: 600; font-size: 16px; }
+  .sq-name__tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .sq-strong { font-weight: 700; }
+}
+.st-form { display: none; }
+.stats-grid, .stats-main, .stats-side { display: contents; }
+@media (min-width: 1100px) {
+  .view[data-view="stats"] .stats-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 0 40px; align-items: start; }
+  .view[data-view="stats"] .stats-main, .view[data-view="stats"] .stats-side { display: block; min-width: 0; }
+  .view[data-view="stats"] .stats-side { position: sticky; top: 12px; }
+  .view[data-view="stats"] .stats-main .stand { font-size: 15px; }
+  .view[data-view="stats"] .stats-main .stand td { padding: 9px 8px; }
+  .view[data-view="stats"] .stats-main .stand th { padding-left: 8px; padding-right: 8px; }
+  .view[data-view="stats"] .stats-main .stand .st-form { padding-left: 16px; }
+  .view[data-view="stats"] .stand td.st-pos, .view[data-view="stats"] .stand th:first-child { width: 40px; padding-left: 12px; }
+  .view[data-view="stats"] .stats-main .st-form { display: table-cell; white-space: nowrap; }
+  .st-form .form__tile { display: inline-flex; width: 18px; height: 18px; font-size: 10px; font-style: normal; margin-left: 2px; align-items: center; justify-content: center; }
+  .view[data-view="stats"] .stats-side .stand .st-wide { display: none; }
+}

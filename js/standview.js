@@ -36,7 +36,7 @@ const gd = (l) => {
 };
 
 const MARK = { rivaal: 'rivaal', interessant: '★' };
-function rowHtml(r, zones, marks, highlight) {
+function rowHtml(r, zones, marks, highlight, form) {
   const z = zones ? zones.map.get(String(r.team.id)) : null;
   const me = r.team.id === TEAM;
   const hl = highlight && highlight.get(String(r.team.id));
@@ -48,15 +48,28 @@ function rowHtml(r, zones, marks, highlight) {
     <td class="mono st-wide">${r.line.gf}:${r.line.ga}</td>
     <td class="mono">${gd(r.line)}</td>
     <td class="mono st-pts">${r.pts}</td>
+    ${form ? `<td class="st-form">${(form.get(String(r.team.id)) || []).map((x) => `<i class="form__tile form__tile--${x}">${x}</i>`).join('')}</td>` : ''}
   </tr>`;
 }
 
 /** zones: uitkomst van zonesFor, of null. highlight: Map(teamId → korte tekst), bijv. periodewinnaar. */
-export function standTable(rows, { zones = null, marks = null, highlight = null } = {}) {
+/** Laatste 5 uitslagen per team (oud → nieuw) uit een lijst competitiewedstrijden. */
+export function formMap(matches) {
+  const out = new Map();
+  (matches || []).filter((m) => m.status === 'finished' && m.score && m.score.home != null)
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
+    .forEach((m) => {
+      const r = m.score.home > m.score.away ? ['W', 'V'] : m.score.home < m.score.away ? ['V', 'W'] : ['G', 'G'];
+      [[m.homeTeam, r[0]], [m.awayTeam, r[1]]].forEach(([t, x]) => { const k = String(t.id); out.set(k, [...(out.get(k) || []), x].slice(-5)); });
+    });
+  return out;
+}
+
+export function standTable(rows, { zones = null, marks = null, highlight = null, form = null } = {}) {
   return `
     <div class="table-wrap"><table class="table stand">
-      <thead><tr><th>#</th><th>Club</th><th>GS</th><th class="st-wide">W</th><th class="st-wide">G</th><th class="st-wide">V</th><th class="st-wide">Doelen</th><th>DS</th><th>PT</th></tr></thead>
-      <tbody>${rows.map((r) => rowHtml(r, zones, marks, highlight)).join('')}</tbody>
+      <thead><tr><th>#</th><th>Club</th><th>GS</th><th class="st-wide">W</th><th class="st-wide">G</th><th class="st-wide">V</th><th class="st-wide">Doelen</th><th>DS</th><th>PT</th>${form ? '<th class="st-form">Vorm</th>' : ''}</tr></thead>
+      <tbody>${rows.map((r) => rowHtml(r, zones, marks, highlight, form)).join('')}</tbody>
     </table></div>`;
 }
 

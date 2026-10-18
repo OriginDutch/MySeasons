@@ -21,6 +21,14 @@ import {
   dayShort, timeOf, relativeDay, shortRound, crowdSummary,
 } from './season.js';
 
+// Clubnamen in koppen nooit over twee regels: spaties binnen een bekende naam worden onbreekbaar.
+let NAMES = [];
+function keepNames(text) {
+  let out = String(text || '');
+  NAMES.forEach((n) => { if (n.includes(' ') && out.includes(n)) out = out.split(n).join(n.replace(/ /g, '\u00a0')); });
+  return out;
+}
+
 const TEAM = MAIN_CLUB.id;
 const today = () => dayShort(new Date().toISOString());
 
@@ -97,7 +105,7 @@ function cover(next, p) {
       </div>
       <div class="cover__band">
         <span class="cover__kicker mono">${esc(when)} · ${esc(compName(next))}${esc(round)} · ${isHome(next, TEAM) ? 'thuis' : 'uit'}</span>
-        <h2 class="cover__title">${esc(p.title)}</h2>
+        <h2 class="cover__title">${esc(keepNames(p.title))}</h2>
         ${p.sub ? `<p class="cover__sub">${esc(p.sub)}</p>` : ''}
       </div>
     </a>`;
@@ -116,7 +124,7 @@ function seasonCover(list, league, standings, team) {
       <div class="cover__photo" style="height:150px"><div class="cover__crests">${crest(team, 64)}</div><span class="cover__tag">Seizoensverslag</span></div>
       <div class="cover__band">
         <span class="cover__kicker mono">${esc(league.name)} · ${esc(seasonLabel())}${done ? ' · eindstand' : ''}</span>
-        <h2 class="cover__title">${esc(title)}</h2>
+        <h2 class="cover__title">${esc(keepNames(title))}</h2>
         <p class="cover__sub">${s.played} duels · ${s.w} winst, ${s.d} gelijk, ${s.l} verlies · ${s.gf}:${s.ga}${me ? ` · ${me.points} punten` : ''}</p>
       </div>
     </div>`;
@@ -143,7 +151,7 @@ function storiesRow(stories) {
       <div class="stories__head mono"><span>Verhalen</span><span>${stories.length > 1 ? 'veeg →' : ''}</span></div>
       <div class="stories__track">${stories.map((s) => `
         <div class="story"><span class="story__label mono">${esc(s.label)}</span>
-          <span class="story__fig">${esc(s.fig)}</span><span class="story__text">${esc(s.text)}</span></div>`).join('')}
+          <span class="story__fig">${esc(s.fig)}</span><span class="story__text">${esc(keepNames(s.text))}</span></div>`).join('')}
       </div>
     </section>`;
 }
@@ -158,7 +166,7 @@ function lastWeek(m, rep) {
           ? `<span class="report__num">${rep.hero.number}</span><span class="report__who mono">${esc(rep.hero.name)}</span>`
           : `${crest(opponentOf(m, TEAM), 44)}`}</div>
         <div class="report__body">
-          <span class="report__title">${esc(rep.title)}</span>
+          <span class="report__title">${esc(keepNames(rep.title))}</span>
           ${rep.sub ? `<span class="report__sub muted">${esc(rep.sub)}</span>` : ''}
           <span class="mono report__score">${esc(rep.scoreLine)} ${resultChip(m)}</span>
         </div>
@@ -278,6 +286,7 @@ export const magazineViews = {
       const cupNow = rulesNow && rulesNow.cup ? cupWinner([...(await getLeagueMatches(rulesNow.cup.leagueId, getSeason()).catch(() => [])), ...list.filter((m) => m.league && m.league.id === rulesNow.cup.leagueId)]) : null;
       const stories = seasonStories(list, league, standings, { topScorer, homeAvg: crowd.homeAvg, homeCount: crowd.homeCount, season: getSeason(), current: isCurrentSeason(), leagueMatches: both.matches, cup: cupNow });
       const teams = knownTeams(list);
+      NAMES = [MAIN_CLUB.name, ...teams.map((t) => t.name)].sort((x, y) => y.length - x.length);
       const nextOpp = next ? opponentOf(next, TEAM) : null;
       const news = await newsFor([TEAM, ...(nextOpp ? [nextOpp.id] : [])], 3).catch(() => []);
       this._teams = teams;
