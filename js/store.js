@@ -246,3 +246,24 @@ export function addToLeagueIndex(leagueId, season, { ids = [], finished = [], wi
   if (withEvents.length) data.withEvents = arrayUnion(...withEvents);
   return setDoc(doc(db, 'leagueIndex', `${leagueId}_${season}`), data, { merge: true });
 }
+
+// ---------- Backup: hele collecties lezen en terugzetten ----------
+
+/** Alle documenten van een collectie als [{ id, data }]. */
+export async function dumpCollection(name) {
+  const snap = await getDocs(collection(db, name));
+  return snap.docs.map((d) => ({ id: d.id, data: d.data() }));
+}
+
+/** Documenten terugzetten (samenvoegen), in batches van 400. Geeft het aantal writes terug. */
+export async function restoreCollection(name, docs, onProgress) {
+  let n = 0;
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = writeBatch(db);
+    docs.slice(i, i + 400).forEach(({ id, data }) => batch.set(doc(db, name, String(id)), data, { merge: true }));
+    await batch.commit();
+    n += Math.min(400, docs.length - i);
+    if (onProgress) onProgress(n);
+  }
+  return n;
+}
