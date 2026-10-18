@@ -5,6 +5,8 @@ import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
 import { getSeason, seasonLabel, inSeason, isCurrentSeason } from './seasonstate.js';
 import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers } from './store.js';
 import { applyNames } from './names.js';
+import { coachOn, coachName } from './coaches.js';
+import { getCoaches, getClubMarks } from './store.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import { applyCorrections, correctionSummary, goalCheck } from './corrections.js';
 import { editEvent, editScore, editNotes } from './editor.js';
@@ -321,6 +323,7 @@ export const matchViews = {
       const st = (await getStandings(league.id, getSeason())) || rsssfStandings(rs, league.id);
       const g = st && st.groups && st.groups[0];
       const fromRsssf = st && st.source === 'rsssf';
+      const marks = await getClubMarks().catch(() => ({}));
       const refresh = `<button class="btn" type="button" data-action="sync-standings" data-league="${league.id}">${icons.refresh}<span>Stand bijwerken · ${COST.standings} call</span></button>`;
       if (!g) {
         return `${head({ kicker, title: 'Stand' })}
@@ -337,7 +340,7 @@ export const matchViews = {
             <legend class="visually-hidden">Weergave</legend>
             ${modes.map(([v, l], i) => `<input type="radio" name="stand-mode" id="sm-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sm-${v}">${l}</label>`).join('')}
           </fieldset>
-          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), league.id, { withZones: zones && v === 'total' })}</div>`).join('')}
+          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), league.id, { withZones: zones && v === 'total', marks })}</div>`).join('')}
           ${zones ? zoneLegend(league.id) : ''}
         </section>
         ${crowdBlock(list, league)}
@@ -415,7 +418,7 @@ export const matchViews = {
     title: 'Wedstrijd',
     navKey: 'wedstrijden',
     async render(ctx, args) {
-      const [apiM, notes, profiles] = await Promise.all([getMatch(args[0]), getNotes(args[0]), getPlayers()]);
+      const [apiM, notes, profiles, coaches] = await Promise.all([getMatch(args[0]), getNotes(args[0]), getPlayers(), getCoaches().catch(() => [])]);
       if (!apiM) {
         return `${head({ kicker: 'Wedstrijden', title: 'Niet gevonden', back: 'wedstrijden' })}
           <section class="section"><p class="muted">Deze wedstrijd staat niet (meer) in je data.</p></section>`;
@@ -427,6 +430,8 @@ export const matchViews = {
       const r = resultFor(m, TEAM);
       const d = m.detail;
       const goalsOff = m.status === 'finished' ? goalCheck(m) : null;
+      const coach = coachOn(coaches, m.date, n.coachId);
+      const motmName = n.motm ? ((n.motm.playerId && profiles[n.motm.playerId] && profiles[n.motm.playerId].fullName) || n.motm.name) : null;
       const kicker = `${compName(m)}${m.round && !/friendl/i.test(m.round) ? ' · ' + shortRound(m.round) : ''} · ${dayShort(m.date)}`;
       return `
         ${head({ kicker, title: m.status === 'finished' ? (r === 'W' ? 'Winst' : r === 'V' ? 'Verlies' : 'Gelijk') : timeOf(m.date), back: 'wedstrijden' })}
@@ -441,6 +446,10 @@ export const matchViews = {
           ${m.penalties ? `<p class="muted" style="text-align:center">Strafschoppen ${m.penalties.home}–${m.penalties.away}</p>` : ''}
           ${devBar(sum.total, sum.conflicts, `#/afwijkingen/${m.id}`)}
           ${goalsOff ? `<p class="warn-line">De uitslag is ${m.score.home}–${m.score.away}, maar de goals in de tijdlijn tellen op tot ${goalsOff.home}–${goalsOff.away}. Klopt er iets niet?</p>` : ''}
+          ${coach || motmName ? `<dl class="kv">
+            ${coach ? `<dt>Trainer</dt><dd>${esc(coachName(coach))}</dd>` : ''}
+            ${motmName ? `<dt>Man van de wedstrijd</dt><dd>${n.motm.playerId ? `<a class="plain-link" href="#/speler/${n.motm.playerId}">${esc(motmName)}</a>` : esc(motmName)} <span class="muted">· jouw keuze</span></dd>` : ''}
+          </dl>` : ''}
           ${d ? `<dl class="kv">
             ${d.venue && d.venue.name ? `<dt>Stadion</dt><dd>${esc(d.venue.name)}${d.venue.city ? ', ' + esc(d.venue.city) : ''}</dd>` : ''}
             ${d.referee ? `<dt>Scheidsrechter</dt><dd>${esc(d.referee)}</dd>` : ''}

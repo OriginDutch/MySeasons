@@ -4,7 +4,7 @@
 
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB } from './config.js';
-import { getLeagueMatches, getStandings, getMeta } from './store.js';
+import { getLeagueMatches, getStandings, getMeta, getClubMarks } from './store.js';
 import { syncLeague, COST } from './sync.js';
 import { correctedList, runWithButton, explain } from './matchviews.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
@@ -121,6 +121,7 @@ export const clubViews = {
           <section class="section"><p class="muted">Deze club staat niet in de stand van ${esc(seasonLabel())}.</p></section>`;
       }
       const t = d.team;
+      const mark = (await getClubMarks().catch(() => ({})))[teamKey] || null;
       const played = d.matches.filter((m) => m.hs != null);
       const upcoming = d.matches.filter((m) => m.hs == null && m.status !== 'finished');
       const form = played.slice(-5).map((m) => resultOf(m, teamKey));
@@ -137,6 +138,7 @@ export const clubViews = {
             ${line ? `<div class="mono">${line.w}–${line.d}–${line.l}<br><span class="muted">${line.gf}:${line.ga}</span></div>` : ''}
             ${form.length ? `<div class="form">${form.map((r) => `<span class="form__tile form__tile--${r}">${r}</span>`).join('')}</div>` : ''}
           </div>
+          ${mark && (mark.mark || mark.note) ? `<p class="muted" style="font-size:13px;margin:0">${mark.mark === 'rivaal' ? '<strong class="accent-text">Rivaal</strong>' : mark.mark === 'interessant' ? '★ Interessant' : ''}${mark.note ? `${mark.mark ? ' · ' : ''}${esc(mark.note)}` : ''}</p>` : ''}
           ${d.me && d.me.deduction ? `<p class="warn-line">${d.me.deduction} punten in mindering gebracht</p>` : ''}
         </section>
         ${upcoming.length ? `<section class="section"><div class="section__label"><span>Programma</span><span>${upcoming.length}</span></div>

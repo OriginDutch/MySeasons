@@ -621,3 +621,5 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .avatar__ini { background: var(--band); color: var(--band-ink); font-weight: 700; font-size: 13px; letter-spacing: 0.02em; }
 .avatar__num { position: absolute; right: -6px; bottom: -4px; min-width: 18px; height: 16px; padding: 0 3px; border-radius: 4px; background: var(--bg); color: var(--ink); border: 1px solid var(--hairline); font-size: 10px; line-height: 14px; text-align: center; box-sizing: border-box; }
 .player-hero__photo { width: 72px; height: 96px; object-fit: cover; object-position: 50% 15%; border-radius: 8px; background: var(--photo); align-self: center; }
+.st-mark { font-style: normal; font-family: var(--font-mono); font-size: 9px; padding: 1px 4px; margin-left: 6px; border: 1px solid var(--accent); color: var(--accent-text); flex: none; }
+.st-mark--interessant { border: 0; padding: 0; font-size: 11px; }

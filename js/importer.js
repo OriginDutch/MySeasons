@@ -1,13 +1,16 @@
 // Oude export importeren (cambuur_tracker_data.json). Het bestand wordt alleen in je browser gelezen.
-// Nu: spelers. Ze worden gekoppeld aan hun Highlightly-id; wie (nog) niet in Highlightly-data staat,
+// Spelers worden gekoppeld aan hun Highlightly-id; wie (nog) niet in Highlightly-data staat,
 // wordt bewaard als oud-speler (legacy-<id>) en kan later alsnog gekoppeld worden.
+// Wedstrijdnotities, MOTM en trainer koppelen op datum (±1 dag) + tegenstander. Alles is opnieuw
+// te draaien: dezelfde documenten worden bijgewerkt, jouw eigen notities worden nooit overschreven.
 
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB } from './config.js';
-import { getAllMatches, getPlayers, getNotes, savePlayersBatch } from './store.js';
+import { getAllMatches, getPlayers, getNotes, getAllNotes, savePlayersBatch, saveNotesBatch, saveCoachesBatch, saveClubMarksBatch, getAllLeagueTeams } from './store.js';
 import { applyCorrections } from './corrections.js';
 import { buildSquad } from './players.js';
 import { tokens } from './rsssf.js';
+import { coachOn } from './coaches.js';
 
 let loaded = null; // { fileName, data } — alleen in het geheugen
 
@@ -79,10 +82,62 @@ function readFile(file) {
 
 const CATS = [
   ['players', 'Spelers', 'profiel, contract, marktwaarde, transfers, blessures', true],
-  ['notes', 'Wedstrijdnotities, MOTM en trainer', 'koppelen op datum + tegenstander', false],
-  ['coaches', 'Trainers en aanstellingen', '', false],
-  ['clubs', 'Rivalen en clubgegevens', '', false],
+  ['coaches', 'Trainers en aanstellingen', 'voor de trainer per wedstrijd', true],
+  ['notes', 'Wedstrijdnotities, MOTM en trainer', 'koppelen op datum + tegenstander', true],
+  ['clubs', 'Rivalen en clubmarkeringen', 'rivaal, interessant, notitie', true],
 ];
+
+const sameClub = (a, b) => {
+  const x = tokens(a); const y = tokens(b);
+  if (!x.length || !y.length) return false;
+  return x.every((t) => y.includes(t)) || y.every((t) => x.includes(t));
+};
+const dayDiff = (a, b) => Math.abs((Date.parse(String(a).slice(0, 10)) - Date.parse(String(b).slice(0, 10))) / 864e5);
+
+/** Oude Cambuur-wedstrijden met MOTM, notitie of trainer → matchNotes van de bijbehorende app-wedstrijd. */
+export function planNotes(data, matches, legacyToHl, existingNotes, coaches = []) {
+  const clubName = Object.fromEntries((data.clubs || []).map((c) => [c.id, c.name]));
+  const own = (data.clubs || []).find((c) => c.isOwnClub);
+  const ownId = own ? own.id : null;
+  const players = Object.fromEntries((data.players || []).map((p) => [p.id, `${p.firstname || ''} ${p.lastname || ''}`.trim()]));
+  const old = (data.matches || []).filter((m) => ownId && [m.homeClubId, m.awayClubId].includes(ownId) && (m.motm || m.notes || m.coachId || m.captain));
+  const writes = []; const unmatched = []; let keptNote = 0; let coachSkipped = 0;
+  old.forEach((m) => {
+    const home = m.homeClubId === ownId;
+    const opp = home ? (m.awayName || clubName[m.awayClubId]) : (m.homeName || clubName[m.homeClubId]);
+    const hit = matches.find((x) => dayDiff(x.date, m.date) <= 1 && sameClub(((x.homeTeam.id === MAIN_CLUB.id) ? x.awayTeam : x.homeTeam).name, opp));
+    if (!hit) { unmatched.push(`${m.date} ${opp}`); return; }
+    const ex = existingNotes[hit.id] || {};
+    const w = { legacyMatchId: m.id };
+    // Aanstellingen (met datums) zijn leidend; een trainer per wedstrijd nemen we alleen over als die er niets over zeggen.
+    if (m.coachId) { if (coachOn(coaches, hit.date)) coachSkipped++; else w.coachId = m.coachId; }
+    if (m.motm) w.motm = { legacyId: m.motm, playerId: legacyToHl[m.motm] ? Number(legacyToHl[m.motm]) : null, name: players[m.motm] || null };
+    if (m.captain) w.legacyCaptain = m.captain;
+    if (m.notes) { if (ex.note && ex.note !== m.notes) keptNote++; else w.note = m.notes; }
+    writes.push([hit.id, w]);
+  });
+  return { writes, unmatched, keptNote, coachSkipped, total: old.length };
+}
+
+export function planCoaches(data) {
+  return (data.coaches || []).map((c) => ({
+    id: c.id, legacyId: c.id, firstname: clean(c.firstname), lastname: clean(c.lastname), dob: clean(c.dob),
+    nationality: clean(c.nationality), photoUrl: clean(c.photo),
+    appointments: (c.appointments || []).map((a) => ({ role: a.role || null, from: clean(a.from), to: clean(a.to), order: a.order ?? null })),
+  }));
+}
+
+/** Rivaal/interessant/notitie → Highlightly-team-id, op naam. */
+export function planClubs(data, teams) {
+  const marks = (data.clubs || []).filter((c) => !c.isOwnClub && (c.highlight || c.note));
+  const writes = []; const unmatched = [];
+  marks.forEach((c) => {
+    const t = teams.find((x) => sameClub(x.name, c.name));
+    if (!t) { unmatched.push(c.name); return; }
+    writes.push([t.id, { mark: c.highlight || null, note: c.note || null, legacyName: c.name, stadium: null }]);
+  });
+  return { writes, unmatched };
+}
 
 function head() {
   return `<header class="page-head"><div class="page-head__titles">
@@ -173,9 +228,33 @@ export const importViews = {
               writes.push([`legacy-${p.id}`, { ...prof, linkedTo: null }]);
             }
           });
-          await savePlayersBatch(writes);
-          const linked = writes.filter(([id]) => !String(id).startsWith('legacy-')).length;
-          toast(`${byOld.size} spelers geïmporteerd · ${linked} gekoppeld aan Highlightly`, { duration: 6000 });
+          const cats = new Set([...root.querySelectorAll('input[name="cat"]:checked')].map((i) => i.value));
+          const report = [];
+          if (cats.has('players')) {
+            await savePlayersBatch(writes);
+            const linked = writes.filter(([id]) => !String(id).startsWith('legacy-')).length;
+            report.push(`${byOld.size} spelers (${linked} gekoppeld)`);
+          }
+          if (cats.has('coaches')) {
+            const cs = planCoaches(loaded.data);
+            if (cs.length) await saveCoachesBatch(cs);
+            report.push(`${cs.length} trainers`);
+          }
+          if (cats.has('notes')) {
+            const legacyToHl = {};
+            root.querySelectorAll('[data-link]').forEach((s) => { if (s.value) legacyToHl[s.dataset.link] = s.value; });
+            const [matches, notes] = await Promise.all([getAllMatches(), getAllNotes()]);
+            const plan = planNotes(loaded.data, matches, legacyToHl, notes, planCoaches(loaded.data));
+            if (plan.writes.length) await saveNotesBatch(plan.writes);
+            report.push(`${plan.writes.length}/${plan.total} wedstrijden aangevuld${plan.unmatched.length ? ` (${plan.unmatched.length} niet gevonden: seizoen nog niet opgehaald?)` : ''}${plan.keptNote ? `, ${plan.keptNote} eigen notitie behouden` : ''}`);
+          }
+          if (cats.has('clubs')) {
+            const teams = await getAllLeagueTeams();
+            const plan = planClubs(loaded.data, teams);
+            if (plan.writes.length) await saveClubMarksBatch(plan.writes);
+            report.push(`${plan.writes.length} clubmarkeringen${plan.unmatched.length ? ` (${plan.unmatched.length} clubs niet herkend)` : ''}`);
+          }
+          toast(`Geïmporteerd: ${report.join(' · ')}`, { duration: 9000 });
           loaded = null;
           location.hash = '#/selectie';
         } catch (err) {

@@ -147,6 +147,7 @@ let restoreScroll = 0;
 ctx.refresh = () => route({ keepScroll: true });
 
 window.addEventListener('hashchange', () => {
+  document.querySelectorAll('dialog[open]').forEach((d) => d.close()); // geen sheet laten hangen bij navigeren
   restoreScroll = trackNavigation() || 0;
   route();
 });

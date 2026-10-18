@@ -179,6 +179,15 @@ async function commit(apiMatch, notes, entries, refresh) {
   return true;
 }
 
+function motmOptions(m, n) {
+  const list = (m.detail && m.detail.players && m.detail.players[MAIN_CLUB.id]) || [];
+  const played = list.filter((p) => p.minutes > 0).sort((a, b) => a.name.localeCompare(b.name));
+  if (!played.length && !(n.motm)) return '';
+  const cur = n.motm && n.motm.playerId ? String(n.motm.playerId) : '';
+  const extra = n.motm && !played.some((p) => String(p.id) === cur) ? `<option value="${esc(cur || 'x')}" selected>${esc(n.motm.name || '?')}</option>` : '';
+  return `<label class="field"><span>Man van de wedstrijd (jouw keuze)</span><select name="motm"><option value="">Geen</option>${extra}${played.map((p) => `<option value="${p.id}" ${String(p.id) === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>`;
+}
+
 export async function editNotes(m, notes) {
   const n = notes || {};
   const awayIsMe = m.awayTeam && m.awayTeam.id === MAIN_CLUB.id;
@@ -187,6 +196,7 @@ export async function editNotes(m, notes) {
     title: 'Wedstrijd aanvullen',
     body: `<label class="field"><span>Toeschouwers (totaal)</span><input name="attendance" type="number" inputmode="numeric" min="0" max="100000" placeholder="bijv. 10250" value="${n.attendance ?? ''}"></label>
       <label class="field"><span>${esc(awayLabel)}</span><input name="awayFans" type="number" inputmode="numeric" min="0" max="100000" placeholder="leeg = onbekend" value="${n.awayFans ?? ''}"></label>
+      ${motmOptions(m, n)}
       <label class="field"><span>Notitie</span><textarea name="note" rows="4" maxlength="2000" placeholder="Sfeer, opvallende momenten, waar je zat…">${esc(n.note || '')}</textarea></label>`,
     validate: (fd) => {
       const t = intIn(fd.get('attendance'), 0, 100000);
@@ -201,9 +211,18 @@ export async function editNotes(m, notes) {
   const next = {
     attendance: intIn(data.get('attendance'), 0, 100000),
     awayFans: intIn(data.get('awayFans'), 0, 100000),
+    motm: (() => {
+      if (!data.has('motm')) return n.motm || null;
+      const v = data.get('motm');
+      if (!v) return null;
+      if (n.motm && String(n.motm.playerId || 'x') === v) return n.motm;
+      const p = ((m.detail && m.detail.players && m.detail.players[MAIN_CLUB.id]) || []).find((x) => String(x.id) === v);
+      return p ? { playerId: p.id, name: p.name } : null;
+    })(),
     note: String(data.get('note') || '').trim() || null,
   };
-  if (next.attendance === (n.attendance ?? null) && next.awayFans === (n.awayFans ?? null) && next.note === (n.note || null)) { toast('Niets veranderd'); return false; }
+  const sameMotm = JSON.stringify(next.motm || null) === JSON.stringify(n.motm || null);
+  if (next.attendance === (n.attendance ?? null) && next.awayFans === (n.awayFans ?? null) && next.note === (n.note || null) && sameMotm) { toast('Niets veranderd'); return false; }
   await saveNotes(m.id, next);
   toast('Opgeslagen');
   return true;

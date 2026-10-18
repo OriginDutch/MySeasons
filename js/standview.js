@@ -33,12 +33,13 @@ const gd = (l) => {
   return v > 0 ? `+${v}` : String(v);
 };
 
-function rowHtml(r, leagueId, withZones) {
+const MARK = { rivaal: 'rivaal', interessant: '★' };
+function rowHtml(r, leagueId, withZones, marks) {
   const z = withZones ? zoneOf(leagueId, r.pos) : null;
   const me = r.team.id === TEAM;
   return `<tr class="${me ? 'is-me' : ''} ${z ? 'zone--' + z.kind : ''}">
     <td class="mono st-pos">${r.pos}</td>
-    <td class="st-club"><a class="st-link" href="#/club/${encodeURIComponent(String(r.team.id))}">${crest(r.team)}<span>${esc(r.team.name)}</span></a></td>
+    <td class="st-club"><a class="st-link" href="#/club/${encodeURIComponent(String(r.team.id))}">${crest(r.team)}<span>${esc(r.team.name)}</span>${marks && marks[r.team.id] && MARK[marks[r.team.id].mark] ? `<i class="st-mark st-mark--${esc(marks[r.team.id].mark)}" title="${esc(marks[r.team.id].note || marks[r.team.id].mark)}">${MARK[marks[r.team.id].mark]}</i>` : ''}</a></td>
     <td class="mono">${r.line.played}</td>
     <td class="mono st-wide">${r.line.w}</td><td class="mono st-wide">${r.line.d}</td><td class="mono st-wide">${r.line.l}</td>
     <td class="mono st-wide">${r.line.gf}:${r.line.ga}</td>
@@ -47,11 +48,11 @@ function rowHtml(r, leagueId, withZones) {
   </tr>`;
 }
 
-export function standTable(rows, leagueId, { withZones = true } = {}) {
+export function standTable(rows, leagueId, { withZones = true, marks = null } = {}) {
   return `
     <div class="table-wrap"><table class="table stand">
       <thead><tr><th>#</th><th>Club</th><th>GS</th><th class="st-wide">W</th><th class="st-wide">G</th><th class="st-wide">V</th><th class="st-wide">Doelen</th><th>DS</th><th>PT</th></tr></thead>
-      <tbody>${rows.map((r) => rowHtml(r, leagueId, withZones)).join('')}</tbody>
+      <tbody>${rows.map((r) => rowHtml(r, leagueId, withZones, marks)).join('')}</tbody>
     </table></div>`;
 }
 

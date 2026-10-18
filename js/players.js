@@ -126,5 +126,7 @@ export function playerFacts(p, squad) {
   if (streak >= 4) facts.push(`${streak} duels op rij in de basis`);
   const benchOnly = p.squads - p.apps;
   if (benchOnly >= 3 && p.apps === 0) facts.push(`${benchOnly} keer op de bank, nog geen minuut gespeeld`);
+  const motm = p.log.filter((l) => l.match.notes && l.match.notes.motm && Number(l.match.notes.motm.playerId) === p.id).length;
+  if (motm) facts.unshift(`${motm}× jouw man van de wedstrijd`);
   return facts.slice(0, 4);
 }

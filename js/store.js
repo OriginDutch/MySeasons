@@ -186,3 +186,46 @@ export async function saveLeagueMatches(list) {
     await batch.commit();
   }
 }
+
+// ---------- Handwerk in bulk (import) ----------
+
+/** matchNotes in bulk (merge). entries: [[matchId, data], ...] */
+export async function saveNotesBatch(entries) {
+  for (let i = 0; i < entries.length; i += 400) {
+    const batch = writeBatch(db);
+    entries.slice(i, i + 400).forEach(([id, data]) => batch.set(doc(db, 'matchNotes', String(id)), { ...data, updatedAt: new Date().toISOString() }, { merge: true }));
+    await batch.commit();
+  }
+}
+
+// ---------- Trainers: coaches/{id} ----------
+export async function getCoaches() {
+  const snap = await getDocs(collection(db, 'coaches'));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+export async function saveCoachesBatch(list) {
+  const batch = writeBatch(db);
+  list.forEach((c) => batch.set(doc(db, 'coaches', String(c.id)), c, { merge: true }));
+  await batch.commit();
+}
+
+// ---------- Clubmarkeringen: clubs/{teamId} (rivaal, interessant, notitie) ----------
+export async function getClubMarks() {
+  const snap = await getDocs(collection(db, 'clubs'));
+  const out = {};
+  snap.docs.forEach((d) => { out[d.id] = d.data(); });
+  return out;
+}
+export async function saveClubMarksBatch(entries) {
+  const batch = writeBatch(db);
+  entries.forEach(([id, data]) => batch.set(doc(db, 'clubs', String(id)), data, { merge: true }));
+  await batch.commit();
+}
+
+/** Alle clubs die de app kent (uit Cambuur-wedstrijden en competitiewedstrijden), uniek op id. */
+export async function getAllLeagueTeams() {
+  const [a, b] = await Promise.all([getDocs(collection(db, 'matches')), getDocs(collection(db, 'leagueMatches'))]);
+  const map = new Map();
+  [...a.docs, ...b.docs].forEach((d) => { const m = d.data(); [m.homeTeam, m.awayTeam].forEach((t) => { if (t && t.id) map.set(t.id, { id: t.id, name: t.name, logo: t.logo || null }); }); });
+  return [...map.values()];
+}
