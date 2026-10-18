@@ -3,6 +3,7 @@
 // De Worker haalt 's nachts (of in turbo-stand elke minuut) ruwe Highlightly-antwoorden op en legt die
 // in KV. Hier verwerken we ze met dezelfde normalisatie als bij handmatig ophalen.
 
+import { addMessage } from './inbox.js';
 import { ns } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import {
@@ -162,6 +163,11 @@ export async function emptyInbox(onProgress) {
     if (onProgress) onProgress(summary, keys.length);
   }
   if (summary.chunks) await setMeta('nsLast', { at: new Date().toISOString(), ...summary });
+  if (summary.items) {
+    const LABEL = { full: 'Cambuur-details', events: 'doelpuntenmakers', league: 'competitiewedstrijden', program: 'programma', standings: 'standen' };
+    const parts = Object.entries(summary.byType).map(([k, n]) => `${n}× ${LABEL[k] || k}`).join(', ');
+    await addMessage({ id: `ns:${Date.now()}`, kind: 'nightshift', title: `${summary.items} ${summary.items === 1 ? 'pakketje' : 'pakketjes'} verwerkt`, text: `${parts}${summary.left ? `. ${summary.left} wachten op morgen (dagbudget Firestore).` : '.'}`, href: '#/nachtploeg' }).catch(() => {});
+  }
   return summary;
 }
 

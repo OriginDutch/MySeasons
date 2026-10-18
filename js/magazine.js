@@ -14,6 +14,7 @@ import { refreshNews, newsFor } from './news.js';
 import { standingsAndMatches } from './livetable.js';
 import { rulesFor, zonesFor } from './rules.js';
 import { miniStand } from './standview.js';
+import { bellButton, unreadCount } from './inbox.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
@@ -31,7 +32,7 @@ function clubTeam(list) {
   return { id: TEAM, name: MAIN_CLUB.name, logo: null };
 }
 
-function masthead(team, league) {
+function masthead(team, league, unread = null) {
   return `
     <header class="mast">
       <button class="mast__club mast__btn" type="button" data-open-season aria-label="Club of seizoen wisselen">
@@ -39,7 +40,7 @@ function masthead(team, league) {
         <span class="mast__titles"><span class="mast__name">${esc(MAIN_CLUB.name)} <svg class="mast__chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
         <span class="mast__sub mono">${league ? esc(league.id === 76523 ? 'KKD' : league.name) + ' · ' : ''}${esc(seasonLabel())}</span></span>
       </button>
-      <span class="mast__date mono">${esc(today())}</span>
+      <span class="mast__end"><span class="mast__date mono">${esc(today())}</span>${unread != null ? bellButton(unread) : ''}</span>
     </header>`;
 }
 
@@ -277,7 +278,7 @@ export const magazineViews = {
       this._focus = [TEAM, ...(nextOpp ? [nextOpp.id] : [])];
       return `
         <div class="mag">
-          ${masthead(team, league)}
+          ${masthead(team, league, await unreadCount({ list, profiles, conflicts }).catch(() => null))}
           ${conflicts ? `<div class="mag-pad">${devBar(total, conflicts, '#/afwijkingen')}</div>` : ''}
           <div class="mag-main">
           ${todoCard(last)}
