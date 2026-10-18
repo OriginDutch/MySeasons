@@ -149,13 +149,23 @@ function initials(name) {
   return ((parts[0] || '?')[0] + (parts.length > 1 ? last[0] : '')).toUpperCase();
 }
 
+/** Transfermarkt levert dezelfde foto in meerdere maten; 'header' is klein en wazig, 'big' is scherp. */
+export function sharpPhoto(url) {
+  return String(url || '').replace('/portrait/header/', '/portrait/big/').replace('/portrait/small/', '/portrait/big/').replace('/portrait/medium/', '/portrait/big/');
+}
+
+/** Bij een fout: eerst de originele link proberen, daarna initialen. */
+function photoImg(url, cls, ini) {
+  const big = sharpPhoto(url);
+  const fallbackIni = ini ? `this.replaceWith(Object.assign(document.createElement('span'),{className:'avatar__ini',textContent:'${ini}'}))` : 'this.remove()';
+  return `<img class="${cls}" src="${esc(big)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-orig="${esc(url)}" onerror="if(this.dataset.orig&&this.src!==this.dataset.orig){this.src=this.dataset.orig;this.dataset.orig='';}else{${fallbackIni}}">`;
+}
+
 /** Portret met rugnummer; zonder foto initialen in clubkleuren. */
 function avatar(p) {
   const photo = p.photo || (p.profile && p.profile.photoUrl);
   const ini = esc(initials(p.name));
-  return `<span class="avatar">${photo
-    ? `<img src="${esc(photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'avatar__ini',textContent:'${ini}'}))">`
-    : `<span class="avatar__ini">${ini}</span>`}${p.number != null ? `<span class="avatar__num mono">${p.number}</span>` : ''}</span>`;
+  return `<span class="avatar">${photo ? photoImg(photo, 'avatar__img', ini) : `<span class="avatar__ini">${ini}</span>`}${p.number != null ? `<span class="avatar__num mono">${p.number}</span>` : ''}</span>`;
 }
 
 const fmtLabel = (l) => l.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, d) => new Date(`${y}-${m}-${d}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: y === String(new Date().getFullYear()) ? undefined : 'numeric' }));
@@ -252,7 +262,7 @@ function profileOnlyPage(pr, id) {
   return `
     ${head({ kicker: `Archief · ${LINE_SHORT[pr.position] || '—'}`, title: name, back: 'selectie' })}
     <section class="section">
-      <div class="player-hero">${pr.photoUrl ? `<img class="player-hero__photo" src="${esc(pr.photoUrl)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="player-hero__num">${pr.shirt ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
+      <div class="player-hero">${pr.photoUrl ? photoImg(pr.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${pr.shirt ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
       <div><button class="btn btn--sm" type="button" data-action="edit-name" data-id="${esc(id)}" data-api="" data-full="${esc(pr.fullName || '')}" data-short="${esc(pr.shortName || '')}" data-photo="${esc(pr.photoUrl || '')}">Naam en foto</button></div>
       <p class="muted" style="font-size:13px;margin:0">${pr.linkedTo === null || String(id).startsWith('legacy-')
         ? 'Nog niet gekoppeld aan Highlightly. Stats verschijnen zodra hij in een opgehaald seizoen voorkomt en je hem koppelt via Meer → Importeren.'
@@ -391,7 +401,7 @@ export const playerViews = {
       return `
         ${head({ kicker: `Selectie · ${LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
         <section class="section">
-          <div class="player-hero">${p.profile && p.profile.photoUrl ? `<img class="player-hero__photo" src="${esc(p.profile.photoUrl)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="player-hero__num">${p.number ?? '–'}</span>
+          <div class="player-hero">${p.profile && p.profile.photoUrl ? photoImg(p.profile.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${p.number ?? '–'}</span>
             <span class="muted">${esc(LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
           <p class="muted" style="font-size:12px;margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>
           <div><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}" data-photo="${esc((p.profile && p.profile.photoUrl) || '')}">Naam en foto</button></div>
