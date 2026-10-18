@@ -73,7 +73,7 @@ export const nightViews = {
         try {
           if (b.dataset.ns === 'queue') { const n = await runWithButton(b, 'Opbouwen…', () => pushQueue()); toast(`Wachtrij: ${n} items`); }
           if (b.dataset.ns === 'run') { const r = await runWithButton(b, 'Bezig…', () => ns.runNow()); toast(`Ronde: ${r.calls} calls, ${r.items} items${r.stop ? ` (${r.stop === 'reserve' ? 'reserve bereikt' : 'quotum op'})` : ''}`); }
-          if (b.dataset.ns === 'empty') { const s = await runWithButton(b, 'Verwerken…', () => emptyInbox()); toast(`${s.items} items verwerkt${s.left ? ` · ${s.left} pakketjes morgen (dagbudget Firestore)` : ''}`); }
+          if (b.dataset.ns === 'empty') { const s = await runWithButton(b, 'Verwerken…', () => emptyInbox()); toast(s.items ? `${s.items} items verwerkt${s.left ? ` · ${s.left} pakketjes morgen (dagbudget Firestore)` : ''}` : 'De brievenbus was al leeg: de app had hem bij het openen al verwerkt.'); ctx.refresh(); }
           ctx.refresh();
         } catch (err) { toast(explain(err)); }
       });

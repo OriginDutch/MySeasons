@@ -142,7 +142,15 @@ async function apply(r) {
 const COST_OF = { full: 3, events: 1, league: 1, program: 1, standings: 1 };
 
 /** Brievenbus legen (oudste eerst), binnen het dagbudget aan Firestore-writes. */
-export async function emptyInbox(onProgress) {
+// Eén leegloop tegelijk: de automatische (bij openen) en de knop mogen niet dezelfde pakketjes dubbel verwerken.
+let emptying = null;
+export function emptyInbox(onProgress) {
+  if (!emptying) emptying = runEmpty(onProgress).finally(() => { emptying = null; });
+  else emptying.joined = true;
+  return emptying;
+}
+
+async function runEmpty(onProgress) {
   const st = await ns.state();
   if (st.state && st.state.lastRun) noteRateLimit({ remaining: st.state.remaining, at: st.state.lastRun }).catch(() => {});
   const keys = (st.inbox || []).slice().sort();
