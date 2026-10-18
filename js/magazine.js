@@ -225,11 +225,15 @@ function seasonStrip(list, league, standings) {
   return `
     <section class="mag-section">
       <div class="mag-section__head"><h2>Seizoen</h2><span class="mono muted">${me ? `${me.position}e · ` : ''}${me ? me.points : s.points} pt · ${s.w}–${s.d}–${s.l} · ${s.gf}:${s.ga}</span></div>
-      <div class="strip">${games.map((m) => {
+      <div class="strip" style="--half:${Math.ceil(games.length / 2)}">${games.map((m) => {
         const r = resultFor(m, TEAM);
         const opp = opponentOf(m, TEAM);
+        const home = isHome(m, TEAM);
+        const short = opp ? opp.name.replace(/^(FC|SC|sc|SV|AFC|Jong)\s+/, '').slice(0, 3).toUpperCase() : '?';
+        const score = m.status === 'finished' && m.score ? `${home ? m.score.home : m.score.away}–${home ? m.score.away : m.score.home}` : '';
         return `<a class="strip__tile strip__tile--${r || 'open'}" href="#/wedstrijd/${m.id}" title="${matchTitle(m)}">
           <span class="mono strip__res">${r || '·'}</span><span class="mono strip__rd">${esc(shortRound(m.round).replace(/^R/, '') || '')}</span>
+          <span class="strip__opp mono" aria-hidden="true">${home ? '' : '@'}${esc(short)}</span>${score ? `<span class="strip__score mono" aria-hidden="true">${score}</span>` : ''}
           <span class="visually-hidden">${esc(opp ? opp.name : '')}</span></a>`;
       }).join('')}</div>
       <div class="strip__links"><span class="muted" style="font-size:12px">Tik op een ronde voor de wedstrijd.</span><a class="link-btn" href="#/stats">Stand</a></div>
