@@ -609,3 +609,6 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .fold > summary::-webkit-details-marker { display: none; }
 .fold > summary span:first-child::before { content: '▸ '; }
 .fold[open] > summary span:first-child::before { content: '▾ '; }
+.transfer-row { width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; border-top: 1px solid var(--hairline); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; cursor: pointer; }
+.field--check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; }
+.field--check input { width: 18px; height: 18px; min-height: 0; accent-color: var(--accent); }

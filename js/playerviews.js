@@ -51,6 +51,70 @@ function ageOf(dob) {
 }
 const T_LABEL = { 'transfer-in': 'Gekomen', 'transfer-uit': 'Vertrokken', 'huur-in': 'Gehuurd', 'huur-uit': 'Verhuurd', promotie: 'Doorgestroomd', verlenging: 'Verlengd' };
 
+const T_TYPES = [['transfer-in', 'Gekomen'], ['transfer-uit', 'Vertrokken'], ['huur-in', 'Gehuurd'], ['huur-uit', 'Verhuurd'], ['promotie', 'Doorgestroomd uit de jeugd'], ['verlenging', 'Contract verlengd']];
+
+/** Transfers met toevoegen/aanpassen/verwijderen. id = het spelersprofiel (Highlightly-id of legacy-…). */
+function transfersBlock(pr, id) {
+  const list = ((pr && pr.transfers) || []).map((t, i) => ({ ...t, i })).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  return `
+    <section class="section">
+      <div class="section__label"><span>Transfers</span><span>${list.length || ''}</span></div>
+      ${list.length ? `<div class="list">${list.map((t) => `
+        <button type="button" class="list-row transfer-row" data-edit-transfer="${t.i}" data-pid="${esc(String(id))}">
+          <span class="list-row__main"><span class="list-row__title">${esc(T_LABEL[t.type] || t.type)}${t.club ? ` · ${esc(t.club)}` : ''}</span>
+          <span class="list-row__sub">${esc(dmy(t.date))}${t.dateTo ? ` t/m ${esc(dmy(t.dateTo))}` : ''}${t.amount ? ` · ${euro(t.amount)}` : ''}${t.note ? ` · ${esc(t.note)}` : ''}</span></span>
+          <span class="muted" aria-hidden="true">✎</span></button>`).join('')}</div>`
+        : '<p class="muted" style="font-size:13px">Nog geen transfers. Zonder transfers telt alleen het wedstrijdformulier.</p>'}
+      <div><button class="btn btn--sm" type="button" data-add-transfer data-pid="${esc(String(id))}">+ Transfer toevoegen</button></div>
+    </section>`;
+}
+
+async function editTransfer(ctx, id, index, profiles) {
+  const pr = profiles[String(id)] || {};
+  const all = (pr.transfers || []).slice();
+  const t = index != null ? all[index] : { type: 'transfer-uit', date: new Date().toISOString().slice(0, 10) };
+  const data = await openSheet({
+    title: index != null ? 'Transfer aanpassen' : 'Transfer toevoegen',
+    body: `<label class="field"><span>Soort</span><select name="type">${T_TYPES.map(([v, l]) => `<option value="${v}" ${t.type === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      <div class="field-row"><label class="field"><span>Datum</span><input name="date" type="date" value="${esc(t.date || '')}"></label>
+      <label class="field"><span>Tot (bij huur)</span><input name="dateTo" type="date" value="${esc(t.dateTo || '')}"></label></div>
+      <label class="field"><span>Club</span><input name="club" maxlength="60" autocomplete="off" placeholder="bijv. Bali United" value="${esc(t.club || '')}"></label>
+      <div class="field-row"><label class="field"><span>Bedrag (€)</span><input name="amount" type="number" inputmode="numeric" min="0" step="1000" placeholder="leeg = onbekend" value="${t.amount ?? ''}"></label>
+      <label class="field"><span>Notitie</span><input name="note" maxlength="120" placeholder="bijv. Vrije transfer" value="${esc(t.note || '')}"></label></div>
+      ${index != null ? '<label class="field field--check"><input type="checkbox" name="delete"> <span>Deze transfer verwijderen</span></label>' : ''}`,
+    validate: (fd) => {
+      if (fd.get('delete')) return null;
+      if (!fd.get('date')) return 'Vul een datum in.';
+      if (fd.get('dateTo') && fd.get('dateTo') < fd.get('date')) return '"Tot" ligt vóór de datum.';
+      return null;
+    },
+  });
+  if (!data) return;
+  const next = all.slice();
+  if (data.get('delete')) next.splice(index, 1);
+  else {
+    const amount = data.get('amount') === '' ? null : Number(data.get('amount'));
+    const item = { type: data.get('type'), date: data.get('date'), dateTo: data.get('dateTo') || null, club: String(data.get('club') || '').trim() || null, amount, note: String(data.get('note') || '').trim() || null };
+    if (index != null) next[index] = item; else next.push(item);
+  }
+  try {
+    await savePlayer(id, { transfers: next });
+    toast(data.get('delete') ? 'Transfer verwijderd' : 'Transfer opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await savePlayer(id, { transfers: all }); ctx.refresh(); } });
+    ctx.refresh();
+  } catch (err) { toast(`Opslaan lukte niet: ${err.message || err}`); }
+}
+
+function mountTransfers(root, ctx) {
+  root.addEventListener('click', async (e) => {
+    const add = e.target.closest('[data-add-transfer]');
+    const ed = e.target.closest('[data-edit-transfer]');
+    if (!add && !ed) return;
+    const { profiles } = await correctedList();
+    const id = (add || ed).dataset.pid;
+    editTransfer(ctx, id, ed ? Number(ed.dataset.editTransfer) : null, profiles);
+  });
+}
+
 function profileBlock(pr) {
   if (!pr || !pr.legacyId) return '';
   const age = ageOf(pr.dob);
@@ -74,9 +138,6 @@ function profileBlock(pr) {
         <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Marktwaarde' ? v : esc(v)}</dd>`).join('')}</dl>
       </div>
       ${trend.length > 1 ? `<div class="value-bars" aria-label="Marktwaarde-verloop">${trend.map((v) => `<span class="value-bar"><i style="height:${Math.max(6, Math.round(((v.amount || 0) / max) * 48))}px"></i><small class="mono">${esc(String(v.date).slice(2, 7).replace('-', '/'))}</small></span>`).join('')}</div>` : ''}
-      ${(pr.transfers || []).length ? `<div class="list">${pr.transfers.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((t) => `
-        <div class="list-row" style="cursor:default"><span class="list-row__main"><span class="list-row__title">${esc(T_LABEL[t.type] || t.type)}${t.club ? ` · ${esc(t.club)}` : ''}</span>
-        <span class="list-row__sub">${esc(dmy(t.date))}${t.dateTo ? ` t/m ${esc(dmy(t.dateTo))}` : ''}${t.amount ? ` · ${euro(t.amount)}` : ''}${t.note ? ` · ${esc(t.note)}` : ''}</span></span></div>`).join('')}</div>` : ''}
       ${pr.note ? `<p class="note-text">${esc(pr.note)}</p>` : ''}
     </section>`;
 }
@@ -181,7 +242,8 @@ function profileOnlyPage(pr, id) {
         ? 'Nog niet gekoppeld aan Highlightly. Stats verschijnen zodra hij in een opgehaald seizoen voorkomt en je hem koppelt via Meer → Importeren.'
         : 'Geen officiële duels in dit seizoen. Kies een ander seizoen via de clubnaam op Home.'}</p>
     </section>
-    ${profileBlock(pr)}`;
+    ${profileBlock(pr)}
+    ${transfersBlock(pr, id)}`;
 }
 
 export const playerViews = {
@@ -263,6 +325,7 @@ export const playerViews = {
     title: 'Speler',
     navKey: 'selectie',
     mount(root, ctx) {
+      mountTransfers(root, ctx);
       root.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-action="edit-name"]');
         if (!btn) return;
@@ -317,6 +380,7 @@ export const playerViews = {
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>
         ${profileBlock(p.profile)}
+        ${transfersBlock(p.profile, p.id)}
         ${facts.length ? `<section class="section"><div class="section__label"><span>Feitjes</span></div>
           <div class="facts">${facts.map((f) => `<div class="fact"><span>${esc(f)}</span></div>`).join('')}</div></section>` : ''}
         <section class="section">
