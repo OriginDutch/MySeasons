@@ -173,7 +173,7 @@ export function valueBlock(pr, id) {
           ${prev ? `<span class="value-delta ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : ''}">${delta > 0 ? '▲' : delta < 0 ? '▼' : '='} ${delta ? esc(euro(Math.abs(delta))) : 'gelijk'}</span>` : ''}
           <span class="muted" style="font-size:12px">${esc(dmy(cur.date))}</span></div>
         ${chart(vals)}
-        <details class="fold"><summary>Alle metingen</summary><div class="list">${desc.map((v) => {
+        <details class="fold"><summary><span>Alle metingen</span></summary><div class="list">${desc.map((v) => {
           const i = (pr.valueHistory || []).indexOf(v);
           return `<button type="button" class="list-row transfer-row" data-edit-value="${i}" data-pid="${pid}">
             <span class="list-row__main"><span class="list-row__title mono">${esc(euro(v.amount))}</span><span class="list-row__sub">${esc(dmy(v.date))}${v.note ? ` · ${esc(v.note)}` : ''}</span></span>

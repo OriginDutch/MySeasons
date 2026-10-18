@@ -104,7 +104,7 @@ function matchRow(m, teamKey, ownIds) {
   const tag = link ? 'a' : 'div';
   return `<${tag} class="list-row club-row ${String(opp.id) === String(TEAM) ? 'is-me' : ''}" ${link ? `href="${link}"` : ''}>
     <span class="match-row__date mono">${esc(dayShort(m.date))}</span>
-    <span class="list-row__main"><span class="list-row__title club-row__opp">${home ? '' : '<span class="muted">@ </span>'}${crest(opp, 18)}<span>${esc(opp.name)}</span></span>
+    <span class="list-row__main"><span class="list-row__title club-row__opp"><span class="club-row__at muted" aria-label="${home ? 'thuis' : 'uit'}">${home ? '' : '@'}</span>${crest(opp, 18)}<span>${esc(opp.name)}</span></span>
       <span class="list-row__sub">${esc(m.stage === 'nacompetitie' ? 'Nacompetitie' : shortRound(m.round))}${m.status && !['finished', 'scheduled'].includes(m.status) ? ' · ' + esc(m.status) : ''}${vsMe && link && String(teamKey) !== String(TEAM) ? ' · jouw wedstrijd' : ''}</span></span>
     <span class="match-row__end mono">${score} ${r ? `<span class="result result--${r}">${r}</span>` : ''}</span>
   </${tag}>`;

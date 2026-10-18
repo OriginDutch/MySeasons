@@ -122,10 +122,10 @@ a { color: inherit; }
 a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 
 .kv {
-  display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px 12px;
+  display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px;
   font-size: 13px;
 }
-.kv dt { color: var(--muted); }
+.kv dt { color: var(--muted); white-space: nowrap; }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 
 .empty {
@@ -610,6 +610,7 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .club-head { display: flex; align-items: center; gap: 10px; }
 .club-row { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; gap: 8px; align-items: center; color: inherit; text-decoration: none; }
 .club-row__opp { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.club-row__at { flex: none; width: 12px; text-align: center; }
 .club-row__opp span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .club-row.is-me { box-shadow: inset 3px 0 0 var(--accent); background: var(--surface-hover); }
 .club-row.is-me .match-row__date { padding-left: 8px; }

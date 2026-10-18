@@ -132,6 +132,7 @@ function profileBlock(pr, id) {
     ['Lengte', pr.height ? `${pr.height} cm` : null],
     ['Bij de club sinds', pr.joined ? dmy(pr.joined) : null],
     ['Contract tot', pr.contractUntil ? dmy(pr.contractUntil) : null],
+    ['Notitie', pr.note || null],
   ].filter(([, v]) => v);
   const editBtn = id != null ? `<div><button class="btn btn--sm" type="button" data-edit-profile="${esc(String(id))}">Profiel bewerken</button></div>` : '';
   if (!kv.length) {
@@ -144,7 +145,6 @@ function profileBlock(pr, id) {
       <div class="profile">
         <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Nationaliteit' ? v : esc(v)}</dd>`).join('')}</dl>
       </div>
-      ${pr.note ? `<p class="note-text">${esc(pr.note)}</p>` : ''}
       ${editBtn}
     </section>`;
 }
