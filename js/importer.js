@@ -26,6 +26,7 @@ export function legacyProfile(p) {
     dob: clean(p.dob), nationality: clean(p.nationality),
     position: POS[p.position] || clean(p.position), subPositions: p.subpos || [],
     foot: clean(p.foot), height: num(p.height),
+    squadLevel: clean(p.squadLevel),
     joined: clean(p.joined), contractUntil: clean(p.contract),
     photoUrl: clean(p.photo),
     note: clean(p.note),

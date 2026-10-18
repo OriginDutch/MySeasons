@@ -5,7 +5,8 @@ import { savePlayer } from './store.js';
 import { autoShort } from './names.js';
 import { openSheet } from './editor.js';
 import { MAIN_CLUB } from './config.js';
-import { seasonLabel } from './seasonstate.js';
+import { seasonLabel, isCurrentSeason, getSeason } from './seasonstate.js';
+import { statusIn, seasonWindow, spells } from './membership.js';
 import { COST, missingDetails, fetchMany } from './sync.js';
 import { buildSquad, playerFacts, LINES, LINE_SHORT } from './players.js';
 import { correctedList, runWithButton, explain, head, crest } from './matchviews.js';
@@ -82,11 +83,15 @@ function profileBlock(pr) {
 
 const SORTS = [['line', 'Linie'], ['goals', 'Goals'], ['minutes', 'Minuten'], ['rating', 'Cijfer']];
 
+const fmtLabel = (l) => l.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, d) => new Date(`${y}-${m}-${d}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: y === String(new Date().getFullYear()) ? undefined : 'numeric' }));
+
 function rowHtml(p, sort) {
-  const sub = p.apps
+  const base = p.apps
     ? `${p.apps} ${p.apps === 1 ? 'duel' : 'duels'}${p.subIns ? ` (${p.subIns} in)` : ''} · ${p.minutes}'`
-    : `${p.squads}× op de bank`;
-  return `<a class="list-row player-row" href="#/speler/${p.id}">
+    : p.squads ? `${p.squads}× op de bank` : 'nog geen officieel duel';
+  const tags = (p.labels || []).map((l) => `<span class="ptag">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '');
+  const sub = `${base}${tags ? ' ' + tags : ''}`;
+  return `<a class="list-row player-row" href="#/speler/${encodeURIComponent(p.id)}">
     <span class="player-row__num mono">${p.number ?? ''}</span>
     <span class="list-row__main"><span class="list-row__title">${esc(p.name)}</span>
       <span class="list-row__sub">${sort === 'line' ? '' : esc(LINE_SHORT[p.position] || '—') + ' · '}${sub}</span></span>
@@ -124,31 +129,124 @@ function squadList(players, sort) {
   }).join('');
 }
 
+/**
+ * Selectie van het bekeken seizoen: wedstrijdformulieren + perioden uit de transfers.
+ * Geeft alle leden en de groepen active / left / loaned / future.
+ */
+function seasonMembers(list, squadPlayers, profiles) {
+  const official = list.filter((m) => m.league && !/friendl/i.test(m.league.name));
+  const win = seasonWindow(getSeason(), official);
+  const today = new Date().toISOString().slice(0, 10);
+  const ref = isCurrentSeason() ? today : win.end;
+  const members = [];
+  const seen = new Set();
+  squadPlayers.forEach((p) => {
+    const last = p.log.length ? p.log[p.log.length - 1].match.date : null;
+    const st = statusIn(p.profile, win, ref, { onSheet: true, lastSheet: last });
+    seen.add(String(p.id));
+    members.push({ ...p, status: st.status || 'active', labels: st.labels || [], conflict: !!st.conflict });
+  });
+  Object.entries(profiles || {}).forEach(([id, pr]) => {
+    if (seen.has(id) || pr.linkedTo) return; // gekoppelde oud-profielen staan al onder hun Highlightly-id
+    if (!pr.legacyId && !pr.transfers) return; // alleen een naamkeuze, geen periode
+    const st = statusIn(pr, win, ref);
+    if (!st.member) return;
+    members.push({
+      id, name: pr.fullName || pr.legacyName || '?', number: pr.shirt ?? null, position: pr.position || '',
+      apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
+      status: pr.squadLevel === 'jeugd' && st.status === 'active' ? 'youth' : st.status, labels: st.labels, conflict: false, profileOnly: true,
+    });
+  });
+  const groups = { active: [], youth: [], left: [], loaned: [], future: [] };
+  members.forEach((m) => (groups[m.status] || groups.active).push(m));
+  return { members, groups };
+}
+
+function periodText(pr) {
+  const { spells: sp } = spells(pr);
+  if (!sp.length) return null;
+  const y = (d) => (d ? d.slice(0, 4) : '…');
+  return sp.map((s) => `${y(s.from)}–${s.to ? y(s.to) : 'nu'}${s.kind === 'huur' ? ' (huur)' : s.kind === 'jeugd' ? ' (jeugd)' : ''}`).join(', ');
+}
+
+/** Spelerspagina zonder Highlightly-stats dit seizoen: alleen het profiel uit je archief. */
+function profileOnlyPage(pr, id) {
+  const name = pr.fullName || pr.legacyName || '?';
+  const per = periodText(pr);
+  return `
+    ${head({ kicker: `Archief · ${LINE_SHORT[pr.position] || '—'}`, title: name, back: 'selectie' })}
+    <section class="section">
+      <div class="player-hero"><span class="player-hero__num">${pr.shirt ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
+      <p class="muted" style="font-size:13px;margin:0">${pr.linkedTo === null || String(id).startsWith('legacy-')
+        ? 'Nog niet gekoppeld aan Highlightly. Stats verschijnen zodra hij in een opgehaald seizoen voorkomt en je hem koppelt via Meer → Importeren.'
+        : 'Geen officiële duels in dit seizoen. Kies een ander seizoen via de clubnaam op Home.'}</p>
+    </section>
+    ${profileBlock(pr)}`;
+}
+
 export const playerViews = {
+  archief: {
+    title: 'Archief',
+    navKey: 'selectie',
+    async render() {
+      const { profiles } = await correctedList();
+      const rows = Object.entries(profiles || {})
+        .filter(([, pr]) => (pr.legacyId || pr.transfers) && !(pr.linkedTo && profiles[String(pr.linkedTo)]))
+        .map(([id, pr]) => {
+          const { spells: sp } = spells(pr);
+          const last = sp.length ? (sp[sp.length - 1].to || '9999') : '';
+          return { id, pr, last, name: pr.fullName || pr.legacyName || '?' };
+        })
+        .sort((a, b) => b.last.localeCompare(a.last) || a.name.localeCompare(b.name));
+      return `${head({ kicker: 'Selectie / Archief', title: 'Archief', back: 'selectie' })}
+        <section class="section">
+          <p class="muted" style="font-size:13px">Iedereen uit je archief, huidige spelers bovenaan, daarna wie het laatst vertrok.</p>
+          <div class="list">${rows.map((r) => `<a class="list-row player-row" href="#/speler/${encodeURIComponent(r.id)}">
+            <span class="player-row__num mono">${r.pr.shirt ?? ''}</span>
+            <span class="list-row__main"><span class="list-row__title">${esc(r.name)}</span>
+              <span class="list-row__sub">${esc(LINE_SHORT[r.pr.position] || '—')}${periodText(r.pr) ? ' · ' + esc(periodText(r.pr)) : ''}${String(r.id).startsWith('legacy-') ? ' · niet gekoppeld' : ''}</span></span>
+            <span></span></a>`).join('')}</div>
+        </section>`;
+    },
+  },
+
   selectie: {
     title: 'Selectie',
     async render() {
       const { list, profiles } = await correctedList();
-      const { players, matches } = buildSquad(list, TEAM, profiles);
+      const built = buildSquad(list, TEAM, profiles);
+      const { matches } = built;
+      const { members, groups } = seasonMembers(list, built.players, profiles);
+      const players = groups.active;
       const kicker = `MySeasons / ${MAIN_CLUB.name} ${seasonLabel()}`;
-      if (!players.length) {
+      if (!members.length) {
         return `${head({ kicker, title: 'Selectie' })}
           ${missingBlock(list) || `<section class="section"><div class="empty"><span class="empty__title">Nog geen spelers</span>
             <p class="muted">De selectie komt uit de opstellingen van gespeelde wedstrijden. Synchroniseer eerst het seizoen op Home.</p>
             <div><a class="btn" href="#/home">Naar Home</a></div></div></section>`}`;
       }
-      const used = players.filter((p) => p.apps).length;
+      const used = members.filter((p) => p.apps).length;
+      const extra = [
+        ['left', isCurrentSeason() ? 'Vertrokken dit seizoen' : 'Vertrokken tijdens het seizoen'],
+        ['youth', 'Jeugd en beloften'],
+        ['loaned', 'Verhuurd'],
+        ['future', 'Komt nog'],
+      ].filter(([k]) => groups[k].length);
       return `
         ${head({ kicker, title: 'Selectie' })}
         <section class="section">
-          <p class="muted" style="font-size:13px">${players.length} spelers op het wedstrijdformulier, ${used} kwamen in actie · ${matches} officiële ${matches === 1 ? 'duel' : 'duels'}</p>
+          <p class="muted" style="font-size:13px">${players.length} ${isCurrentSeason() ? 'spelers nu bij de club' : 'spelers aan het eind van het seizoen'} · ${used} kwamen in actie in ${matches} officiële ${matches === 1 ? 'duel' : 'duels'}</p>
           <fieldset class="segmented segmented--4" style="margin:0;padding:0">
             <legend class="visually-hidden">Sorteren</legend>
             ${SORTS.map(([v, l], i) => `<input type="radio" name="sq-sort" id="sq-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sq-${v}">${l}</label>`).join('')}
           </fieldset>
         </section>
         ${missingBlock(list)}
-        ${SORTS.map(([v], i) => `<div data-sq="${v}" ${i === 0 ? '' : 'hidden'}>${squadList(players, v)}</div>`).join('')}`;
+        ${SORTS.map(([v], i) => `<div data-sq="${v}" ${i === 0 ? '' : 'hidden'}>${squadList(players, v)}</div>`).join('')}
+        ${extra.map(([k, label]) => `<section class="section"><details class="fold" ${isCurrentSeason() ? '' : 'open'}>
+          <summary class="section__label"><span>${esc(label)}</span><span>${groups[k].length}</span></summary>
+          ${statHead}<div class="list">${groups[k].map((p) => rowHtml(p, 'all')).join('')}</div></details></section>`).join('')}
+        <section class="section"><a class="link-btn" href="#/archief">Alle spelers uit je archief</a></section>`;
     },
     mount(root, ctx) {
       root.querySelectorAll('input[name="sq-sort"]').forEach((input) => input.addEventListener('change', () => {
@@ -188,10 +286,13 @@ export const playerViews = {
       });
     },
     async render(ctx, args) {
-      const id = Number(args[0]);
+      const rawId = decodeURIComponent(args[0] || '');
+      const id = Number(rawId);
       const { list, profiles } = await correctedList();
       const { players } = buildSquad(list, TEAM, profiles);
       const p = players.find((x) => x.id === id);
+      const prof = profiles[rawId];
+      if (!p && prof) return profileOnlyPage(prof, rawId);
       if (!p) {
         return `${head({ kicker: 'Selectie', title: 'Niet gevonden', back: 'selectie' })}
           <section class="section"><p class="muted">Deze speler staat (nog) niet in een opgehaalde wedstrijd.</p></section>`;

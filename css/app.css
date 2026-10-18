@@ -601,3 +601,11 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .club-row__opp span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .club-row.is-me { box-shadow: inset 3px 0 0 var(--accent); background: var(--surface-hover); }
 .club-row.is-me .match-row__date { padding-left: 8px; }
+
+/* ---------- Selectie per seizoen ---------- */
+.ptag { display: inline-block; font-family: var(--font-mono); font-size: 10px; padding: 1px 5px; border: 1px solid var(--hairline); margin-left: 4px; white-space: nowrap; }
+.ptag--warn { border-color: var(--accent); color: var(--accent-text); }
+.fold > summary { list-style: none; cursor: pointer; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary span:first-child::before { content: '▸ '; }
+.fold[open] > summary span:first-child::before { content: '▾ '; }
