@@ -19,7 +19,7 @@ export function getLastRateLimit() {
   return lastRateLimit;
 }
 
-async function call(path, params, { method = 'GET', body } = {}) {
+async function call(path, params, { method = 'GET', body, raw = null, binary = false } = {}) {
   const user = auth.currentUser;
   if (!user) throw new ApiError('Niet ingelogd', 401);
   const token = await user.getIdToken();
@@ -33,8 +33,9 @@ async function call(path, params, { method = 'GET', body } = {}) {
   let res;
   try {
     const headers = { Authorization: `Bearer ${token}` };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    res = await fetch(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    if (raw) headers['Content-Type'] = 'application/octet-stream';
+    else if (body !== undefined) headers['Content-Type'] = 'application/json';
+    res = await fetch(url, { method, headers, body: raw || (body !== undefined ? JSON.stringify(body) : undefined) });
   } catch {
     throw new ApiError('Geen verbinding met de Worker', 0);
   }
@@ -46,6 +47,7 @@ async function call(path, params, { method = 'GET', body } = {}) {
     noteRateLimit(lastRateLimit).catch(() => {});
   }
 
+  if (binary && res.ok) return res.arrayBuffer();
   let data = null;
   try { data = await res.json(); } catch { /* geen JSON */ }
 
@@ -94,4 +96,11 @@ export const push = {
   unsubscribe: (endpoint) => call('/push/unsubscribe', null, { method: 'POST', body: { endpoint } }),
   schedule: (matches) => call('/push/schedule', null, { method: 'POST', body: { matches } }),
   test: () => call('/push/test', null, { method: 'POST', body: {} }),
+};
+
+// ---------- Automatische back-ups (gzip, bewaard in de Worker-KV) ----------
+export const backups = {
+  list: () => call('/backup/list'),
+  upload: (bytes, { docs, version, why = 'auto' } = {}) => call('/backup/upload', { docs, v: version, why }, { method: 'POST', raw: bytes }),
+  get: (key) => call('/backup/get', { key }, { binary: true }),
 };

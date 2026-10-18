@@ -88,7 +88,8 @@ function derived({ list, profiles, conflicts, backup }) {
 /** Alle meldingen, nieuwste eerst, zonder weggedane. ctx mag list/profiles/conflicts al bevatten. */
 export async function inboxItems(ctx = null) {
   const c = ctx && ctx.list ? ctx : await correctedList();
-  const [s, backup] = await Promise.all([state(), getMeta('backup').catch(() => null)]);
+  const [s, manual, auto] = await Promise.all([state(), getMeta('backup').catch(() => null), getMeta('autoBackup').catch(() => null)]);
+  const backup = [manual, auto].filter((b) => b && b.at).sort((a, b) => b.at.localeCompare(a.at))[0] || null;
   const all = [...derived({ list: c.list, profiles: c.profiles, conflicts: c.conflicts || 0, backup }), ...s.items];
   const dismissed = new Set(s.dismissed); const seen = new Set(s.seen);
   return all.filter((m) => !dismissed.has(m.id))

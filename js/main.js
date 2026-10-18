@@ -218,6 +218,8 @@ watchAuth((user) => {
     });
     // Meldingen: programma bij de Worker actueel houden (stuurt alleen bij wijzigingen).
     import('./meldingen.js').then((m) => m.pushSupported() && m.pushSchedule()).catch(() => {});
+    // Wekelijkse back-up naar de Worker, rustig na het opstarten.
+    setTimeout(() => import('./backup.js').then((m) => m.autoBackup()).then((r) => { if (r && r.ok) toast(`Wekelijkse back-up gemaakt · ${r.docs} documenten`); }).catch(() => {}), 20000);
   } else {
     renderLogin();
   }

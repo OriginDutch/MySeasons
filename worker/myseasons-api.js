@@ -19,6 +19,7 @@
 //   ALLOWED_UID      (type Text)    je Firebase UID uit MySeasons → Meer → Instellingen
 
 import { pushApi, pushScheduled } from './push.js';
+import { backupApi } from './backup.js';
 
 const PROJECT_ID = 'myseasons-c1dd9';
 const HIGHLIGHTLY_BASE = 'https://soccer.highlightly.net';
@@ -357,7 +358,8 @@ export default {
     }
     const isNs = url.pathname.startsWith('/ns/');
     const isPush = url.pathname.startsWith('/push/');
-    if (request.method !== 'GET' && !(isNs && ['POST', 'DELETE'].includes(request.method)) && !(isPush && request.method === 'POST')) {
+    const isBackup = url.pathname.startsWith('/backup/');
+    if (request.method !== 'GET' && !(isNs && ['POST', 'DELETE'].includes(request.method)) && !((isPush || isBackup) && request.method === 'POST')) {
       return json({ error: 'Methode niet toegestaan' }, 405, origin);
     }
 
@@ -387,6 +389,12 @@ export default {
     if (isPush) {
       if (!env.MS_KV) return json({ error: 'Meldingen: KV-namespace MS_KV is nog niet gekoppeld' }, 501, origin);
       return pushApi(request, env, url, (b, st) => json(b, st, origin));
+    }
+
+    // Automatische back-ups (gzip-bestanden van de app), de laatste 4.
+    if (isBackup) {
+      if (!env.MS_KV) return json({ error: 'Back-ups: KV-namespace MS_KV is nog niet gekoppeld' }, 501, origin);
+      return backupApi(request, env, url, (b, st) => json(b, st, origin), corsHeaders(origin));
     }
 
     // Gezondheidscheck: geen Highlightly-call, kost geen quotum.

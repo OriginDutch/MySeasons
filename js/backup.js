@@ -4,6 +4,7 @@
 import { esc, icons, toast } from './ui.js';
 import { dumpCollection, restoreCollection, setMeta, getMeta } from './store.js';
 import { APP_VERSION } from './version.js';
+import { backups } from './api.js';
 import { dayShort, timeOf } from './season.js';
 
 // Volgorde = belangrijkste eerst. 'raw' is groot en optioneel.
@@ -25,7 +26,7 @@ export const COLLECTIONS = [
 const LABEL = Object.fromEntries(COLLECTIONS.map(([k, l]) => [k, l]));
 const WRITE_WARN = 15000; // Firestore gratis: 20.000 writes per dag
 // Tellers die bij vandaag horen: nooit terugzetten, anders klopt je quotum niet meer.
-const SKIP_META = new Set(['quota', 'nsWrites', 'backup']);
+const SKIP_META = new Set(['quota', 'nsWrites', 'backup', 'autoBackup']);
 const docsFor = (b, k) => (b.collections[k] || []).filter((d) => !(k === 'meta' && SKIP_META.has(d.id)));
 const docWord = (n) => `${n} ${n === 1 ? 'document' : 'documenten'}`;
 
@@ -48,6 +49,42 @@ function download(obj) {
 }
 
 let pending = null; // ingelezen backup die op terugzetten wacht
+
+// ---------- Automatisch (wekelijks, gzip, laatste 4 in de Worker-KV) ----------
+const AUTO_KEY = 'ms-autobackup';
+const WEEK = 7 * 864e5;
+export const autoEnabled = () => { try { return localStorage.getItem(AUTO_KEY) !== 'off'; } catch { return true; } };
+const setAuto = (on) => { try { localStorage.setItem(AUTO_KEY, on ? 'on' : 'off'); } catch { /* niet erg */ } };
+const canZip = () => typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+
+async function gzip(text) {
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function gunzip(buf) {
+  const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).text();
+}
+
+/** Back-up maken en bij de Worker opslaan. why: 'auto' | 'manual'. */
+export async function cloudBackup(why = 'manual', onProgress) {
+  if (!canZip()) throw new Error('Deze browser kan niet comprimeren');
+  const b = await buildBackup({ raw: false }, onProgress);
+  const bytes = await gzip(JSON.stringify(b));
+  const r = await backups.upload(bytes, { docs: count(b), version: APP_VERSION, why });
+  await setMeta('autoBackup', { at: r.at, size: bytes.length, docs: count(b), why });
+  return { ...r, docs: count(b) };
+}
+
+let autoRunning = false;
+/** Bij het openen van de app: hooguit eens per week, op de achtergrond. */
+export async function autoBackup() {
+  if (autoRunning || !autoEnabled() || !canZip()) return null;
+  const last = await getMeta('autoBackup').catch(() => null);
+  if (last && last.at && Date.now() - Date.parse(last.at) < WEEK) return null;
+  autoRunning = true;
+  try { return await cloudBackup('auto'); } catch (err) { return { error: err }; } finally { autoRunning = false; }
+}
 
 function readFile(file) {
   return new Promise((resolve, reject) => {
@@ -86,7 +123,23 @@ export const backupViews = {
           </section>
 `;
       }
+      let cloud = null; let cloudErr = null;
+      try { cloud = await backups.list(); } catch (e) { cloudErr = e; }
+      const auto = autoEnabled();
       return `${head}
+        <section class="section">
+          <div class="section__label"><span>Automatisch</span><span>${cloud ? `${cloud.items.length} van ${cloud.keep}` : ''}</span></div>
+          <p class="muted" style="font-size:13px">Eens per week maakt de app bij het openen zelf een back-up en bewaart die (gecomprimeerd) bij je Worker. De laatste 4 blijven staan. Zonder de ruwe Highlightly-data.</p>
+          <label class="field field--check"><input type="checkbox" data-auto ${auto ? 'checked' : ''}> <span>Wekelijks automatisch</span></label>
+          ${cloudErr ? `<p class="warn-line">${esc(cloudErr.status === 404 ? 'De Worker kent back-ups nog niet: de nieuwe versie is nog niet gedeployd.' : (cloudErr.message || 'Worker niet bereikbaar'))}</p>` : ''}
+          ${cloud && cloud.items.length ? `<div class="list">${cloud.items.map((it) => `
+            <div class="list-row bk-row">
+              <span class="list-row__main"><span class="list-row__title">${esc(dayShort(it.at))} ${esc(timeOf(it.at))}${it.why === 'manual' ? ' <span class="muted">· handmatig</span>' : ''}</span>
+                <span class="list-row__sub">${it.docs ? `${it.docs} documenten · ` : ''}${esc(kb(it.size || 0))}${it.version ? ` · v${esc(it.version)}` : ''}</span></span>
+              <span class="bk-row__btns"><button class="btn btn--sm" type="button" data-cloud-get="${esc(it.key)}">Downloaden</button><button class="btn btn--sm" type="button" data-cloud-restore="${esc(it.key)}">Terugzetten</button></span>
+            </div>`).join('')}</div>` : cloud ? '<p class="muted" style="font-size:13px">Nog geen automatische back-ups.</p>' : ''}
+          <div><button class="btn" type="button" data-bk="cloud" ${cloudErr ? 'disabled' : ''}>Nu een back-up opslaan</button></div>
+        </section>
         <section class="section">
           <div class="section__label"><span>Exporteren</span><span>${last ? `laatst ${esc(dayShort(last.at))}` : 'nog nooit'}</span></div>
           <p class="muted" style="font-size:13px">Alles uit je database als één bestand: wedstrijden, je aanvullingen en correcties, spelers, transfers, trainers, seizoenen en standen. Bewaar het op je telefoon, PC of cloud.</p>
@@ -111,6 +164,7 @@ export const backupViews = {
         totalEl.textContent = `${docWord(n)} = ${n} writes${n > WRITE_WARN ? `. Let op: dat is veel voor één dag (gratis limiet 20.000). Vink vandaag een deel aan en morgen de rest.` : '.'}`;
       };
       root.addEventListener('change', async (e) => {
+        if (e.target.matches('[data-auto]')) { setAuto(e.target.checked); toast(e.target.checked ? 'Wekelijkse back-up staat aan' : 'Wekelijkse back-up staat uit'); }
         if (e.target.matches('input[name="rc"]')) updateTotal();
         if (e.target.matches('[data-restore-file]')) {
           try {
@@ -123,8 +177,33 @@ export const backupViews = {
       });
       updateTotal();
       root.addEventListener('click', async (e) => {
+        const cg = e.target.closest('[data-cloud-get],[data-cloud-restore]');
+        if (cg) {
+          const key = cg.dataset.cloudGet || cg.dataset.cloudRestore;
+          const label = cg.textContent; cg.disabled = true; cg.textContent = 'Ophalen…';
+          try {
+            const text = await gunzip(await backups.get(key));
+            const obj = JSON.parse(text);
+            if (cg.dataset.cloudRestore) { pending = obj; ctx.refresh(); return; }
+            const { blob, name } = download(obj);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = name;
+            document.body.append(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+          } catch (err) { toast(`Lukte niet: ${err.message || err}`); } finally { cg.disabled = false; cg.textContent = label; }
+          return;
+        }
         const b = e.target.closest('[data-bk]');
         if (!b) return;
+        if (b.dataset.bk === 'cloud') {
+          b.disabled = true;
+          try {
+            const r = await cloudBackup('manual', (name) => { b.textContent = `Lezen: ${LABEL[name] || name}…`; });
+            toast(`Opgeslagen: ${r.docs} documenten · ${kb(r.size)}${r.removed ? ` · ${r.removed} oude opgeruimd` : ''}`);
+            ctx.refresh();
+          } catch (err) { toast(`Back-up mislukt: ${err.message || err}`); b.disabled = false; b.textContent = 'Nu een back-up opslaan'; }
+          return;
+        }
         const act = b.dataset.bk;
         if (act === 'cancel') { pending = null; ctx.refresh(); return; }
         if (act === 'restore') {
