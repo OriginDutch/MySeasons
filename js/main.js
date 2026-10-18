@@ -8,6 +8,8 @@ import { pastSeasonBar, openViewSheet } from './seasonsview.js';
 import { setSeason } from './seasonstate.js';
 import { CURRENT_SEASON } from './config.js';
 import { autoSync } from './nightshift.js';
+import { clubNamesLoaded, setClubOverrides } from './clubnames.js';
+import { getClubMarks } from './store.js';
 
 const appEl = document.getElementById('app');
 
@@ -121,6 +123,8 @@ async function route({ keepScroll = false } = {}) {
     if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
+
+  if (!clubNamesLoaded()) await getClubMarks().then(setClubOverrides).catch(() => {}); // eigen clubnamen vóór het eerste scherm (offline: volgende keer opnieuw)
 
   let html;
   try {

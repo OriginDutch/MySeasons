@@ -3,6 +3,7 @@
 
 import { esc } from './ui.js';
 import { MAIN_CLUB } from './config.js';
+import { nameHtml } from './clubnames.js';
 
 const TEAM = MAIN_CLUB.id;
 
@@ -42,7 +43,7 @@ function rowHtml(r, zones, marks, highlight, form) {
   const hl = highlight && highlight.get(String(r.team.id));
   return `<tr class="${me ? 'is-me' : ''} ${z ? 'zone--' + z.kind : ''} ${hl ? 'is-hl' : ''}">
     <td class="mono st-pos">${r.pos}</td>
-    <td class="st-club"><a class="st-link" href="#/club/${encodeURIComponent(String(r.team.id))}">${crest(r.team)}<span>${esc(r.team.name)}</span>${z && z.tag ? `<i class="st-tag mono" title="Periodekampioen ${esc(z.tag)}">${esc(z.tag)}</i>` : ''}${hl ? `<i class="st-tag st-tag--hl mono">${esc(hl)}</i>` : ''}${marks && marks[r.team.id] && MARK[marks[r.team.id].mark] ? `<i class="st-mark st-mark--${esc(marks[r.team.id].mark)}" title="${esc(marks[r.team.id].note || marks[r.team.id].mark)}">${MARK[marks[r.team.id].mark]}</i>` : ''}</a></td>
+    <td class="st-club"><a class="st-link" href="#/club/${encodeURIComponent(String(r.team.id))}">${crest(r.team)}<span>${nameHtml(r.team, esc)}</span>${z && z.tag ? `<i class="st-tag mono" title="Periodekampioen ${esc(z.tag)}">${esc(z.tag)}</i>` : ''}${hl ? `<i class="st-tag st-tag--hl mono">${esc(hl)}</i>` : ''}${marks && marks[r.team.id] && MARK[marks[r.team.id].mark] ? `<i class="st-mark st-mark--${esc(marks[r.team.id].mark)}" title="${esc(marks[r.team.id].note || marks[r.team.id].mark)}">${MARK[marks[r.team.id].mark]}</i>` : ''}</a></td>
     <td class="mono">${r.line.played}</td>
     <td class="mono st-wide">${r.line.w}</td><td class="mono st-wide">${r.line.d}</td><td class="mono st-wide">${r.line.l}</td>
     <td class="mono st-wide">${r.line.gf}:${r.line.ga}</td>
@@ -66,9 +67,9 @@ export function formMap(matches, side = 'total') {
   return out;
 }
 
-export function standTable(rows, { zones = null, marks = null, highlight = null, form = null } = {}) {
+export function standTable(rows, { zones = null, marks = null, highlight = null, form = null, mini = false } = {}) {
   return `
-    <div class="table-wrap"><table class="table stand">
+    <div class="table-wrap"><table class="table stand${mini ? ' stand--mini' : ''}">
       <thead><tr><th>#</th><th>Club</th><th>GS</th><th class="st-wide">W</th><th class="st-wide">G</th><th class="st-wide">V</th><th class="st-wide">Doelen</th><th>DS</th><th>PT</th>${form ? '<th class="st-form">Vorm</th>' : ''}</tr></thead>
       <tbody>${rows.map((r) => rowHtml(r, zones, marks, highlight, form)).join('')}</tbody>
     </table></div>`;
@@ -92,5 +93,5 @@ export function miniStand(standings, zones) {
   const i = rows.findIndex((r) => r.team.id === TEAM);
   if (i < 0) return '';
   const start = Math.max(0, Math.min(i - 2, rows.length - 5));
-  return standTable(rows.slice(start, start + 5), { zones });
+  return standTable(rows.slice(start, start + 5), { zones, mini: true });
 }

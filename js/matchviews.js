@@ -19,6 +19,7 @@ import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
   dayShort, dayLong, timeOf, monthOf, relativeDay, shortRound, crowdSummary, penOutcome,
 } from './season.js';
+import { clubCode } from './clubnames.js';
 
 const TEAM = MAIN_CLUB.id;
 const nl = (v) => Number(v).toLocaleString('nl-NL');
@@ -27,7 +28,7 @@ const nl = (v) => Number(v).toLocaleString('nl-NL');
 
 export function crest(t, size = 28) {
   if (!t) return '';
-  const fallback = esc((t.name || '?').slice(0, 3).toUpperCase());
+  const fallback = esc(clubCode(t));
   return t.logo
     ? `<img class="crest" src="${esc(t.logo)}" width="${size}" height="${size}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'crest crest--txt',textContent:'${fallback}'}))">`
     : `<span class="crest crest--txt" style="width:${size}px;height:${size}px">${fallback}</span>`;
@@ -358,7 +359,7 @@ function roundsBlock(list, league) {
         const opp = opponentOf(m, TEAM);
         return `<a class="round round--${r || 'open'}" href="#/wedstrijd/${m.id}" title="${matchTitle(m)}">
           <span class="mono">${esc(shortRound(m.round))}</span>
-          <span class="round__opp">${esc(opp ? opp.name.slice(0, 3).toUpperCase() : '?')}</span>
+          <span class="round__opp">${esc(opp ? clubCode(opp) : '?')}</span>
           <span class="mono">${r ? esc(r) : esc(dayShort(m.date).split(' ').slice(1).join(' '))}</span>
         </a>`;
       }).join('')}</div>

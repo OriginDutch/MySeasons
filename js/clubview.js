@@ -12,13 +12,14 @@ import { getSeason, seasonLabel, isCurrentSeason } from './seasonstate.js';
 import { mainLeague, sortByDate, dayShort, timeOf, shortRound } from './season.js';
 import { tokens } from './rsssf.js';
 import { bestStandings } from './livetable.js';
+import { clubCode } from './clubnames.js';
 
 const TEAM = MAIN_CLUB.id;
 const clean = (n) => String(n || '').replace(/\s*\(.*?\)\s*/g, ' ').trim();
 const sameName = (a, b) => tokens(a).join(' ') === tokens(b).join(' ');
 
 function crest(t, size = 24) {
-  const txt = esc((t.name || '?').replace(/^(FC|SC|sc|SV|AFC|Jong)\s+/, '').slice(0, 3).toUpperCase());
+  const txt = esc(clubCode(t));
   return t.logo
     ? `<img class="crest" src="${esc(t.logo)}" width="${size}" height="${size}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'crest crest--txt',textContent:'${txt}'}))">`
     : `<span class="crest crest--txt" style="width:${size}px;height:${size}px">${txt}</span>`;
@@ -141,6 +142,7 @@ export const clubViews = {
           </div>
           ${mark && (mark.mark || mark.note) ? `<p class="muted" style="font-size:13px;margin:0">${mark.mark === 'rivaal' ? '<strong class="accent-text">Rivaal</strong>' : mark.mark === 'interessant' ? '★ Interessant' : ''}${mark.note ? `${mark.mark ? ' · ' : ''}${esc(mark.note)}` : ''}</p>` : ''}
           ${d.me && d.me.deduction ? `<p class="warn-line">${d.me.deduction} punten in mindering gebracht</p>` : ''}
+          <p style="font-size:12px;margin:0"><a class="muted" href="#/clubnamen/${encodeURIComponent(String(t.id))}">Naam aanpassen${t.apiName && t.apiName !== t.name ? ` · Highlightly: ${esc(t.apiName)}` : ''}</a></p>
         </section>
         ${upcoming.length ? `<section class="section"><div class="section__label"><span>Programma</span><span>${upcoming.length}</span></div>
           <div class="list">${upcoming.map((m) => matchRow(m, teamKey, d.ownIds)).join('')}</div></section>` : ''}

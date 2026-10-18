@@ -3,6 +3,7 @@
 
 import { esc } from './ui.js';
 import { getAllLeagueTeams, getPlayers, savePlayersBatch, getMeta, setMeta } from './store.js';
+import { clubCode } from './clubnames.js';
 
 let cache = null;
 export async function knownTeams() {
@@ -22,7 +23,7 @@ export function matchTeam(teams, name) {
   return teams.find((t) => clubKey(t.name) === k) || null;
 }
 
-const crestImg = (t, size = 18) => (t.logo ? `<img class="crest" src="${esc(t.logo)}" width="${size}" height="${size}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'crest crest--txt',textContent:'${esc((t.name || '?').slice(0, 3).toUpperCase())}'}))">` : `<span class="crest crest--txt" style="width:${size}px;height:${size}px">${esc((t.name || '?').slice(0, 3).toUpperCase())}</span>`);
+const crestImg = (t, size = 18) => (t.logo ? `<img class="crest" src="${esc(t.logo)}" width="${size}" height="${size}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'crest crest--txt',textContent:'${esc(clubCode(t))}'}))">` : `<span class="crest crest--txt" style="width:${size}px;height:${size}px">${esc(clubCode(t))}</span>`);
 export const clubCrest = (t, size) => (t && (t.logo || t.name) ? crestImg(t, size) : '');
 
 /** Veld-HTML: tekstveld + verborgen id/logo + suggestielijst. */

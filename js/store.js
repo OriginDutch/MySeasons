@@ -6,6 +6,7 @@
 // meta/quota       aantal API-calls per dag (eigen telling)
 
 import { db } from './firebase.js';
+import { nameMatch, nameStandings, nameTeam, rawMatch, rawStandings } from './clubnames.js';
 import {
   collection, doc, getDoc, getDocs, setDoc, writeBatch, increment, deleteField, query, where, arrayUnion,
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
@@ -38,26 +39,26 @@ export function saveCorrections(id, changes) {
 
 export async function getAllMatches() {
   const snap = await getDocs(collection(db, 'matches'));
-  return snap.docs.map((d) => d.data());
+  return snap.docs.map((d) => nameMatch(d.data()));
 }
 
 export async function getMatch(id) {
   const snap = await getDoc(doc(db, 'matches', String(id)));
-  return snap.exists() ? snap.data() : null;
+  return snap.exists() ? nameMatch(snap.data()) : null;
 }
 
 /** Programma opslaan. merge: een al opgehaald `detail` blijft staan. */
 export async function saveMatches(list) {
   for (let i = 0; i < list.length; i += 400) {
     const batch = writeBatch(db);
-    list.slice(i, i + 400).forEach((m) => batch.set(doc(db, 'matches', String(m.id)), m, { merge: true }));
+    list.slice(i, i + 400).forEach((m) => batch.set(doc(db, 'matches', String(m.id)), rawMatch(m), { merge: true }));
     await batch.commit();
   }
 }
 
 export async function saveMatchDetail(id, base, detail, raw) {
   const batch = writeBatch(db);
-  batch.set(doc(db, 'matches', String(id)), { ...base, detail }, { merge: true });
+  batch.set(doc(db, 'matches', String(id)), { ...rawMatch(base), detail }, { merge: true });
   batch.set(doc(db, 'rawMatches', String(id)), raw, { merge: true });
   await batch.commit();
 }
@@ -66,11 +67,11 @@ const standingsId = (leagueId, season) => `${leagueId}_${season}`;
 
 export async function getStandings(leagueId, season) {
   const snap = await getDoc(doc(db, 'standings', standingsId(leagueId, season)));
-  return snap.exists() ? snap.data() : null;
+  return snap.exists() ? nameStandings(snap.data()) : null;
 }
 
 export function saveStandings(leagueId, season, data) {
-  return setDoc(doc(db, 'standings', standingsId(leagueId, season)), data);
+  return setDoc(doc(db, 'standings', standingsId(leagueId, season)), rawStandings(data));
 }
 
 export async function getMeta(name) {
@@ -194,13 +195,13 @@ export async function savePlayersBatch(writes) {
 export async function getLeagueMatches(leagueId, season) {
   const q = query(collection(db, 'leagueMatches'), where('league.id', '==', Number(leagueId)), where('league.season', '==', Number(season)));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data());
+  return snap.docs.map((d) => nameMatch(d.data()));
 }
 
 export async function saveLeagueMatches(list) {
   for (let i = 0; i < list.length; i += 400) {
     const batch = writeBatch(db);
-    list.slice(i, i + 400).forEach((m) => batch.set(doc(db, 'leagueMatches', String(m.id)), m, { merge: true }));
+    list.slice(i, i + 400).forEach((m) => batch.set(doc(db, 'leagueMatches', String(m.id)), rawMatch(m), { merge: true }));
     await batch.commit();
   }
 }
@@ -244,7 +245,7 @@ export async function saveClubMarksBatch(entries) {
 export async function getAllLeagueTeams() {
   const [a, b] = await Promise.all([getDocs(collection(db, 'matches')), getDocs(collection(db, 'leagueMatches'))]);
   const map = new Map();
-  [...a.docs, ...b.docs].forEach((d) => { const m = d.data(); [m.homeTeam, m.awayTeam].forEach((t) => { if (t && t.id) map.set(t.id, { id: t.id, name: t.name, logo: t.logo || null }); }); });
+  [...a.docs, ...b.docs].forEach((d) => { const m = d.data(); [m.homeTeam, m.awayTeam].forEach((t) => { if (t && t.id) map.set(t.id, nameTeam({ id: t.id, name: t.apiName || t.name, logo: t.logo || null })); }); });
   return [...map.values()];
 }
 

@@ -20,6 +20,7 @@ import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
   dayShort, timeOf, relativeDay, shortRound, crowdSummary,
 } from './season.js';
+import { clubCode } from './clubnames.js';
 
 // Clubnamen in koppen nooit over twee regels: spaties binnen een bekende naam worden onbreekbaar.
 let NAMES = [];
@@ -237,7 +238,7 @@ function seasonStrip(list, league, standings) {
         const r = resultFor(m, TEAM);
         const opp = opponentOf(m, TEAM);
         const home = isHome(m, TEAM);
-        const short = opp ? opp.name.replace(/^(FC|SC|sc|SV|AFC|Jong)\s+/, '').slice(0, 3).toUpperCase() : '?';
+        const short = opp ? clubCode(opp) : '?';
         const score = m.status === 'finished' && m.score ? `${home ? m.score.home : m.score.away}–${home ? m.score.away : m.score.home}` : '';
         return `<a class="strip__tile strip__tile--${r || 'open'}" href="#/wedstrijd/${m.id}" title="${matchTitle(m)}">
           <span class="mono strip__res">${r || '·'}</span><span class="mono strip__rd">${esc(shortRound(m.round).replace(/^R/, '') || '')}</span>

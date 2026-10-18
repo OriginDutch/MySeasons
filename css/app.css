@@ -836,3 +836,12 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .transfer-row .list-row__title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .transfer-club { display: inline-flex; align-items: center; gap: 6px; }
 .transfer-club .crest { width: 18px; height: 18px; flex: none; }
+
+/* Eigen korte clubnamen: in krappe plekken de korte, anders de volledige */
+.nm-short { display: none; }
+.stand--mini .nm-full { display: none; }
+.stand--mini .nm-short { display: inline; }
+@media (max-width: 600px) { .nm-full { display: none; } .nm-short { display: inline; } }
+.cn-row { width: 100%; text-align: left; }
+.cn-row__title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cn-row .list-row__end { color: var(--muted, #888); }
