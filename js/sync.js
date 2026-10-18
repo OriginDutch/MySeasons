@@ -4,10 +4,10 @@ import { hl } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import { getSeason } from './seasonstate.js';
 import { normalizeListMatch, normalizeDetail, normalizeStandings } from './normalize.js';
-import { saveMatches, saveMatchDetail, saveStandings, setMeta, countCalls } from './store.js';
+import { saveMatches, saveMatchDetail, saveStandings, setMeta, countCalls, saveLeagueMatches } from './store.js';
 import { mainLeague } from './season.js';
 
-export const COST = { season: 3, match: 3, standings: 1 };
+export const COST = { season: 3, match: 3, standings: 1, league: 4 };
 
 /** Stand van één competitie. Kost 1 call. */
 async function fetchAndSaveStandings(leagueId, season) {
@@ -104,4 +104,30 @@ export async function fetchMany(list, onProgress) {
     if (onProgress) onProgress(done, list.length);
   }
   return done;
+}
+
+/**
+ * Alle wedstrijden van een competitie in een seizoen (uitslagen + programma), per 100.
+ * Kost 1 call per 100 wedstrijden: Eredivisie (306) = 4, KKD (380) = 4.
+ */
+export async function syncLeague(leagueId, season = getSeason()) {
+  let calls = 0; let offset = 0; let total = Infinity;
+  const all = [];
+  try {
+    while (offset < total && calls < 8) {
+      const res = await hl('/matches', { leagueId, season, limit: 100, offset });
+      calls++;
+      const data = (res && res.data) || [];
+      all.push(...data);
+      total = res && res.pagination && res.pagination.totalCount != null ? res.pagination.totalCount : (data.length < 100 ? 0 : Infinity);
+      if (!data.length) break;
+      offset += data.length;
+    }
+    const list = [...new Map(all.map((m) => [m.id, m])).values()].map(normalizeListMatch);
+    await saveLeagueMatches(list);
+    await setMeta(`league_${leagueId}_${season}`, { fetchedAt: new Date().toISOString(), count: list.length, calls });
+    return { count: list.length, calls };
+  } finally {
+    if (calls) await countCalls(calls);
+  }
 }

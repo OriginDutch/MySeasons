@@ -38,7 +38,7 @@ function rowHtml(r, leagueId, withZones) {
   const me = r.team.id === TEAM;
   return `<tr class="${me ? 'is-me' : ''} ${z ? 'zone--' + z.kind : ''}">
     <td class="mono st-pos">${r.pos}</td>
-    <td class="st-club">${crest(r.team)}<span>${esc(r.team.name)}</span></td>
+    <td class="st-club"><a class="st-link" href="#/club/${encodeURIComponent(String(r.team.id))}">${crest(r.team)}<span>${esc(r.team.name)}</span></a></td>
     <td class="mono">${r.line.played}</td>
     <td class="mono st-wide">${r.line.w}</td><td class="mono st-wide">${r.line.d}</td><td class="mono st-wide">${r.line.l}</td>
     <td class="mono st-wide">${r.line.gf}:${r.line.ga}</td>

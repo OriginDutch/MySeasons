@@ -8,6 +8,7 @@ import { playerViews } from './playerviews.js';
 import { magazineViews } from './magazine.js';
 import { seasonViews } from './seasonsview.js';
 import { importViews } from './importer.js';
+import { clubViews } from './clubview.js';
 import { getCallsToday, getAllMatches, getAllNotes } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
 import { getThemePref, setThemePref, getClubColors, setClubColors } from './theme.js';
@@ -41,6 +42,7 @@ export const views = {
   ...magazineViews,
   ...seasonViews,
   ...importViews,
+  ...clubViews,
 
   meer: {
     title: 'Meer',

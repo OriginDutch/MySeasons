@@ -591,3 +591,13 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .value-bar { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
 .value-bar i { display: block; width: 100%; max-width: 28px; background: var(--accent); }
 .value-bar small { font-size: 9px; color: var(--muted); }
+
+/* ---------- Clubpagina ---------- */
+.st-link { display: flex; align-items: center; gap: 8px; min-width: 0; color: inherit; text-decoration: none; }
+.st-link:hover span { text-decoration: underline; }
+.club-head { display: flex; align-items: center; gap: 10px; }
+.club-row { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; gap: 8px; align-items: center; color: inherit; text-decoration: none; }
+.club-row__opp { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.club-row__opp span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.club-row.is-me { box-shadow: inset 3px 0 0 var(--accent); background: var(--surface-hover); }
+.club-row.is-me .match-row__date { padding-left: 8px; }

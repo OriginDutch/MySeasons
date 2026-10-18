@@ -7,7 +7,7 @@
 
 import { db } from './firebase.js';
 import {
-  collection, doc, getDoc, getDocs, setDoc, writeBatch, increment, deleteField,
+  collection, doc, getDoc, getDocs, setDoc, writeBatch, increment, deleteField, query, where,
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
 
 // ---------- Handwerk per wedstrijd: matchNotes/{id} ----------
@@ -166,6 +166,23 @@ export async function savePlayersBatch(writes) {
   for (let i = 0; i < writes.length; i += 400) {
     const batch = writeBatch(db);
     writes.slice(i, i + 400).forEach(([id, data]) => batch.set(doc(db, 'players', String(id)), { ...data, updatedAt: at }, { merge: true }));
+    await batch.commit();
+  }
+}
+
+// ---------- Competitiewedstrijden: leagueMatches/{id} ----------
+// Alle uitslagen en het programma van een hele competitie (ook duels zonder Cambuur). Alleen de basis, geen details.
+
+export async function getLeagueMatches(leagueId, season) {
+  const q = query(collection(db, 'leagueMatches'), where('league.id', '==', Number(leagueId)), where('league.season', '==', Number(season)));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data());
+}
+
+export async function saveLeagueMatches(list) {
+  for (let i = 0; i < list.length; i += 400) {
+    const batch = writeBatch(db);
+    list.slice(i, i + 400).forEach((m) => batch.set(doc(db, 'leagueMatches', String(m.id)), m, { merge: true }));
     await batch.commit();
   }
 }

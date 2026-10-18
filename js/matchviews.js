@@ -8,7 +8,7 @@ import { applyNames } from './names.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import { applyCorrections, correctionSummary, goalCheck } from './corrections.js';
 import { editEvent, editScore, editNotes } from './editor.js';
-import { syncSeason, fetchMatch, syncStandings, COST } from './sync.js';
+import { syncSeason, fetchMatch, syncStandings, syncLeague, COST } from './sync.js';
 import { rowsFor, standTable, zoneLegend, miniStand } from './standview.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
@@ -344,10 +344,19 @@ export const matchViews = {
         <section class="section">
           <div class="section__label"><span>Bijgewerkt</span><span>${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
           ${fromRsssf ? '<p class="muted" style="font-size:12px">Van RSSSF. De Highlightly-stand van dat seizoen kun je ook ophalen.</p>' : '<p class="muted" style="font-size:12px">De stand wordt ook bijgewerkt als je het seizoen synchroniseert.</p>'}
-          <div>${refresh}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${refresh}${isCurrentSeason() || !fromRsssf ? `<button class="btn" type="button" data-action="sync-league" data-league="${league.id}">${icons.refresh}<span>Alle wedstrijden · ~${COST.league} calls</span></button>` : ''}</div>
+          <p class="muted" style="font-size:12px">Tik op een club voor al zijn wedstrijden dit seizoen.</p>
         </section>`;
     },
     mount(root, ctx) {
+      root.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-action="sync-league"]');
+        if (!b) return;
+        try {
+          const r = await runWithButton(b, 'Ophalen…', () => syncLeague(Number(b.dataset.league)));
+          toast(`${r.count} wedstrijden opgehaald · ${r.calls} calls`);
+        } catch (err) { toast(explain(err)); }
+      });
       root.querySelectorAll('input[name="stand-mode"]').forEach((input) => input.addEventListener('change', () => {
         root.querySelectorAll('[data-stand-mode]').forEach((el) => { el.hidden = el.dataset.standMode !== input.value; });
       }));
