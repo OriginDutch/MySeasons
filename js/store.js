@@ -140,3 +140,22 @@ export async function getSeasons() {
 export function saveSeason(year, data) {
   return setDoc(doc(db, 'seasons', String(year)), { year: Number(year), ...data, updatedAt: new Date().toISOString() }, { merge: true });
 }
+
+// ---------- RSSSF: rsssf/{seizoensjaar} ----------
+// Gelezen seizoenspagina: eindstanden, uitslagen, nacompetitie, beker en de zelfcontrole.
+
+export async function getRsssf(year) {
+  const snap = await getDoc(doc(db, 'rsssf', String(year)));
+  return snap.exists() ? snap.data() : null;
+}
+
+export async function getAllRsssf() {
+  const snap = await getDocs(collection(db, 'rsssf'));
+  const out = {};
+  snap.docs.forEach((d) => { out[d.id] = d.data(); });
+  return out;
+}
+
+export function saveRsssf(year, data) {
+  return setDoc(doc(db, 'rsssf', String(year)), data);
+}

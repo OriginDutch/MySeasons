@@ -6,7 +6,7 @@ import { MAIN_CLUB, ZONES, ZONE_NOTE } from './config.js';
 const TEAM = MAIN_CLUB.id;
 
 function crest(t) {
-  const txt = esc((t.name || '?').slice(0, 3).toUpperCase());
+  const txt = esc((t.name || '?').replace(/^(FC|SC|sc|SV|AFC|Jong)\s+/, '').slice(0, 3).toUpperCase());
   return t.logo
     ? `<img class="crest crest--sm" src="${esc(t.logo)}" width="20" height="20" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'crest crest--txt crest--sm',textContent:'${txt}'}))">`
     : `<span class="crest crest--txt crest--sm">${txt}</span>`;

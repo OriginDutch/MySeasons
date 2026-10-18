@@ -5,6 +5,7 @@ import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
 import { getSeason, seasonLabel, inSeason, isCurrentSeason } from './seasonstate.js';
 import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers } from './store.js';
 import { applyNames } from './names.js';
+import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import { applyCorrections, correctionSummary, goalCheck } from './corrections.js';
 import { editEvent, editScore, editNotes } from './editor.js';
 import { syncSeason, fetchMatch, syncStandings, COST } from './sync.js';
@@ -308,36 +309,41 @@ export const matchViews = {
     title: 'Stand',
     async render() {
       const { list } = await correctedList();
-      const league = mainLeague(list);
+      const rs = await getRsssf(getSeason()).catch(() => null);
+      const rsDiv = mainDivision(rs);
+      const league = mainLeague(list) || (rsDiv && rsDiv.leagueId ? { id: rsDiv.leagueId, name: rsDiv.name } : null);
       const kicker = `MySeasons / ${league ? league.name + ' ' : ''}${seasonLabel()}`;
       if (!league) {
         return `${head({ kicker, title: 'Stand' })}
           <section class="section"><div class="empty"><span class="empty__title">Nog geen competitie</span>
           <p class="muted">Synchroniseer eerst het seizoen op Home.</p><div><a class="btn" href="#/home">Naar Home</a></div></div></section>`;
       }
-      const st = await getStandings(league.id, getSeason());
+      const st = (await getStandings(league.id, getSeason())) || rsssfStandings(rs, league.id);
       const g = st && st.groups && st.groups[0];
+      const fromRsssf = st && st.source === 'rsssf';
       const refresh = `<button class="btn" type="button" data-action="sync-standings" data-league="${league.id}">${icons.refresh}<span>Stand bijwerken · ${COST.standings} call</span></button>`;
       if (!g) {
         return `${head({ kicker, title: 'Stand' })}
           <section class="section"><div class="empty"><span class="empty__title">Stand nog niet opgehaald</span>
           <p class="muted">Haal de actuele ${esc(league.name)}-stand op.</p><div>${refresh}</div></div></section>`;
       }
-      const modes = [['total', 'Totaal'], ['home', 'Thuis'], ['away', 'Uit']];
+      const modes = fromRsssf ? [['total', 'Totaal']] : [['total', 'Totaal'], ['home', 'Thuis'], ['away', 'Uit']];
+      const zones = isCurrentSeason();
       return `
         ${head({ kicker, title: 'Stand' })}
         <section class="section">
-          <fieldset class="segmented segmented--3" style="margin:0;padding:0">
+          ${fromRsssf ? `<p class="muted" style="font-size:12px;margin:0">Eindstand ${esc(seasonLabel())} · ${esc(st.credit)}</p>` : ''}
+          <fieldset class="segmented segmented--3" style="margin:0;padding:0" ${fromRsssf ? 'hidden' : ''}>
             <legend class="visually-hidden">Weergave</legend>
             ${modes.map(([v, l], i) => `<input type="radio" name="stand-mode" id="sm-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sm-${v}">${l}</label>`).join('')}
           </fieldset>
-          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), league.id, { withZones: v === 'total' })}</div>`).join('')}
-          ${zoneLegend(league.id)}
+          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), league.id, { withZones: zones && v === 'total' })}</div>`).join('')}
+          ${zones ? zoneLegend(league.id) : ''}
         </section>
         ${crowdBlock(list, league)}
         <section class="section">
           <div class="section__label"><span>Bijgewerkt</span><span>${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
-          <p class="muted" style="font-size:12px">De stand wordt ook bijgewerkt als je het seizoen synchroniseert.</p>
+          ${fromRsssf ? '<p class="muted" style="font-size:12px">Van RSSSF. De Highlightly-stand van dat seizoen kun je ook ophalen.</p>' : '<p class="muted" style="font-size:12px">De stand wordt ook bijgewerkt als je het seizoen synchroniseert.</p>'}
           <div>${refresh}</div>
         </section>`;
     },

@@ -11,6 +11,7 @@ import {
 import { preview, seasonStories, matchReport } from './stories.js';
 import { buildSquad } from './players.js';
 import { refreshNews, newsFor } from './news.js';
+import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
   dayShort, timeOf, relativeDay, shortRound, crowdSummary,
@@ -74,9 +75,10 @@ function cover(next, p) {
 
 function seasonCover(list, league, standings, team) {
   if (!league) return '';
-  const s = leagueSummary(list, TEAM, league.id);
   const g = standings && standings.groups && standings.groups[0];
   const me = g ? g.rows.find((r) => r.team.id === TEAM) : null;
+  const ls = leagueSummary(list, TEAM, league.id);
+  const s = !ls.played && me ? { ...me.total, points: me.points } : ls;
   const done = s.played && !list.some((m) => m.league && m.league.id === league.id && m.status !== 'finished');
   const title = me ? `${me.position}e in de ${league.id === 76523 ? 'KKD' : league.name}` : `${MAIN_CLUB.name} in de ${league.name}`;
   return `
@@ -196,6 +198,16 @@ export const magazineViews = {
     async render() {
       const [{ list, total, conflicts, profiles }, meta, calls] = await Promise.all([correctedList(), getMeta(`sync_${getSeason()}`).then((m) => m || (isCurrentSeason() ? getMeta('sync') : null)), getCallsToday()]);
       const team = clubTeam(list);
+      if (!list.length && !isCurrentSeason()) {
+        const rs0 = await getRsssf(getSeason()).catch(() => null);
+        const d0 = mainDivision(rs0);
+        const lg0 = d0 && d0.leagueId ? { id: d0.leagueId, name: d0.name } : null;
+        if (lg0) {
+          return `<div class="mag">${masthead(team, lg0)}${seasonCover(list, lg0, rsssfStandings(rs0, lg0.id), team)}
+            <section class="mag-section"><p class="muted" style="font-size:13px;margin:0">Dit seizoen heeft alleen de RSSSF-basis: eindstand en uitslagen. Schutters, opstellingen en spelersstats komen van Highlightly (Meer → Seizoenen → Ophalen) of 's nachts.</p>
+            <div><a class="link-btn" href="#/stats">Eindstand</a></div><p class="muted" style="font-size:11px">${esc(rs0.credit)}</p></section></div>`;
+        }
+      }
       if (!list.length) {
         return `${masthead(team, null)}
           <section class="section"><div class="empty">
@@ -204,8 +216,10 @@ export const magazineViews = {
             <div><button class="btn btn--primary" type="button" data-action="sync-season">${icons.refresh}<span>Seizoen ophalen · ${COST.season} calls</span></button></div>
           </div></section>`;
       }
-      const league = mainLeague(list);
-      const standings = league ? await getStandings(league.id, getSeason()) : null;
+      const rs = isCurrentSeason() ? null : await getRsssf(getSeason()).catch(() => null);
+      const rsDiv = mainDivision(rs);
+      const league = mainLeague(list) || (rsDiv && rsDiv.leagueId ? { id: rsDiv.leagueId, name: rsDiv.name } : null);
+      const standings = league ? ((await getStandings(league.id, getSeason())) || rsssfStandings(rs, league.id)) : null;
       const next = nextMatch(list);
       const last = lastMatch(list);
       const { players } = buildSquad(list, TEAM, profiles);

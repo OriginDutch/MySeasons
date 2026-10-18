@@ -8,6 +8,8 @@ import { getSeason, setSeason, isCurrentSeason, seasonLabel, seasonOf } from './
 import { mainLeague } from './season.js';
 import { openSheet } from './editor.js';
 import { explain, runWithButton } from './matchviews.js';
+import { importRsssf } from './rsssfimport.js';
+import { getAllRsssf } from './store.js';
 
 const FIRST_YEAR = 2018;
 const DEFAULT_FOLLOWS = [75672, 76523]; // Eredivisie en Eerste Divisie, elk seizoen standaard
@@ -16,7 +18,7 @@ const leagueShort = (l) => (!l ? '' : l.id === 76523 ? 'KKD' : l.name);
 
 /** Alle seizoenen die opgehaald of aangemaakt zijn, nieuwste eerst, met wat erin zit. */
 export async function seasonRows() {
-  const [matches, saved] = await Promise.all([getAllMatches(), getSeasons().catch(() => [])]);
+  const [matches, saved, rs] = await Promise.all([getAllMatches(), getSeasons().catch(() => []), getAllRsssf().catch(() => ({}))]);
   const map = new Map();
   const row = (year) => {
     if (!map.has(year)) map.set(year, { year, saved: null, matches: [] });
@@ -24,6 +26,7 @@ export async function seasonRows() {
   };
   row(CURRENT_SEASON);
   saved.forEach((s) => { row(Number(s.year)).saved = s; });
+  Object.values(rs).forEach((r) => { row(Number(r.year)).rsssf = r; });
   matches.forEach((m) => { const y = seasonOf(m); if (y != null) row(y).matches.push(m); });
   return [...map.values()].sort((a, b) => b.year - a.year).map((r) => {
     const own = r.matches.filter((m) => [m.homeTeam, m.awayTeam].some((t) => t && t.id === MAIN_CLUB.id));
@@ -38,7 +41,20 @@ export async function seasonRows() {
   });
 }
 
+function rsDivName(r) {
+  if (!r.rsssf) return '—';
+  const d = (r.rsssf.divisions || []).find((x) => x.table.some((t) => /cambuur/i.test(t.name)));
+  return d ? d.name : '—';
+}
+
+function rsssfLine(r) {
+  if (!r.rsssf) return '';
+  const c = r.rsssf.checks || [];
+  return c.map((x) => `${x.name === 'Eerste Divisie' ? 'KKD' : x.name} ${x.ok ? '✓' : '⚠'} ${x.matches}`).join(' · ');
+}
+
 function rowSub(r) {
+  if (!r.count && r.rsssf) return `RSSSF-basis · ${rsssfLine(r)}`;
   if (!r.count) return r.source === 'manual' ? 'Leeg seizoen, zelf in te vullen' : 'Nog niets opgehaald';
   return `${r.played} gespeeld · ${r.detailed} met details`;
 }
@@ -95,10 +111,12 @@ export const seasonViews = {
           <div class="list">${rows.map((r) => `
             <div class="season-row">
               <span class="season-row__year mono">${esc(seasonLabel(r.year))}</span>
-              <span class="list-row__main"><span class="list-row__title">${esc(r.league ? r.league.name : '—')}${r.year === CURRENT_SEASON ? ' <span class="muted">· nu</span>' : ''}</span>
-                <span class="list-row__sub">${esc(rowSub(r))}</span></span>
+              <span class="list-row__main"><span class="list-row__title">${esc(r.league ? r.league.name : rsDivName(r))}${r.year === CURRENT_SEASON ? ' <span class="muted">· nu</span>' : ''}</span>
+                <span class="list-row__sub">${esc(rowSub(r))}</span>
+                ${r.rsssf && r.count ? `<span class="list-row__sub">RSSSF: ${esc(rsssfLine(r))}</span>` : ''}</span>
               <span class="season-row__actions">
                 <button class="btn btn--sm" type="button" data-view-season="${r.year}">Bekijken</button>
+                ${r.year < CURRENT_SEASON ? `<button class="btn btn--sm" type="button" data-rsssf="${r.year}">${r.rsssf ? 'RSSSF opnieuw' : 'RSSSF-basis'} · 0</button>` : ''}
                 ${r.source !== 'manual' ? `<button class="btn btn--sm" type="button" data-fetch-season="${r.year}">${r.count ? 'Bijwerken' : 'Ophalen'} · ${COST.season}</button>` : ''}
               </span>
             </div>`).join('')}</div>
@@ -108,6 +126,7 @@ export const seasonViews = {
           <label class="field"><span>Seizoen</span><select name="add-year">${addable.map((y) => `<option value="${y}">${esc(seasonLabel(y))}</option>`).join('')}</select></label>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn--primary" type="button" data-add="highlightly">Ophalen bij Highlightly · ${COST.season} calls</button>
+            <button class="btn" type="button" data-add="rsssf">RSSSF-basis · 0 calls</button>
             <button class="btn" type="button" data-add="manual">Leeg aanmaken</button>
           </div>
           <p class="muted" style="font-size:12px">Ophalen haalt het programma en de uitslagen van ${esc(MAIN_CLUB.name)} plus de stand. Details per wedstrijd haal je later op, of laat je 's nachts ophalen. Heeft Highlightly het seizoen niet, dan maak je het leeg aan.</p>
@@ -115,6 +134,21 @@ export const seasonViews = {
     },
     mount(root, ctx) {
       root.addEventListener('click', async (e) => {
+        const rsBtn = e.target.closest('[data-rsssf]');
+        if (rsBtn) {
+          const year = Number(rsBtn.dataset.rsssf);
+          try {
+            const data = await runWithButton(rsBtn, 'Lezen…', () => importRsssf(year));
+            const bad = data.checks.filter((c) => !c.ok);
+            toast(bad.length
+              ? `RSSSF ${seasonLabel(year)} gelezen, maar de controle wijkt af: ${bad.map((c) => c.problems[0]).join('; ')}`
+              : `RSSSF ${seasonLabel(year)}: ${data.checks.map((c) => `${c.name} ${c.matches} duels`).join(', ')} · controle klopt`, { duration: 7000 });
+            ctx.refresh();
+          } catch (err) {
+            toast(err.status === 404 ? `RSSSF heeft (nog) geen pagina voor ${seasonLabel(year)}, of de Worker kent /rsssf nog niet` : explain(err));
+          }
+          return;
+        }
         const view = e.target.closest('[data-view-season]');
         if (view) { setSeason(view.dataset.viewSeason); location.hash = '#/home'; return; }
         const fetchBtn = e.target.closest('[data-fetch-season]');
@@ -123,7 +157,12 @@ export const seasonViews = {
         const year = Number(fetchBtn ? fetchBtn.dataset.fetchSeason : root.querySelector('select[name="add-year"]').value);
         const btn = fetchBtn || add;
         try {
-          if (add && add.dataset.add === 'manual') {
+          if (add && add.dataset.add === 'rsssf') {
+            const data = await runWithButton(btn, 'Lezen…', () => importRsssf(year));
+            await saveSeason(year, { source: 'manual', follows: DEFAULT_FOLLOWS, createdAt: new Date().toISOString() });
+            const bad = data.checks.filter((c) => !c.ok);
+            toast(bad.length ? `${seasonLabel(year)} aangemaakt; RSSSF-controle wijkt af: ${bad.map((c) => c.problems[0]).join('; ')}` : `${seasonLabel(year)} aangemaakt met RSSSF-basis · controle klopt`, { duration: 7000 });
+          } else if (add && add.dataset.add === 'manual') {
             await saveSeason(year, { source: 'manual', follows: DEFAULT_FOLLOWS, createdAt: new Date().toISOString() });
             toast(`${seasonLabel(year)} aangemaakt als leeg seizoen`);
           } else {
