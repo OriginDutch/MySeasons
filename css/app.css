@@ -656,12 +656,24 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .value-delta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 .value-delta.is-up { color: var(--win); }
 .value-delta.is-down { color: var(--danger); }
-.value-chart { display: block; width: 100%; height: 96px; }
-.value-chart__line { fill: none; stroke: var(--accent); stroke-width: 2; }
-.value-chart__area { fill: var(--accent); opacity: .1; }
-.value-chart circle { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
-.value-chart circle.is-peak { fill: var(--accent); }
-.value-chart__axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: -4px; }
+.vchart { position: relative; width: 100%; margin: 4px 0 2px; outline: none; touch-action: pan-y; }
+.vchart__svg { display: block; overflow: visible; }
+.vchart__grid { stroke: var(--hairline); stroke-width: 1; }
+.vchart__axis { stroke: var(--muted); stroke-width: 1; opacity: .5; }
+.vchart__ytick, .vchart__xtick { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.vchart__line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.vchart__line--now { stroke-dasharray: 2 4; opacity: .7; }
+.vchart__area { fill: var(--accent); opacity: .1; }
+.vchart__dot { fill: var(--accent); stroke: var(--bg); stroke-width: 2; }
+.vchart__cross { stroke: var(--muted); stroke-width: 1; }
+.vchart__hl { fill: none; stroke: var(--accent); stroke-width: 2; }
+.vchart__tip { position: absolute; pointer-events: none; display: grid; gap: 2px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--rule); font-size: 12px; white-space: nowrap; z-index: 2; box-shadow: 0 4px 14px rgb(0 0 0 / .18); }
+.vchart__tip strong { font-size: 16px; font-weight: 700; }
+.vchart__tipdate { color: var(--muted); }
+.vchart__tipdelta { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.vchart__tipdelta.is-up { color: var(--win); } .vchart__tipdelta.is-down { color: var(--danger); }
+.vchart__tipnote { color: var(--muted); font-style: italic; white-space: normal; max-width: 220px; }
+.vchart:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .inj-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); margin-right: 6px; vertical-align: 1px; }
 .ptag--inj { color: var(--danger); border-color: currentColor; }
 
@@ -815,3 +827,4 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .sq-tools { display: flex; justify-content: flex-end; }
 .sq-group-toggle { width: 260px; }
 .segmented--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.vchart__area--now { opacity: .05; }

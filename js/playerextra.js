@@ -49,23 +49,115 @@ export function injuryLabel(pr, ref, current) {
 
 // ---------- Marktwaarde ----------
 
+// Marktwaarde-grafiek: een trapgrafiek (de waarde geldt tot de volgende meting), getekend op de echte breedte
+// van het scherm zodat niets uitrekt. Assen met ronde bedragen en datums, crosshair + tooltip op hover/tik.
 function chart(vals) {
   if (vals.length < 2) return '';
-  const W = 320; const H = 96; const P = 6;
-  const t0 = new Date(vals[0].date).getTime(); const t1 = Math.max(new Date(vals[vals.length - 1].date).getTime(), t0 + 1);
-  const max = Math.max(...vals.map((v) => v.amount)); const min = Math.min(...vals.map((v) => v.amount));
-  const lo = Math.max(0, min - (max - min) * 0.25); const hi = max === lo ? lo + 1 : max;
-  const x = (d) => P + ((new Date(d).getTime() - t0) / (t1 - t0)) * (W - 2 * P);
-  const y = (a) => H - P - ((a - lo) / (hi - lo)) * (H - 2 * P - 14);
-  let d = `M${x(vals[0].date).toFixed(1)},${y(vals[0].amount).toFixed(1)}`;
-  vals.slice(1).forEach((v) => { d += ` H${x(v.date).toFixed(1)} V${y(v.amount).toFixed(1)}`; });
-  const area = `${d} V${H - P} H${x(vals[0].date).toFixed(1)} Z`;
-  const peak = vals.reduce((a, b) => (b.amount >= a.amount ? b : a));
-  return `<svg class="value-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Marktwaarde van ${esc(euro(vals[0].amount))} naar ${esc(euro(vals[vals.length - 1].amount))}">
-    <path class="value-chart__area" d="${area}"/><path class="value-chart__line" d="${d}" vector-effect="non-scaling-stroke"/>
-    ${vals.map((v) => `<circle cx="${x(v.date).toFixed(1)}" cy="${y(v.amount).toFixed(1)}" r="2.6" class="${v === peak ? 'is-peak' : ''}"/>`).join('')}
-  </svg>
-  <div class="value-chart__axis mono"><span>${esc(dm(vals[0].date))} ’${vals[0].date.slice(2, 4)}</span><span>top ${esc(euro(peak.amount))}</span><span>${esc(dm(vals[vals.length - 1].date))} ’${vals[vals.length - 1].date.slice(2, 4)}</span></div>`;
+  const data = esc(JSON.stringify(vals.map((v) => ({ d: v.date, a: v.amount, n: v.note || '' }))));
+  return `<div class="vchart" data-vals="${data}" tabindex="0" role="img" aria-label="Marktwaarde-verloop: ${esc(vals.map((v) => `${dmy(v.date)} ${euro(v.amount)}`).join(', '))}"></div>`;
+}
+
+const SVGNS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs = {}) => { const e = document.createElementNS(SVGNS, tag); Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v)); return e; };
+const mShort = (t) => new Date(t).toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '');
+
+function niceStep(range, count) {
+  const raw = range / count; const pow = 10 ** Math.floor(Math.log10(raw)); const f = raw / pow;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * pow;
+}
+
+function drawValueChart(box) {
+  let vals; try { vals = JSON.parse(box.dataset.vals); } catch { return; }
+  const W = Math.max(260, box.clientWidth); const H = 190;
+  const P = { l: 56, r: 14, t: 14, b: 28 };
+  const iw = W - P.l - P.r; const ih = H - P.t - P.b;
+  const pts = vals.map((v) => ({ ...v, t: Date.parse(v.d + 'T12:00:00') })).sort((a, b) => a.t - b.t);
+  const now = Date.now();
+  const t0 = pts[0].t; const t1 = Math.max(now, pts[pts.length - 1].t + 1);
+  const amounts = pts.map((p) => p.a);
+  const lo0 = Math.min(...amounts); const hi0 = Math.max(...amounts);
+  const step = niceStep(Math.max(hi0 - lo0, hi0 * 0.2, 1), 4);
+  const lo = Math.max(0, Math.floor((lo0 - step * 0.5) / step) * step); const hi = Math.ceil((hi0 + step * 0.25) / step) * step;
+  const x = (t) => P.l + ((t - t0) / (t1 - t0)) * iw;
+  const y = (a) => P.t + ih - ((a - lo) / (hi - lo)) * ih;
+
+  const svg = el('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: 'vchart__svg' });
+  // Y-raster met ronde bedragen
+  for (let v = lo; v <= hi + 1; v += step) {
+    svg.append(el('line', { x1: P.l, x2: W - P.r, y1: y(v), y2: y(v), class: 'vchart__grid' }));
+    const t = el('text', { x: P.l - 8, y: y(v) + 4, class: 'vchart__ytick', 'text-anchor': 'end' }); t.textContent = euro(v); svg.append(t);
+  }
+  // X-labels: per kwartaal of halfjaar, afhankelijk van de breedte
+  const months = (t1 - t0) / (30.4 * 864e5);
+  const every = months / (iw / 70) > 6 ? 12 : months / (iw / 70) > 3 ? 6 : 3;
+  const d = new Date(t0); d.setDate(1); d.setHours(12); d.setMonth(Math.ceil(d.getMonth() / every) * every);
+  for (; d.getTime() <= t1; d.setMonth(d.getMonth() + every)) {
+    const tx = x(d.getTime()); if (tx < P.l + 10 || tx > W - P.r - 10) continue;
+    svg.append(el('line', { x1: tx, x2: tx, y1: P.t + ih, y2: P.t + ih + 4, class: 'vchart__axis' }));
+    const t = el('text', { x: tx, y: H - 8, class: 'vchart__xtick', 'text-anchor': 'middle' });
+    t.textContent = `${mShort(d.getTime())} ’${String(d.getFullYear()).slice(2)}`; svg.append(t);
+  }
+  svg.append(el('line', { x1: P.l, x2: W - P.r, y1: P.t + ih, y2: P.t + ih, class: 'vchart__axis' }));
+  // Trap: waarde blijft staan tot de volgende meting, en loopt door tot vandaag.
+  let path = `M${x(pts[0].t)},${y(pts[0].a)}`;
+  pts.slice(1).forEach((p) => { path += ` H${x(p.t)} V${y(p.a)}`; });
+  const lastX = x(pts[pts.length - 1].t); const nowX = x(t1);
+  svg.append(el('path', { d: `${path} H${lastX} V${P.t + ih} H${x(pts[0].t)} Z`, class: 'vchart__area' }));
+  if (nowX - lastX > 2) svg.append(el('rect', { x: lastX, y: y(pts[pts.length - 1].a), width: nowX - lastX, height: P.t + ih - y(pts[pts.length - 1].a), class: 'vchart__area vchart__area--now' }));
+  svg.append(el('path', { d: path, class: 'vchart__line' }));
+  if (nowX - lastX > 2) svg.append(el('path', { d: `M${lastX},${y(pts[pts.length - 1].a)} H${nowX}`, class: 'vchart__line vchart__line--now' }));
+  pts.forEach((p, i) => svg.append(el('circle', { cx: x(p.t), cy: y(p.a), r: i === pts.length - 1 ? 5 : 4, class: `vchart__dot${i === pts.length - 1 ? ' is-last' : ''}` })));
+  // Hover-laag
+  const cross = el('line', { y1: P.t, y2: P.t + ih, class: 'vchart__cross', visibility: 'hidden' });
+  const ring = el('circle', { r: 7, class: 'vchart__hl', visibility: 'hidden' });
+  svg.append(cross, ring);
+  const hit = el('rect', { x: P.l, y: 0, width: iw, height: H, fill: 'transparent' });
+  svg.append(hit);
+  box.replaceChildren(svg);
+  const tip = document.createElement('div'); tip.className = 'vchart__tip'; tip.hidden = true; box.append(tip);
+
+  let cur = -1;
+  const show = (i) => {
+    cur = i; const p = pts[i]; const px = x(p.t); const py = y(p.a);
+    cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
+    ring.setAttribute('cx', px); ring.setAttribute('cy', py); ring.setAttribute('visibility', 'visible');
+    const prev = pts[i - 1]; const delta = prev ? p.a - prev.a : null;
+    tip.replaceChildren();
+    const v = document.createElement('strong'); v.textContent = euro(p.a);
+    const dl = document.createElement('span'); dl.className = 'vchart__tipdate'; dl.textContent = dmy(p.d);
+    tip.append(v, dl);
+    if (delta != null) { const dd = document.createElement('span'); dd.className = `vchart__tipdelta ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : ''}`; dd.textContent = delta ? `${delta > 0 ? '▲' : '▼'} ${euro(Math.abs(delta))} t.o.v. ${dmy(prev.d)}` : `gelijk aan ${dmy(prev.d)}`; tip.append(dd); }
+    if (p.n) { const nn = document.createElement('span'); nn.className = 'vchart__tipnote'; nn.textContent = p.n; tip.append(nn); }
+    tip.hidden = false;
+    const tw = tip.offsetWidth; const left = Math.min(Math.max(px - tw / 2, 0), W - tw);
+    tip.style.left = `${left}px`; tip.style.top = `${Math.max(0, py - tip.offsetHeight - 14)}px`;
+  };
+  const hide = () => { cur = -1; tip.hidden = true; cross.setAttribute('visibility', 'hidden'); ring.setAttribute('visibility', 'hidden'); };
+  const nearest = (clientX) => {
+    const r = svg.getBoundingClientRect(); const mx = clientX - r.left;
+    let best = 0; pts.forEach((p, i) => { if (Math.abs(x(p.t) - mx) < Math.abs(x(pts[best].t) - mx)) best = i; });
+    return best;
+  };
+  hit.addEventListener('pointermove', (e) => show(nearest(e.clientX)));
+  hit.addEventListener('pointerdown', (e) => show(nearest(e.clientX)));
+  hit.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hide(); });
+  box.onkeydown = (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); show(Math.min(pts.length - 1, Math.max(0, (cur < 0 ? pts.length : cur) + (e.key === 'ArrowRight' ? 1 : -1)))); }
+    if (e.key === 'Escape') hide();
+  };
+  box.onblur = hide;
+}
+
+/** Alle grafieken in root tekenen, en opnieuw als de breedte verandert. */
+export function drawCharts(root) {
+  root.querySelectorAll('.vchart').forEach((box) => {
+    drawValueChart(box);
+    if (typeof ResizeObserver !== 'undefined' && !box._ro) {
+      let w = box.clientWidth;
+      box._ro = new ResizeObserver(() => { if (Math.abs(box.clientWidth - w) > 4) { w = box.clientWidth; drawValueChart(box); } });
+      box._ro.observe(box);
+    }
+  });
 }
 
 export function valueBlock(pr, id) {
@@ -187,6 +279,7 @@ async function saveWithUndo(ctx, id, next, before, msg) {
 
 /** Klikken op de knoppen in beide blokken. getProfiles: () => Promise<profiles>. */
 export function mountExtra(root, ctx, getProfiles) {
+  drawCharts(root);
   root.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-add-value],[data-edit-value],[data-add-injury],[data-edit-injury]');
     if (!b) return;
