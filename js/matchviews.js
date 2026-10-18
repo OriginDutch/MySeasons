@@ -292,7 +292,7 @@ function nextBlock(m) {
 
 function scorers(m) {
   if (!m.detail) return '';
-  const goals = m.detail.events.filter((e) => /goal/i.test(e.type) && !/missed/i.test(e.type));
+  const goals = m.detail.events.filter((e) => kindOf(e.type) === 'goal');
   if (!goals.length) return '';
   return `<ul class="scorers">${goals.map((g) => `
     <li><span class="mono muted">${g.minute ?? ''}${g.extra ? '+' + g.extra : ''}'</span> ${esc(g.player || '?')}${/own/i.test(g.type) ? ' <span class="muted">(e.d.)</span>' : ''}${/penalty/i.test(g.type) ? ' <span class="muted">(pen.)</span>' : ''} <span class="muted">· ${esc(g.teamId === (m.homeTeam && m.homeTeam.id) ? m.homeTeam.name : m.awayTeam.name)}</span></li>`).join('')}</ul>`;
@@ -470,8 +470,7 @@ export const matchViews = {
             <legend class="visually-hidden">Weergave</legend>
             ${modes.map(([v, l], i) => `<input type="radio" name="stand-mode" id="sm-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sm-${v}">${l}</label>`).join('')}
           </fieldset>
-          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks, form: v === 'total' && lmUse.length ? formMap(lmUse) : null })}</div>`).join('')}
-          ${zones ? zoneLegend(zones, rules) : ''}
+          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks, form: lmUse.length ? formMap(lmUse, v) : null })}${v === 'total' && zones ? zoneLegend(zones, rules) : v !== 'total' ? `<p class="muted" style="font-size:12px;margin-top:10px">Alleen ${v === 'home' ? 'thuis' : 'uit'}duels. Europese plekken en degradatie gaan op de totaalstand.</p>` : ''}</div>`).join('')}
         </section>
         </div><aside class="stats-side">
         ${zones && rules.periods ? periodsBlock(zones, rules, lmUse, marks) : ''}
@@ -663,10 +662,15 @@ function timeline(m) {
   const label = (e) => {
     if (e.type === 'Substitution') return `${esc(e.inName || names.get(e.inId) || '?')} <span class="muted">voor ${esc(e.outName || names.get(e.outId) || '?')}</span>`;
     const assist = e.assist || (e.assistId && names.get(e.assistId));
-    return `${esc(e.player || '?')}${assist && /goal/i.test(e.type) ? ` <span class="muted">· assist ${esc(assist)}</span>` : ''}`;
+    return `${esc(e.player || '?')}${assist && kindOf(e.type) === 'goal' ? ` <span class="muted">· assist ${esc(assist)}</span>` : ''}`;
   };
-  const kind = (t) => /goal/i.test(t) && !/missed/i.test(t) ? 'goal' : /yellow/i.test(t) ? 'yellow' : /red/i.test(t) ? 'red' : /subst/i.test(t) ? 'sub' : 'other';
+  const kind = kindOf;
   const word = { goal: 'Goal', yellow: 'Geel', red: 'Rood', sub: 'Wissel', other: '' };
+  const OTHER = { 'var penalty': 'VAR: penalty', 'missed penalty': 'Pen. gemist', 'var goal cancelled': 'VAR: afgekeurd', 'var goal confirmed': 'VAR: goal telt' };
+  const badge = (k, t) => {
+    if (k === 'goal') return /own/i.test(t) ? 'Eigen goal' : /penalty/i.test(t) ? 'Penalty' : 'Goal';
+    return word[k] || OTHER[String(t || '').toLowerCase()] || esc(t);
+  };
   return `
     <section class="section">
       <div class="section__label"><span>Tijdlijn</span><span>tik op een moment om te corrigeren</span></div>
@@ -676,7 +680,7 @@ function timeline(m) {
         const editable = k !== 'other' && e._sig;
         const dot = e._fix && e._fix.length ? '<span class="fix-dot" title="Door jou aangepast"></span>' : '';
         const inner = `<span class="tl__min mono">${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'</span>
-          <span class="tl__body"><span class="tl__badge tl__badge--${k}">${word[k] || esc(e.type)}</span> ${label(e)}${dot}</span>`;
+          <span class="tl__body"><span class="tl__badge tl__badge--${k}">${badge(k, e.type)}</span> ${label(e)}${dot}</span>`;
         return `<li class="tl tl--${side} tl--${k}">${editable
           ? `<button type="button" class="tl__btn" data-action="edit-event" data-sig="${esc(e._sig)}">${inner}</button>`
           : inner}</li>`;

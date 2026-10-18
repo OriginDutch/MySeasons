@@ -54,13 +54,14 @@ function rowHtml(r, zones, marks, highlight, form) {
 
 /** zones: uitkomst van zonesFor, of null. highlight: Map(teamId → korte tekst), bijv. periodewinnaar. */
 /** Laatste 5 uitslagen per team (oud → nieuw) uit een lijst competitiewedstrijden. */
-export function formMap(matches) {
+/** Laatste 5 per club. side 'home'/'away': alleen thuis- of uitduels van die club. */
+export function formMap(matches, side = 'total') {
   const out = new Map();
   (matches || []).filter((m) => m.status === 'finished' && m.score && m.score.home != null)
     .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
     .forEach((m) => {
       const r = m.score.home > m.score.away ? ['W', 'V'] : m.score.home < m.score.away ? ['V', 'W'] : ['G', 'G'];
-      [[m.homeTeam, r[0]], [m.awayTeam, r[1]]].forEach(([t, x]) => { const k = String(t.id); out.set(k, [...(out.get(k) || []), x].slice(-5)); });
+      [[m.homeTeam, r[0], 'home'], [m.awayTeam, r[1], 'away']].filter((x) => side === 'total' || x[2] === side).forEach(([t, x]) => { const k = String(t.id); out.set(k, [...(out.get(k) || []), x].slice(-5)); });
     });
   return out;
 }

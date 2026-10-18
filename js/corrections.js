@@ -14,9 +14,17 @@ export const EVENT_FIELDS = {
   sub: [['in', 'speler erin'], ['out', 'speler eruit'], ['minute', 'minuut'], ['extra', 'blessuretijd']],
 };
 
+/** Telt dit event als doelpunt? "Goal", "Own Goal" en een benutte "Penalty".
+ *  Niet: "Missed Penalty", en VAR-events ("VAR Penalty" = penalty toegekend, de goal zelf komt los). */
+export function isGoalType(type) {
+  const t = String(type || '').trim();
+  if (/missed|var|cancel|disallow/i.test(t)) return false;
+  return /goal/i.test(t) || /^penalty( goal| scored)?$/i.test(t);
+}
+
 export function kindOf(type) {
   const t = String(type || '');
-  if (/goal/i.test(t) && !/missed/i.test(t)) return 'goal';
+  if (isGoalType(t)) return 'goal';
   if (/yellow/i.test(t)) return 'yellow';
   if (/red/i.test(t)) return 'red';
   if (/subst/i.test(t)) return 'sub';
