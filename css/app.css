@@ -585,7 +585,7 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .link-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--hairline); }
 .link-row__old b { display: block; font-weight: 600; font-size: 14px; } .link-row__old small { font-size: 11px; }
 .link-row select { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--rule); min-height: 40px; padding: 0 8px; width: 100%; border-radius: 0; }
-.profile { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; }
+.profile { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
 .profile__photo { width: 84px; height: 108px; object-fit: cover; background: var(--photo); }
 .value-bars { display: flex; align-items: flex-end; gap: 6px; height: 70px; }
 .value-bar { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
@@ -612,3 +612,11 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .transfer-row { width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; border-top: 1px solid var(--hairline); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; cursor: pointer; }
 .field--check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; }
 .field--check input { width: 18px; height: 18px; min-height: 0; accent-color: var(--accent); }
+
+/* ---------- Spelersfoto's ---------- */
+.player-row { grid-template-columns: 44px minmax(0, 1fr) 112px; }
+.avatar { position: relative; width: 38px; height: 38px; flex: none; border-radius: 6px; overflow: visible; }
+.avatar img, .avatar__ini { width: 38px; height: 38px; border-radius: 6px; display: flex; align-items: center; justify-content: center; object-fit: cover; object-position: top; background: var(--photo); }
+.avatar__ini { background: var(--band); color: var(--band-ink); font-weight: 700; font-size: 13px; letter-spacing: 0.02em; }
+.avatar__num { position: absolute; right: -4px; bottom: -4px; min-width: 18px; height: 16px; padding: 0 3px; border-radius: 4px; background: var(--bg); color: var(--ink); border: 1px solid var(--hairline); font-size: 10px; line-height: 14px; text-align: center; box-sizing: border-box; }
+.player-hero__photo { width: 64px; height: 80px; object-fit: cover; object-position: top; border-radius: 8px; background: var(--photo); align-self: center; }

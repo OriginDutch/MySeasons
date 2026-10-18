@@ -134,7 +134,6 @@ function profileBlock(pr) {
     <section class="section">
       <div class="section__label"><span>Profiel</span><span>uit je oude tracker</span></div>
       <div class="profile">
-        ${pr.photoUrl ? `<img class="profile__photo" src="${esc(pr.photoUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
         <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Marktwaarde' ? v : esc(v)}</dd>`).join('')}</dl>
       </div>
       ${trend.length > 1 ? `<div class="value-bars" aria-label="Marktwaarde-verloop">${trend.map((v) => `<span class="value-bar"><i style="height:${Math.max(6, Math.round(((v.amount || 0) / max) * 48))}px"></i><small class="mono">${esc(String(v.date).slice(2, 7).replace('-', '/'))}</small></span>`).join('')}</div>` : ''}
@@ -143,6 +142,21 @@ function profileBlock(pr) {
 }
 
 const SORTS = [['line', 'Linie'], ['goals', 'Goals'], ['minutes', 'Minuten'], ['rating', 'Cijfer']];
+
+function initials(name) {
+  const parts = String(name || '?').replace(/^[A-Z]\.\s*/, '').split(/\s+/).filter(Boolean);
+  const last = parts.filter((w) => !/^(van|der|de|den|het|ter|te)$/i.test(w)).pop() || parts[0] || '?';
+  return ((parts[0] || '?')[0] + (parts.length > 1 ? last[0] : '')).toUpperCase();
+}
+
+/** Portret met rugnummer; zonder foto initialen in clubkleuren. */
+function avatar(p) {
+  const photo = p.photo || (p.profile && p.profile.photoUrl);
+  const ini = esc(initials(p.name));
+  return `<span class="avatar">${photo
+    ? `<img src="${esc(photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'avatar__ini',textContent:'${ini}'}))">`
+    : `<span class="avatar__ini">${ini}</span>`}${p.number != null ? `<span class="avatar__num mono">${p.number}</span>` : ''}</span>`;
+}
 
 const fmtLabel = (l) => l.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, d) => new Date(`${y}-${m}-${d}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: y === String(new Date().getFullYear()) ? undefined : 'numeric' }));
 
@@ -153,7 +167,7 @@ function rowHtml(p, sort) {
   const tags = (p.labels || []).map((l) => `<span class="ptag">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '');
   const sub = `${base}${tags ? ' ' + tags : ''}`;
   return `<a class="list-row player-row" href="#/speler/${encodeURIComponent(p.id)}">
-    <span class="player-row__num mono">${p.number ?? ''}</span>
+    ${avatar(p)}
     <span class="list-row__main"><span class="list-row__title">${esc(p.name)}</span>
       <span class="list-row__sub">${sort === 'line' ? '' : esc(LINE_SHORT[p.position] || '—') + ' · '}${sub}</span></span>
     <span class="player-row__stats mono">
@@ -214,6 +228,7 @@ function seasonMembers(list, squadPlayers, profiles) {
     if (!st.member) return;
     members.push({
       id, name: pr.fullName || pr.legacyName || '?', number: pr.shirt ?? null, position: pr.position || '',
+      photo: pr.photoUrl || null,
       apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
       status: pr.squadLevel === 'jeugd' && st.status === 'active' ? 'youth' : st.status, labels: st.labels, conflict: false, profileOnly: true,
     });
@@ -237,7 +252,8 @@ function profileOnlyPage(pr, id) {
   return `
     ${head({ kicker: `Archief · ${LINE_SHORT[pr.position] || '—'}`, title: name, back: 'selectie' })}
     <section class="section">
-      <div class="player-hero"><span class="player-hero__num">${pr.shirt ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
+      <div class="player-hero">${pr.photoUrl ? `<img class="player-hero__photo" src="${esc(pr.photoUrl)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="player-hero__num">${pr.shirt ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
+      <div><button class="btn btn--sm" type="button" data-action="edit-name" data-id="${esc(id)}" data-api="" data-full="${esc(pr.fullName || '')}" data-short="${esc(pr.shortName || '')}" data-photo="${esc(pr.photoUrl || '')}">Naam en foto</button></div>
       <p class="muted" style="font-size:13px;margin:0">${pr.linkedTo === null || String(id).startsWith('legacy-')
         ? 'Nog niet gekoppeld aan Highlightly. Stats verschijnen zodra hij in een opgehaald seizoen voorkomt en je hem koppelt via Meer → Importeren.'
         : 'Geen officiële duels in dit seizoen. Kies een ander seizoen via de clubnaam op Home.'}</p>
@@ -264,7 +280,7 @@ export const playerViews = {
         <section class="section">
           <p class="muted" style="font-size:13px">Iedereen uit je archief, huidige spelers bovenaan, daarna wie het laatst vertrok.</p>
           <div class="list">${rows.map((r) => `<a class="list-row player-row" href="#/speler/${encodeURIComponent(r.id)}">
-            <span class="player-row__num mono">${r.pr.shirt ?? ''}</span>
+            ${avatar({ name: r.name, photo: r.pr.photoUrl, number: r.pr.shirt })}
             <span class="list-row__main"><span class="list-row__title">${esc(r.name)}</span>
               <span class="list-row__sub">${esc(LINE_SHORT[r.pr.position] || '—')}${periodText(r.pr) ? ' · ' + esc(periodText(r.pr)) : ''}${String(r.id).startsWith('legacy-') ? ' · niet gekoppeld' : ''}</span></span>
             <span></span></a>`).join('')}</div>
@@ -329,19 +345,21 @@ export const playerViews = {
       root.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-action="edit-name"]');
         if (!btn) return;
-        const { id, api, full, short } = btn.dataset;
+        const { id, api, full, short, photo } = btn.dataset;
         const data = await openSheet({
           title: 'Naam aanpassen',
           body: `<label class="field"><span>Volledige naam</span><input name="full" maxlength="60" autocomplete="off" placeholder="${esc(api)}" value="${esc(full)}"></label>
             <label class="field"><span>Korte naam (tijdlijn, opstellingen)</span><input name="short" maxlength="30" autocomplete="off" placeholder="${esc(autoShort(full || api))}" value="${esc(short)}"></label>
-            <p class="muted sheet__note">Leeg laten = automatisch. Highlightly noemt hem: ${esc(api)}</p>`,
+            <label class="field"><span>Foto-link</span><input name="photo" type="url" inputmode="url" autocomplete="off" placeholder="https://…" value="${esc(photo || '')}"></label>
+            <p class="muted sheet__note">Leeg laten = automatisch. ${api ? `Highlightly noemt hem: ${esc(api)}` : ''}</p>`,
+          validate: (fd) => (fd.get('photo') && !/^https:\/\/\S+$/.test(String(fd.get('photo')).trim()) ? 'De foto-link moet met https:// beginnen.' : null),
         });
         if (!data) return;
-        const next = { fullName: String(data.get('full') || '').trim() || null, shortName: String(data.get('short') || '').trim() || null };
-        if (next.fullName === (full || null) && next.shortName === (short || null)) { toast('Niets veranderd'); return; }
+        const next = { fullName: String(data.get('full') || '').trim() || null, shortName: String(data.get('short') || '').trim() || null, photoUrl: String(data.get('photo') || '').trim() || null };
+        if (next.fullName === (full || null) && next.shortName === (short || null) && next.photoUrl === (photo || null)) { toast('Niets veranderd'); return; }
         try {
           await savePlayer(id, next);
-          toast('Naam opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await savePlayer(id, { fullName: full || null, shortName: short || null }); ctx.refresh(); } });
+          toast('Naam opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await savePlayer(id, { fullName: full || null, shortName: short || null, photoUrl: photo || null }); ctx.refresh(); } });
           ctx.refresh();
         } catch (err) {
           toast(`Opslaan lukte niet: ${err.message || err}`);
@@ -373,10 +391,10 @@ export const playerViews = {
       return `
         ${head({ kicker: `Selectie · ${LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
         <section class="section">
-          <div class="player-hero"><span class="player-hero__num">${p.number ?? '–'}</span>
+          <div class="player-hero">${p.profile && p.profile.photoUrl ? `<img class="player-hero__photo" src="${esc(p.profile.photoUrl)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<span class="player-hero__num">${p.number ?? '–'}</span>
             <span class="muted">${esc(LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
           <p class="muted" style="font-size:12px;margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>
-          <div><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}">Naam aanpassen</button></div>
+          <div><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}" data-photo="${esc((p.profile && p.profile.photoUrl) || '')}">Naam en foto</button></div>
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>
         ${profileBlock(p.profile)}
