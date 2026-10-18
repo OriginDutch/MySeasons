@@ -411,7 +411,7 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .dev-flag__go { margin-left: auto; font-weight: 600; text-decoration: underline; }
 
 .warn-line { font-size: 13px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--surface-hover); margin: 0; }
-.note-text { white-space: pre-wrap; margin: 0; font-size: 15px; line-height: 1.5; }
+.note-text { white-space: pre-wrap; margin: 0; font-size: 14px; line-height: 1.55; }
 
 .action-card { display: grid; gap: 4px; padding: 16px; background: var(--inverse-bg); color: var(--inverse-ink); text-decoration: none; }
 .action-card .muted { color: inherit; opacity: 0.7; font-size: 13px; }
