@@ -96,6 +96,7 @@ export const push = {
   unsubscribe: (endpoint) => call('/push/unsubscribe', null, { method: 'POST', body: { endpoint } }),
   schedule: (matches) => call('/push/schedule', null, { method: 'POST', body: { matches } }),
   test: () => call('/push/test', null, { method: 'POST', body: {} }),
+  prefs: (p) => call('/push/prefs', null, { method: 'POST', body: p }),
 };
 
 // ---------- Automatische back-ups (gzip, bewaard in de Worker-KV) ----------

@@ -139,7 +139,8 @@ export async function pushApi(request, env, url, json) {
     const k = await vapidKeys(kv);
     const subs = (await kv.get(SUBS, 'json')) || [];
     const schedule = (await kv.get(SCHEDULE, 'json')) || [];
-    return json({ publicKey: k.publicKey, devices: subs.length, scheduled: schedule.length, sendAt: SEND_AT, tz: TZ }, 200);
+    const prefs = { results: true, resultPush: true, ...((await kv.get('push:prefs', 'json')) || {}) };
+    return json({ publicKey: k.publicKey, devices: subs.length, scheduled: schedule.length, sendAt: SEND_AT, tz: TZ, prefs }, 200);
   }
   const body = request.method === 'POST' ? await request.json().catch(() => null) : null;
   if (path === '/subscribe' && request.method === 'POST') {
@@ -167,6 +168,13 @@ export async function pushApi(request, env, url, json) {
     const next = JSON.stringify(clean);
     if (prev !== next) await kv.put(SCHEDULE, next); // KV-writes sparen
     return json({ ok: true, scheduled: clean.length, changed: prev !== next }, 200);
+  }
+  if (path === '/prefs' && request.method === 'POST') {
+    const cur = (await kv.get('push:prefs', 'json')) || {};
+    const next = { ...cur };
+    ['results', 'resultPush'].forEach((k) => { if (body && typeof body[k] === 'boolean') next[k] = body[k]; });
+    await kv.put('push:prefs', JSON.stringify(next));
+    return json({ ok: true, prefs: { results: true, resultPush: true, ...next } }, 200);
   }
   if (path === '/test' && request.method === 'POST') {
     const r = await broadcast(kv, { title: 'MySeasons', body: 'Testmelding: meldingen op wedstrijddag staan aan.', url: '#/home', tag: 'test' });

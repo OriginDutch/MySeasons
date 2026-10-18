@@ -602,7 +602,7 @@ export const matchViews = {
             ? `<div><button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${d ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button></div>`
             : '<p class="muted" style="font-size:12px">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
         </section>
-        ${m.status === 'finished' ? notesBlock(n) : ''}
+        ${m.status === 'finished' || (Date.parse(m.date) - Date.now() < 12 * 3600e3 && m.status !== 'postponed') ? notesBlock(n, m.status !== 'finished') : ''}
         ${d ? timeline(m) + statsBlock(m) + lineupsBlock(m) + playersBlock(m) : ''}`;
     },
     mount(root, ctx, args) {
@@ -643,13 +643,14 @@ function nameIndex(m) {
   return idx;
 }
 
-function notesBlock(n) {
+function notesBlock(n, early = false) {
   const has = n.attendance != null || n.awayFans != null || n.note;
   return `
     <section class="section">
       <div class="section__label"><span>Jouw aanvulling</span><span>${has ? '' : 'nog leeg'}</span></div>
       ${n.note ? `<p class="note-text">${esc(n.note)}</p>` : ''}
-      ${!has ? '<p class="muted" style="font-size:13px">Toeschouwers en een notitie komen niet uit de API. Die vul je zelf in.</p>' : ''}
+      ${has && n.attendance != null ? `<p class="muted" style="font-size:13px">${nl(n.attendance)} toeschouwers${n.awayFans != null ? ` · ${nl(n.awayFans)} in het uitvak` : ''}</p>` : ''}
+      ${!has ? `<p class="muted" style="font-size:13px">${early ? 'Weet je het aantal toeschouwers al (bijvoorbeeld van het scorebord)? Zet het nu klaar; de uitslag die straks automatisch binnenkomt laat je aanvulling staan.' : 'Toeschouwers en een notitie komen niet uit de API. Die vul je zelf in.'}</p>` : ''}
       <div><button class="btn ${has ? '' : 'btn--primary'}" type="button" data-action="edit-notes">${has ? 'Aanvulling bewerken' : 'Aanvullen'}</button></div>
     </section>`;
 }

@@ -62,7 +62,8 @@ export async function disablePush() {
 export async function pushSchedule({ force = false } = {}) {
   const now = Date.now();
   const list = (await getAllMatches())
-    .filter((m) => m.status !== 'finished' && Date.parse(m.date) > now - 3 * 3600e3 && Date.parse(m.date) < now + 60 * 864e5)
+    // Ook de afgelopen 2 dagen: dan kan de Worker de uitslag ophalen en de volgende ochtend nog eens controleren.
+    .filter((m) => Date.parse(m.date) > now - 48 * 3600e3 && Date.parse(m.date) < now + 60 * 864e5 && m.status !== 'postponed')
     .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
     .map((m) => ({
       id: m.id, date: m.date, home: !!(m.homeTeam && m.homeTeam.id === TEAM),
@@ -108,9 +109,20 @@ export const meldingenViews = {
               : `<button class="btn btn--primary" type="button" data-push="on" ${err || perm === 'denied' ? 'disabled' : ''}>Aanzetten op dit apparaat</button>`}
           </div>
           <p class="muted" style="font-size:12px">Het programma wordt bijgewerkt telkens als je het seizoen synchroniseert. Een verplaatste wedstrijd komt dus vanzelf goed na de volgende synchronisatie.</p>
-        </section>`;
+        </section>
+        ${info ? `<section class="section">
+          <div class="section__label"><span>Uitslag automatisch ophalen</span></div>
+          <p class="muted" style="font-size:13px">Zo'n 2,5 uur na de aftrap haalt de Worker uitslag, opstelling, tijdlijn en spelersstats op (3 calls, plus 1 voor de stand). Nog niet afgelopen? Elk half uur opnieuw, tot 6 uur na de aftrap. De volgende ochtend om 08:00 nog één controle (3 calls). Open je de app, dan staat alles erin.</p>
+          <label class="field field--check"><input type="checkbox" data-pref="results" ${info.prefs && info.prefs.results === false ? '' : 'checked'}> <span>Uitslag automatisch ophalen</span></label>
+          <label class="field field--check"><input type="checkbox" data-pref="resultPush" ${info.prefs && info.prefs.resultPush === false ? '' : 'checked'} ${info.prefs && info.prefs.results === false ? 'disabled' : ''}> <span>Melding als de uitslag binnen is</span></label>
+        </section>` : ''}`;
     },
     mount(root, ctx) {
+      root.addEventListener('change', async (e) => {
+        const c = e.target.closest('[data-pref]');
+        if (!c) return;
+        try { await push.prefs({ [c.dataset.pref]: c.checked }); toast(c.checked ? 'Staat aan' : 'Staat uit'); ctx.refresh(); } catch (err) { c.checked = !c.checked; toast(explain(err)); }
+      });
       root.addEventListener('click', async (e) => {
         const b = e.target.closest('[data-push]');
         if (!b) return;

@@ -20,6 +20,7 @@
 
 import { pushApi, pushScheduled } from './push.js';
 import { backupApi } from './backup.js';
+import { followUp } from './followup.js';
 
 const PROJECT_ID = 'myseasons-c1dd9';
 const HIGHLIGHTLY_BASE = 'https://soccer.highlightly.net';
@@ -346,7 +347,15 @@ async function nsApi(request, env, url, origin) {
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(Promise.all([nsScheduled(env, event.scheduledTime), pushScheduled(env, event.scheduledTime).catch(() => {})]));
+    ctx.waitUntil(Promise.all([
+      nsScheduled(env, event.scheduledTime),
+      pushScheduled(env, event.scheduledTime).catch(() => {}),
+      followUp(env, event.scheduledTime, {
+        base: HIGHLIGHTLY_BASE, inboxPrefix: NS_INBOX, remainingOf,
+        state: () => nsGet(env, NS_STATE, {}),
+        saveRemaining: async (n) => { const s = await nsGet(env, NS_STATE, {}); await env.MS_KV.put(NS_STATE, JSON.stringify({ ...s, remaining: n })); },
+      }).catch(() => {}),
+    ]));
   },
 
   async fetch(request, env) {
