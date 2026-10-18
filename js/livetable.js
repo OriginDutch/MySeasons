@@ -3,6 +3,7 @@
 // Puntenaftrek nemen we over uit de Highlightly-stand: het verschil tussen hun punten en W/G/V.
 
 import { getStandings, getLeagueMatches } from './store.js';
+import { rankRows } from './rules.js';
 
 const blank = () => ({ played: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 });
 function add(line, gf, ga) {
@@ -29,9 +30,8 @@ export function liveStandings(hl, matches) {
     add(H.total, m.score.home, m.score.away); add(H.home, m.score.home, m.score.away);
     add(A.total, m.score.away, m.score.home); add(A.away, m.score.away, m.score.home);
   });
-  const list = [...rows.values()].map((r) => ({ ...r, points: r.total.w * 3 + r.total.d - r.deduction }));
-  list.sort((a, b) => b.points - a.points || (b.total.gf - b.total.ga) - (a.total.gf - a.total.ga) || b.total.gf - a.total.gf || a.team.name.localeCompare(b.team.name));
-  list.forEach((r, i) => { r.position = i + 1; });
+  // Gelijk op punten, doelsaldo en doelpunten: onderling resultaat (KNVB art. 17 lid 4).
+  const list = rankRows([...rows.values()].map((r) => ({ ...r, points: r.total.w * 3 + r.total.d - r.deduction })), { tiebreak: ['points', 'gd', 'gf', 'h2h'], matches: finished });
   const playedSum = (rs) => rs.reduce((t, r) => t + (r.total ? r.total.played : 0), 0);
   return {
     source: 'live', league: hl ? hl.league : null,
@@ -41,12 +41,16 @@ export function liveStandings(hl, matches) {
   };
 }
 
+/** De meest actuele stand plus alle competitiewedstrijden (voor periodes en onderling resultaat). */
+export async function standingsAndMatches(leagueId, season) {
+  const [hl, lm] = await Promise.all([getStandings(leagueId, season), getLeagueMatches(leagueId, season).catch(() => [])]);
+  if (!lm.length) return { standings: hl, matches: lm };
+  const live = liveStandings(hl, lm);
+  if (!live) return { standings: hl, matches: lm };
+  return { standings: !hl || live.ahead > 0 ? live : hl, matches: lm };
+}
+
 /** De meest actuele stand: zelf berekend als die verder is dan Highlightly, anders Highlightly. */
 export async function bestStandings(leagueId, season) {
-  const [hl, lm] = await Promise.all([getStandings(leagueId, season), getLeagueMatches(leagueId, season).catch(() => [])]);
-  if (!lm.length) return hl;
-  const live = liveStandings(hl, lm);
-  if (!live) return hl;
-  if (!hl || live.ahead > 0) return live;
-  return hl;
+  return (await standingsAndMatches(leagueId, season)).standings;
 }

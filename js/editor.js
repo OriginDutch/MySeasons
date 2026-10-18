@@ -197,6 +197,7 @@ export async function editNotes(m, notes) {
     body: `<label class="field"><span>Toeschouwers (totaal)</span><input name="attendance" type="number" inputmode="numeric" min="0" max="100000" placeholder="bijv. 10250" value="${n.attendance ?? ''}"></label>
       <label class="field"><span>${esc(awayLabel)}</span><input name="awayFans" type="number" inputmode="numeric" min="0" max="100000" placeholder="leeg = onbekend" value="${n.awayFans ?? ''}"></label>
       ${motmOptions(m, n)}
+      ${m.league && !/friendl/i.test(m.league.name) && !(m.round && /regular season/i.test(m.round)) ? `<label class="field field--check"><input type="checkbox" name="neutral" ${n.neutral ? 'checked' : ''}> <span>Op neutraal terrein (telt niet als thuis of uit)</span></label>` : ''}
       <label class="field"><span>Notitie</span><textarea name="note" rows="4" maxlength="2000" placeholder="Sfeer, opvallende momenten, waar je zat…">${esc(n.note || '')}</textarea></label>`,
     validate: (fd) => {
       const t = intIn(fd.get('attendance'), 0, 100000);
@@ -220,9 +221,10 @@ export async function editNotes(m, notes) {
       return p ? { playerId: p.id, name: p.name } : null;
     })(),
     note: String(data.get('note') || '').trim() || null,
+    neutral: data.get('neutral') ? true : null,
   };
   const sameMotm = JSON.stringify(next.motm || null) === JSON.stringify(n.motm || null);
-  if (next.attendance === (n.attendance ?? null) && next.awayFans === (n.awayFans ?? null) && next.note === (n.note || null) && sameMotm) { toast('Niets veranderd'); return false; }
+  if (next.attendance === (n.attendance ?? null) && next.awayFans === (n.awayFans ?? null) && next.note === (n.note || null) && !!next.neutral === !!n.neutral && sameMotm) { toast('Niets veranderd'); return false; }
   await saveNotes(m.id, next);
   toast('Opgeslagen');
   return true;

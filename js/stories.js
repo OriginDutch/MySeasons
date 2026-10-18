@@ -1,8 +1,9 @@
 // Magazineteksten uit je eigen data. Vaste sjablonen, niets verzonnen:
 // elk sjabloon checkt zelf of de data het waarmaakt, anders komt het er niet in.
 
-import { MAIN_CLUB, ZONES } from './config.js';
-import { sortByDate, resultFor, opponentOf, isHome, shortRound, roundNumber } from './season.js';
+import { MAIN_CLUB } from './config.js';
+import { rulesFor, zonesFor, isJong } from './rules.js';
+import { sortByDate, resultFor, opponentOf, isHome, shortRound, roundNumber, penOutcome, venueOf } from './season.js';
 import { kindOf } from './corrections.js';
 
 const TEAM = MAIN_CLUB.id;
@@ -103,22 +104,41 @@ export function seasonStories(list, league, standings, extra = {}) {
     }
   }
 
-  // Ruimte in de stand
+  // Ruimte in de stand (zones uit de regelmotor, alleen als die er voor dit seizoen zijn)
   const me = standRow(standings, TEAM);
   const g = standings && standings.groups && standings.groups[0];
-  const zones = ZONES[league.id] || [];
-  if (me && g) {
-    const at = (pos) => g.rows.find((r) => r.position === pos);
-    const po = zones.find((z) => z.kind === 'po'); const pl = zones.find((z) => z.kind === 'playoff');
-    if (pl && me.position < pl.from && at(pl.from)) {
-      const gap = me.points - at(pl.from).points;
-      out.push({ label: 'Ruimte', fig: signed(gap), text: `punten op plek ${pl.from}, de nacompetitie.` });
-    } else if (pl && me.position >= pl.from && at(pl.from - 1)) {
-      out.push({ label: 'Het gat', fig: String(at(pl.from - 1).points - me.points), text: `punten tot plek ${pl.from - 1}, veilig.` });
-    }
-    if (po && me.position > po.to && at(po.to)) {
-      const gap = at(po.to).points - me.points;
-      if (gap <= 6) out.push({ label: 'Europa?', fig: String(gap), text: `punten tot plek ${po.to}, de play-offs.` });
+  const rules = extra.current === false ? null : rulesFor(league.id, extra.season);
+  if (me && g && rules) {
+    const rows = g.rows.slice().sort((x, y) => x.position - y.position);
+    const zones = zonesFor(rules, rows, { matches: extra.leagueMatches || [] });
+    const zoneOf = (r) => zones.map.get(String(r.team.id));
+    const mine = zoneOf(me);
+    if (rules.playoff) {
+      const inPo = (r) => { const z = zoneOf(r); return z && (z.kind === rules.playoff.kind || z.kind === rules.direct.kind); };
+      const counted = rows.filter((r) => !isJong(r.team));
+      const lastIn = counted.filter(inPo).pop();
+      const firstOut = counted.find((r) => !inPo(r) && r.position > (lastIn ? lastIn.position : 0));
+      const third = counted[rules.direct.count];
+      if (mine && mine.kind === rules.direct.kind && third) {
+        out.push({ label: 'Promotie', fig: signed(me.points - third.points), text: `punten op ${third.team.name}, de eerste club buiten de directe promotie.` });
+      } else if (mine && mine.kind === rules.playoff.kind && firstOut) {
+        out.push({ label: 'Nacompetitie', fig: signed(me.points - firstOut.points), text: `punten op ${firstOut.team.name}, de eerste club erbuiten${mine.tag ? `. ${mine.tag} is al binnen` : ''}.` });
+      } else if (lastIn) {
+        out.push({ label: 'Nacompetitie?', fig: String(lastIn.points - me.points), text: `punten tot ${lastIn.team.name}, nu de laatste plek in de nacompetitie.` });
+      }
+    } else {
+      const at = (pos) => rows.find((r) => r.position === pos);
+      const range = (kind) => (rules.zones || []).find((z) => z.kind === kind);
+      const pl = range('playoff'); const po = range('po');
+      if (pl && me.position < pl.positions[0] && at(pl.positions[0])) {
+        out.push({ label: 'Ruimte', fig: signed(me.points - at(pl.positions[0]).points), text: `punten op plek ${pl.positions[0]}, de nacompetitie.` });
+      } else if (pl && me.position >= pl.positions[0] && at(pl.positions[0] - 1)) {
+        out.push({ label: 'Het gat', fig: String(at(pl.positions[0] - 1).points - me.points), text: `punten tot plek ${pl.positions[0] - 1}, veilig.` });
+      }
+      if (po && me.position > po.positions[1] && at(po.positions[1])) {
+        const gap = at(po.positions[1]).points - me.points;
+        if (gap <= 6) out.push({ label: 'Europa?', fig: String(gap), text: `punten tot plek ${po.positions[1]}, de play-offs.` });
+      }
     }
   }
 
@@ -144,11 +164,16 @@ export function matchReport(m) {
   const oppName = opp ? opp.name : 'de tegenstander';
   const home = isHome(m, TEAM);
   const city = m.detail && m.detail.venue && m.detail.venue.city;
-  const place = home ? `in ${MAIN_CLUB.city}` : city ? `in ${city}` : `bij ${oppName}`;
+  const venue = venueOf(m, TEAM);
+  const place = venue === 'neutral' ? (city ? `in ${city}` : 'op neutraal terrein') : home ? `in ${MAIN_CLUB.city}` : city ? `in ${city}` : `bij ${oppName}`;
+  const pen = penOutcome(m, TEAM);
   const gf = goalsFor(m); const ga = goalsAgainst(m);
   const short = (t) => (t ? t.name.slice(0, 3).toUpperCase() : '?');
   const scoreLine = `${short(m.homeTeam)} ${m.score.home}–${m.score.away} ${short(m.awayTeam)}`;
 
+  if (pen && !m.detail) {
+    return { title: pen === 'W' ? `${MAIN_CLUB.name} door na strafschoppen ${place}` : `${MAIN_CLUB.name} eruit na strafschoppen ${place}`, sub: null, scoreLine, hero: null, needsDetail: true };
+  }
   if (!m.detail) {
     const title = r === 'W' ? `${MAIN_CLUB.name} wint ${place}` : r === 'G' ? `Gelijkspel ${place}` : `Nederlaag ${place}`;
     return { title, sub: null, scoreLine, hero: null, needsDetail: true };
@@ -178,6 +203,7 @@ export function matchReport(m) {
   } else {
     title = gf === 0 ? `${MAIN_CLUB.name} blijft zonder goal ${place}` : `Nederlaag ${place}`;
   }
+  if (pen) title = pen === 'W' ? `${MAIN_CLUB.name} door na strafschoppen ${place}` : `${MAIN_CLUB.name} eruit na strafschoppen ${place}`;
 
   // Ondertitel: twee feiten, als ze kloppen.
   const lines = [];

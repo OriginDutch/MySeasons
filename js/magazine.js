@@ -6,12 +6,12 @@ import { getSeason, isCurrentSeason, seasonLabel } from './seasonstate.js';
 import { getMeta, getCallsToday, getStandings } from './store.js';
 import { COST } from './sync.js';
 import {
-  correctedList, crest, devBar, syncFooter, handleSync, handleFetch, scoreText, compName, matchTitle,
+  correctedList, resultChip, crest, devBar, syncFooter, handleSync, handleFetch, scoreText, compName, matchTitle,
 } from './matchviews.js';
 import { preview, seasonStories, matchReport } from './stories.js';
 import { buildSquad } from './players.js';
 import { refreshNews, newsFor } from './news.js';
-import { bestStandings } from './livetable.js';
+import { standingsAndMatches } from './livetable.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
@@ -143,7 +143,7 @@ function lastWeek(m, rep) {
         <div class="report__body">
           <span class="report__title">${esc(rep.title)}</span>
           ${rep.sub ? `<span class="report__sub muted">${esc(rep.sub)}</span>` : ''}
-          <span class="mono report__score">${esc(rep.scoreLine)} <span class="result result--${resultFor(m, TEAM)}">${resultFor(m, TEAM)}</span></span>
+          <span class="mono report__score">${esc(rep.scoreLine)} ${resultChip(m)}</span>
         </div>
       </a>
       ${rep.needsDetail ? `<div><button class="btn" type="button" data-action="fetch-match" data-id="${m.id}">Details ophalen voor het verhaal · ${COST.match} calls</button></div>` : ''}
@@ -246,13 +246,14 @@ export const magazineViews = {
       const rs = isCurrentSeason() ? null : await getRsssf(getSeason()).catch(() => null);
       const rsDiv = mainDivision(rs);
       const league = mainLeague(list) || (rsDiv && rsDiv.leagueId ? { id: rsDiv.leagueId, name: rsDiv.name } : null);
-      const standings = league ? ((await bestStandings(league.id, getSeason())) || rsssfStandings(rs, league.id)) : null;
+      const both = league ? await standingsAndMatches(league.id, getSeason()) : { standings: null, matches: [] };
+      const standings = league ? (both.standings || rsssfStandings(rs, league.id)) : null;
       const next = nextMatch(list);
       const last = lastMatch(list);
       const { players } = buildSquad(list, TEAM, profiles);
       const topScorer = players.slice().sort((a, b) => b.goals - a.goals)[0] || null;
       const crowd = league ? crowdSummary(list, TEAM, league.id) : {};
-      const stories = seasonStories(list, league, standings, { topScorer, homeAvg: crowd.homeAvg, homeCount: crowd.homeCount });
+      const stories = seasonStories(list, league, standings, { topScorer, homeAvg: crowd.homeAvg, homeCount: crowd.homeCount, season: getSeason(), current: isCurrentSeason(), leagueMatches: both.matches });
       const teams = knownTeams(list);
       const nextOpp = next ? opponentOf(next, TEAM) : null;
       const news = await newsFor([TEAM, ...(nextOpp ? [nextOpp.id] : [])], 3).catch(() => []);

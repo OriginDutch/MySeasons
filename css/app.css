@@ -652,3 +652,21 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .value-chart__axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: -4px; }
 .inj-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); margin-right: 6px; vertical-align: 1px; }
 .ptag--inj { color: var(--danger); border-color: currentColor; }
+
+/* ---------- Regelmotor: extra zones, periodes, nacompetitie ---------- */
+:root { --z-up: #1F5FD6; --z-jong: transparent; }
+.stand tr.zone--up { --z: var(--z-up); }
+.zone-key--up { background: var(--z-up); }
+.zone-key--jong { background: none; border-left: 1px dashed var(--muted); }
+.stand tr.zone--jong .st-club span { color: var(--muted); }
+.st-tag { font-style: normal; font-size: 9px; padding: 0 4px; margin-left: 6px; border: 1px solid var(--z-playoff); color: var(--text); border-radius: 2px; vertical-align: 1px; }
+.st-tag--hl { border-color: var(--accent); color: var(--accent-text); }
+.stand tr.is-hl td { background: var(--surface-hover); }
+.period-sum { font-size: 13px; margin: 0; }
+.bracket { display: grid; gap: 6px; font-size: 13px; }
+.bracket__row { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--hairline); }
+.bracket__row:last-child { border-bottom: 0; }
+.bracket__key { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.bracket .is-me { font-weight: 700; color: var(--accent-text); }
+.season-flag { font-size: 13px; padding: 8px 12px; border-left: 3px solid var(--danger); background: var(--surface-hover); margin: 0; }
+.result--pen { font-weight: 500; font-size: 10px; }

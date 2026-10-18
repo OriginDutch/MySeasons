@@ -15,12 +15,23 @@ export function resultFor(m, teamId) {
   const ga = home ? m.score.away : m.score.home;
   if (gf > ga) return 'W';
   if (gf < ga) return 'V';
-  if (m.penalties) {
-    const pf = home ? m.penalties.home : m.penalties.away;
-    const pa = home ? m.penalties.away : m.penalties.home;
-    if (pf !== pa) return pf > pa ? 'W' : 'V';
-  }
+  // Strafschoppen tellen in de stats als gelijkspel; wie doorgaat staat apart (penOutcome).
   return 'G';
+}
+
+/** Na strafschoppen: 'W' (door) of 'V' (eruit), anders null. */
+export function penOutcome(m, teamId) {
+  if (!m.penalties || m.status !== 'finished') return null;
+  const home = m.homeTeam && m.homeTeam.id === teamId;
+  const pf = home ? m.penalties.home : m.penalties.away;
+  const pa = home ? m.penalties.away : m.penalties.home;
+  return pf === pa ? null : pf > pa ? 'W' : 'V';
+}
+
+/** Thuis, uit of neutraal (zelf aangevinkt bij Aanvullen). Neutraal telt niet als thuis of uit. */
+export function venueOf(m, teamId) {
+  if (m.notes && m.notes.neutral) return 'neutral';
+  return isHome(m, teamId) ? 'home' : 'away';
 }
 
 export function opponentOf(m, teamId) {
