@@ -12,6 +12,7 @@ import { COST, missingDetails, fetchMany } from './sync.js';
 import { buildSquad, playerFacts, LINES, LINE_SHORT } from './players.js';
 import { correctedList, runWithButton, explain, head, crest } from './matchviews.js';
 import { dayShort, opponentOf, isHome } from './season.js';
+import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './playerextra.js';
 
 const TEAM = MAIN_CLUB.id;
 const r1 = (v) => (v == null ? '–' : v.toFixed(2));
@@ -43,7 +44,6 @@ async function handleMissing(btn, ctx) {
   ctx.refresh();
 }
 
-const euro = (v) => (v == null ? '—' : v >= 1e6 ? `€${(v / 1e6).toLocaleString('nl-NL', { maximumFractionDigits: 2 })} mln` : `€${Math.round(v / 1e3).toLocaleString('nl-NL')}k`);
 const dmy = (iso) => (iso ? new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 function ageOf(dob) {
   if (!dob) return null;
@@ -121,7 +121,6 @@ function mountTransfers(root, ctx) {
 function profileBlock(pr, id) {
   pr = pr || {};
   const age = ageOf(pr.dob);
-  const val = pr.valueHistory && pr.valueHistory[0];
   const kv = [
     ['Geboren', pr.dob ? `${dmy(pr.dob)}${age != null ? ` (${age})` : ''}` : null],
     ['Nationaliteit', pr.nationality ? nationalities(pr.nationality).map((n) => `<span class="nat">${flag(n, 14)}${esc(n)}</span>`).join(' ') : null],
@@ -129,10 +128,7 @@ function profileBlock(pr, id) {
     ['Lengte', pr.height ? `${pr.height} cm` : null],
     ['Bij de club sinds', pr.joined ? dmy(pr.joined) : null],
     ['Contract tot', pr.contractUntil ? dmy(pr.contractUntil) : null],
-    ['Marktwaarde', val ? `${euro(val.amount)} <span class="muted">· ${esc(dmy(val.date))}</span>` : null],
   ].filter(([, v]) => v);
-  const trend = (pr.valueHistory || []).slice(0, 6).reverse();
-  const max = Math.max(...trend.map((v) => v.amount || 0), 1);
   const editBtn = id != null ? `<div><button class="btn btn--sm" type="button" data-edit-profile="${esc(String(id))}">Profiel bewerken</button></div>` : '';
   if (!kv.length) {
     return `<section class="section"><div class="section__label"><span>Profiel</span></div>
@@ -142,9 +138,8 @@ function profileBlock(pr, id) {
     <section class="section">
       <div class="section__label"><span>Profiel</span><span>${pr.legacyId ? 'uit je oude tracker' : ''}</span></div>
       <div class="profile">
-        <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Marktwaarde' || k === 'Nationaliteit' ? v : esc(v)}</dd>`).join('')}</dl>
+        <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Nationaliteit' ? v : esc(v)}</dd>`).join('')}</dl>
       </div>
-      ${trend.length > 1 ? `<div class="value-bars" aria-label="Marktwaarde-verloop">${trend.map((v) => `<span class="value-bar"><i style="height:${Math.max(6, Math.round(((v.amount || 0) / max) * 48))}px"></i><small class="mono">${esc(String(v.date).slice(2, 7).replace('-', '/'))}</small></span>`).join('')}</div>` : ''}
       ${pr.note ? `<p class="note-text">${esc(pr.note)}</p>` : ''}
       ${editBtn}
     </section>`;
@@ -244,7 +239,7 @@ function rowHtml(p, sort) {
   const base = p.apps
     ? `${p.apps} ${p.apps === 1 ? 'duel' : 'duels'}${p.subIns ? ` (${p.subIns} in)` : ''} · ${p.minutes}'`
     : p.squads ? `${p.squads}× op de bank` : 'nog geen officieel duel';
-  const tags = (p.labels || []).map((l) => `<span class="ptag">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '');
+  const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '');
   const sub = `${base}${tags ? ' ' + tags : ''}`;
   const nat = p.nationality || (p.profile && p.profile.nationality);
   const flags = nat ? nationalities(nat).map((n) => flag(n, 12)).join('') : '';
@@ -310,7 +305,8 @@ function seasonMembers(list, squadPlayers, profiles) {
     const last = p.log.length ? p.log[p.log.length - 1].match.date : null;
     const st = statusIn(p.profile, win, ref, { onSheet: true, lastSheet: last });
     seen.add(String(p.id));
-    members.push({ ...p, status: st.status || 'active', labels: st.labels || [], conflict: !!st.conflict });
+    const inj = injuryLabel(p.profile, ref, isCurrentSeason());
+    members.push({ ...p, status: st.status || 'active', labels: [...(inj ? [inj] : []), ...(st.labels || [])], conflict: !!st.conflict, injured: !!inj });
   });
   Object.entries(profiles || {}).forEach(([id, pr]) => {
     if (seen.has(id) || pr.linkedTo) return; // gekoppelde oud-profielen staan al onder hun Highlightly-id
@@ -321,7 +317,8 @@ function seasonMembers(list, squadPlayers, profiles) {
       id, name: pr.fullName || pr.legacyName || '?', number: pr.shirt ?? null, position: pr.position || '',
       photo: pr.photoUrl || null, nationality: pr.nationality || null,
       apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
-      status: pr.squadLevel === 'jeugd' && st.status === 'active' ? 'youth' : st.status, labels: st.labels, conflict: false, profileOnly: true,
+      status: pr.squadLevel === 'jeugd' && st.status === 'active' ? 'youth' : st.status, labels: [...(injuryLabel(pr, ref, isCurrentSeason()) ? [injuryLabel(pr, ref, isCurrentSeason())] : []), ...(st.labels || [])], conflict: false, profileOnly: true,
+      injured: !!injuryLabel(pr, ref, isCurrentSeason()),
     });
   });
   const groups = { active: [], youth: [], left: [], loaned: [], future: [] };
@@ -350,6 +347,8 @@ function profileOnlyPage(pr, id) {
         : 'Geen officiële duels in dit seizoen. Kies een ander seizoen via de clubnaam op Home.'}</p>
     </section>
     ${profileBlock(pr, id)}
+    ${valueBlock(pr, id)}
+    ${injuryBlock(pr, id)}
     ${transfersBlock(pr, id)}`;
 }
 
@@ -433,6 +432,7 @@ export const playerViews = {
     navKey: 'selectie',
     mount(root, ctx) {
       mountTransfers(root, ctx);
+      mountExtra(root, ctx, async () => (await correctedList()).profiles);
       root.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-action="edit-name"]');
         if (!btn) return;
@@ -489,6 +489,8 @@ export const playerViews = {
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>
         ${profileBlock(p.profile, p.id)}
+        ${valueBlock(p.profile || {}, p.id)}
+        ${injuryBlock(p.profile || {}, p.id)}
         ${transfersBlock(p.profile, p.id)}
         ${facts.length ? `<section class="section"><div class="section__label"><span>Feitjes</span></div>
           <div class="facts">${facts.map((f) => `<div class="fact"><span>${esc(f)}</span></div>`).join('')}</div></section>` : ''}
