@@ -11,6 +11,7 @@ import {
 import { preview, seasonStories, matchReport } from './stories.js';
 import { buildSquad } from './players.js';
 import { refreshNews, newsFor } from './news.js';
+import { bestStandings } from './livetable.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
@@ -219,7 +220,7 @@ export const magazineViews = {
       const rs = isCurrentSeason() ? null : await getRsssf(getSeason()).catch(() => null);
       const rsDiv = mainDivision(rs);
       const league = mainLeague(list) || (rsDiv && rsDiv.leagueId ? { id: rsDiv.leagueId, name: rsDiv.name } : null);
-      const standings = league ? ((await getStandings(league.id, getSeason())) || rsssfStandings(rs, league.id)) : null;
+      const standings = league ? ((await bestStandings(league.id, getSeason())) || rsssfStandings(rs, league.id)) : null;
       const next = nextMatch(list);
       const last = lastMatch(list);
       const { players } = buildSquad(list, TEAM, profiles);

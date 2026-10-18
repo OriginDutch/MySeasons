@@ -5,6 +5,7 @@ import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
 import { getSeason, seasonLabel, inSeason, isCurrentSeason } from './seasonstate.js';
 import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers } from './store.js';
 import { applyNames } from './names.js';
+import { bestStandings } from './livetable.js';
 import { coachOn, coachName } from './coaches.js';
 import { getCoaches, getClubMarks } from './store.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
@@ -266,7 +267,7 @@ export const matchViews = {
     async render() {
       const [{ list, total, conflicts }, meta, calls] = await Promise.all([correctedList(), getMeta(`sync_${getSeason()}`).then((m) => m || (isCurrentSeason() ? getMeta('sync') : null)), getCallsToday()]);
       const league = mainLeague(list);
-      const standings = league ? await getStandings(league.id, getSeason()) : null;
+      const standings = league ? await bestStandings(league.id, getSeason()) : null;
       const kicker = `MySeasons / ${league ? league.name + ' ' : ''}${seasonLabel()}`;
       if (!list.length) {
         return `
@@ -320,7 +321,7 @@ export const matchViews = {
           <section class="section"><div class="empty"><span class="empty__title">Nog geen competitie</span>
           <p class="muted">Synchroniseer eerst het seizoen op Home.</p><div><a class="btn" href="#/home">Naar Home</a></div></div></section>`;
       }
-      const st = (await getStandings(league.id, getSeason())) || rsssfStandings(rs, league.id);
+      const st = (await bestStandings(league.id, getSeason())) || rsssfStandings(rs, league.id);
       const g = st && st.groups && st.groups[0];
       const fromRsssf = st && st.source === 'rsssf';
       const marks = await getClubMarks().catch(() => ({}));
@@ -346,6 +347,7 @@ export const matchViews = {
         ${crowdBlock(list, league)}
         <section class="section">
           <div class="section__label"><span>Bijgewerkt</span><span>${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
+          ${st.source === 'live' ? '<p class="muted" style="font-size:12px">Zelf berekend uit alle uitslagen: de stand van Highlightly loopt achter tot een speelronde klaar is. Puntenaftrek is meegenomen.</p>' : ''}
           ${fromRsssf ? '<p class="muted" style="font-size:12px">Van RSSSF. De Highlightly-stand van dat seizoen kun je ook ophalen.</p>' : '<p class="muted" style="font-size:12px">De stand wordt ook bijgewerkt als je het seizoen synchroniseert.</p>'}
           <div style="display:flex;gap:8px;flex-wrap:wrap">${refresh}${isCurrentSeason() || !fromRsssf ? `<button class="btn" type="button" data-action="sync-league" data-league="${league.id}">${icons.refresh}<span>Alle wedstrijden · ~${COST.league} calls</span></button>` : ''}</div>
           <p class="muted" style="font-size:12px">Tik op een club voor al zijn wedstrijden dit seizoen.</p>

@@ -11,6 +11,7 @@ import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import { getSeason, seasonLabel, isCurrentSeason } from './seasonstate.js';
 import { mainLeague, sortByDate, dayShort, timeOf, shortRound } from './season.js';
 import { tokens } from './rsssf.js';
+import { bestStandings } from './livetable.js';
 
 const TEAM = MAIN_CLUB.id;
 const clean = (n) => String(n || '').replace(/\s*\(.*?\)\s*/g, ' ').trim();
@@ -57,7 +58,7 @@ async function load(teamKey) {
   const rsDiv = mainDivision(rs);
   const league = mainLeague(list) || (rsDiv && rsDiv.leagueId ? { id: rsDiv.leagueId, name: rsDiv.name } : null);
   if (!league) return { league: null };
-  const standings = (await getStandings(league.id, season)) || rsssfStandings(rs, league.id);
+  const standings = (await bestStandings(league.id, season)) || rsssfStandings(rs, league.id);
   const rows = standings && standings.groups && standings.groups[0] ? standings.groups[0].rows : [];
   const me = rows.find((r) => String(r.team.id) === teamKey) || null;
   const lm = await getLeagueMatches(league.id, season).catch(() => []);
