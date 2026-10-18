@@ -7,7 +7,12 @@
 //    kop, teaser, link, datum en tags terug.
 // 4. Haalt een RSSSF-seizoenspagina voor Nederland op (/rsssf/ned2025), ongewijzigd als tekst.
 //    RSSSF staat kopiëren toe met bronvermelding (Karel Stokkermans / RSSSF); de app toont die.
-// 5. Zet CORS-headers zodat alleen de MySeasons-app hem kan gebruiken.
+// 5. Nachtploeg: een wekker (Cron Trigger) werkt een wachtrij af met je restquotum en legt de
+//    ruwe antwoorden in een brievenbus (KV). De app leegt de brievenbus en schrijft zelf naar Firestore,
+//    dus de Worker heeft geen toegang tot je database.
+// 6. Zet CORS-headers zodat alleen de MySeasons-app hem kan gebruiken.
+//
+// Nodig voor de nachtploeg: een KV-namespace gekoppeld als MS_KV, en een Cron Trigger "* * * * *".
 //
 // Instellen in Cloudflare (Settings → Variables and Secrets):
 //   HIGHLIGHTLY_KEY  (type Secret)  je Highlightly API-key
@@ -46,8 +51,8 @@ function corsHeaders(origin) {
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin': allowed,
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
     'Access-Control-Expose-Headers': 'X-MS-RateLimit-Remaining, X-MS-RateLimit-Limit',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
@@ -199,9 +204,148 @@ async function verifyIdToken(token) {
   return payload;
 }
 
+// ---------- Nachtploeg ----------
+// Gratis Workers-plan: max 50 subrequests per run (KV telt mee) en 10 ms CPU. Daarom per run
+// hooguit MAX_CALLS Highlightly-calls, en de antwoorden ongeparst bewaren.
+
+const NS_QUEUE = 'ns:queue';
+const NS_STATE = 'ns:state';
+const NS_INBOX = 'ns:inbox:';
+const MAX_CALLS = 40;
+const RESERVE = 15; // in de gratis stand blijven er altijd zoveel calls over voor de app zelf
+const MODES = ['off', 'free', 'turbo'];
+
+const isId = (v) => Number.isInteger(Number(v)) && Number(v) > 0;
+
+/** Welke Highlightly-paden een wachtrij-item kost. Alleen vaste patronen: niets anders kan erdoor. */
+function pathsFor(item) {
+  const id = Number(item.id);
+  switch (item.type) {
+    case 'full': return isId(id) ? [`/matches/${id}`, `/lineups/${id}`, `/box-score/${id}`] : null;
+    case 'events': return isId(id) ? [`/matches/${id}`] : null;
+    case 'league': return isId(item.leagueId) && isId(item.season) ? [`/matches?leagueId=${Number(item.leagueId)}&season=${Number(item.season)}&limit=100&offset=${Number(item.offset) || 0}`] : null;
+    case 'program': return isId(item.teamId) && isId(item.season) && ['home', 'away'].includes(item.side) ? [`/matches?${item.side}TeamId=${Number(item.teamId)}&season=${Number(item.season)}&limit=100`] : null;
+    case 'standings': return isId(item.leagueId) && isId(item.season) ? [`/standings?leagueId=${Number(item.leagueId)}&season=${Number(item.season)}`] : null;
+    default: return null;
+  }
+}
+
+async function nsGet(env, key, fallback) {
+  const v = await env.MS_KV.get(key);
+  if (!v) return fallback;
+  try { return JSON.parse(v); } catch { return fallback; }
+}
+
+function remainingOf(res) {
+  for (const [name, value] of res.headers) {
+    const n = name.toLowerCase();
+    if (n.includes('ratelimit') && n.includes('remaining')) return Number(value);
+  }
+  return null;
+}
+
+/** Eén run: werk de wachtrij af tot het budget op is. Geeft een samenvatting terug. */
+async function nsRun(env, why) {
+  const [queue, state] = await Promise.all([nsGet(env, NS_QUEUE, []), nsGet(env, NS_STATE, {})]);
+  const mode = state.mode || 'free';
+  const results = [];
+  let calls = 0; let stop = null; let remaining = state.remaining ?? null;
+  while (queue.length && !stop) {
+    const item = queue[0];
+    const paths = pathsFor(item);
+    if (!paths) { queue.shift(); continue; }
+    if (calls + paths.length > MAX_CALLS) break;
+    if (mode !== 'turbo' && remaining != null && remaining - paths.length < RESERVE) { stop = 'reserve'; break; }
+    const bodies = []; let status = 200;
+    for (const p of paths) {
+      const res = await fetch(`${HIGHLIGHTLY_BASE}${p}`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });
+      calls++;
+      const r = remainingOf(res); if (r != null) remaining = r;
+      if (res.status === 429) { status = 429; break; }
+      if (!res.ok) { status = res.status; bodies.push(null); continue; }
+      bodies.push(await res.text());
+    }
+    if (status === 429) { stop = 'quota'; break; } // item blijft in de wachtrij
+    queue.shift();
+    results.push({ item, status, bodies });
+    // Competitie: volgende pagina van 100 erachteraan zetten (pagination uit het antwoord).
+    if (item.type === 'league' && bodies[0]) {
+      const m = bodies[0].match(/"totalCount"\s*:\s*(\d+)/);
+      const total = m ? Number(m[1]) : 0;
+      const next = (Number(item.offset) || 0) + 100;
+      if (next < total) queue.unshift({ ...item, offset: next });
+    }
+  }
+  const at = new Date().toISOString();
+  if (results.length) await env.MS_KV.put(`${NS_INBOX}${Date.now()}`, JSON.stringify({ at, results }));
+  const log = [{ at, why, calls, items: results.length, stop, remaining }, ...(state.log || [])].slice(0, 30);
+  await Promise.all([
+    env.MS_KV.put(NS_QUEUE, JSON.stringify(queue)),
+    env.MS_KV.put(NS_STATE, JSON.stringify({ ...state, mode, lastRun: at, remaining, exhaustedAt: stop === 'quota' ? at : state.exhaustedAt || null, log })),
+  ]);
+  return { calls, items: results.length, stop, remaining, queue: queue.length };
+}
+
+/** De wekker loopt elke minuut; hier beslissen we of er echt gedraaid wordt. */
+async function nsScheduled(env, time) {
+  if (!env.MS_KV) return;
+  const state = await nsGet(env, NS_STATE, {});
+  const mode = state.mode || 'free';
+  if (mode === 'off') return;
+  const d = new Date(time);
+  // Gratis: 's avonds laat (UTC 21-23 = 23-01 uur NL-zomertijd), elke 10 minuten, met reserve.
+  if (mode === 'free' && !(d.getUTCHours() >= 21 && d.getUTCMinutes() % 10 === 0)) return;
+  const queue = await env.MS_KV.get(NS_QUEUE);
+  if (!queue || queue === '[]') return;
+  await nsRun(env, 'wekker');
+}
+
+async function nsApi(request, env, url, origin) {
+  if (!env.MS_KV) return json({ error: 'Nachtploeg: KV-namespace MS_KV is nog niet gekoppeld aan de Worker' }, 501, origin);
+  const path = url.pathname.slice(3); // na /ns
+  if (path === '/state' && request.method === 'GET') {
+    const [state, queue, list] = await Promise.all([nsGet(env, NS_STATE, {}), nsGet(env, NS_QUEUE, []), env.MS_KV.list({ prefix: NS_INBOX })]);
+    const byType = {};
+    queue.forEach((q) => { byType[q.type] = (byType[q.type] || 0) + 1; });
+    return json({ state: { mode: 'free', ...state }, queue: queue.length, byType, inbox: list.keys.map((k) => k.name) }, 200, origin);
+  }
+  if (path === '/queue' && request.method === 'POST') {
+    const body = await request.json().catch(() => null);
+    const items = Array.isArray(body && body.items) ? body.items.filter((i) => pathsFor(i)) : null;
+    if (!items) return json({ error: 'Geen geldige wachtrij' }, 400, origin);
+    if (items.length > 20000) return json({ error: 'Wachtrij te groot' }, 400, origin);
+    await env.MS_KV.put(NS_QUEUE, JSON.stringify(items));
+    return json({ ok: true, queue: items.length }, 200, origin);
+  }
+  if (path === '/mode' && request.method === 'POST') {
+    const body = await request.json().catch(() => null);
+    if (!body || !MODES.includes(body.mode)) return json({ error: 'Onbekende stand' }, 400, origin);
+    const state = await nsGet(env, NS_STATE, {});
+    await env.MS_KV.put(NS_STATE, JSON.stringify({ ...state, mode: body.mode }));
+    return json({ ok: true, mode: body.mode }, 200, origin);
+  }
+  if (path === '/run' && request.method === 'POST') {
+    return json(await nsRun(env, 'handmatig'), 200, origin);
+  }
+  const m = path.match(/^\/inbox\/(ns:inbox:\d+)$/);
+  if (m && request.method === 'GET') {
+    const v = await env.MS_KV.get(m[1]);
+    return v ? new Response(v, { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...corsHeaders(origin) } }) : json({ error: 'Niet gevonden' }, 404, origin);
+  }
+  if (m && request.method === 'DELETE') {
+    await env.MS_KV.delete(m[1]);
+    return json({ ok: true }, 200, origin);
+  }
+  return json({ error: 'Onbekend pad' }, 404, origin);
+}
+
 // ---------- Worker ----------
 
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(nsScheduled(env, event.scheduledTime));
+  },
+
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
     const url = new URL(request.url);
@@ -209,8 +353,9 @@ export default {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
-    if (request.method !== 'GET') {
-      return json({ error: 'Alleen GET is toegestaan' }, 405, origin);
+    const isNs = url.pathname.startsWith('/ns/');
+    if (request.method !== 'GET' && !(isNs && ['POST', 'DELETE'].includes(request.method))) {
+      return json({ error: 'Methode niet toegestaan' }, 405, origin);
     }
 
     if (!env.HIGHLIGHTLY_KEY || !env.ALLOWED_UID) {
@@ -231,6 +376,9 @@ export default {
     if (user.sub !== env.ALLOWED_UID) {
       return json({ error: 'Dit account heeft geen toegang' }, 403, origin);
     }
+
+    // Nachtploeg: wachtrij, stand, handmatige run en de brievenbus.
+    if (isNs) return nsApi(request, env, url, origin);
 
     // Gezondheidscheck: geen Highlightly-call, kost geen quotum.
     if (url.pathname === '/health') {

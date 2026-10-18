@@ -7,7 +7,7 @@
 
 import { db } from './firebase.js';
 import {
-  collection, doc, getDoc, getDocs, setDoc, writeBatch, increment, deleteField, query, where,
+  collection, doc, getDoc, getDocs, setDoc, writeBatch, increment, deleteField, query, where, arrayUnion,
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
 
 // ---------- Handwerk per wedstrijd: matchNotes/{id} ----------
@@ -228,4 +228,21 @@ export async function getAllLeagueTeams() {
   const map = new Map();
   [...a.docs, ...b.docs].forEach((d) => { const m = d.data(); [m.homeTeam, m.awayTeam].forEach((t) => { if (t && t.id) map.set(t.id, { id: t.id, name: t.name, logo: t.logo || null }); }); });
   return [...map.values()];
+}
+
+// ---------- Competitie-index: leagueIndex/{leagueId}_{season} ----------
+// Klein overzicht per competitie-seizoen, zodat de nachtploeg niet elke keer duizenden wedstrijden hoeft te lezen.
+// { ids: [...], finished: [...], withEvents: [...] }
+
+export async function getLeagueIndexes() {
+  const snap = await getDocs(collection(db, 'leagueIndex'));
+  return snap.docs.map((d) => ({ key: d.id, ...d.data() }));
+}
+
+export function addToLeagueIndex(leagueId, season, { ids = [], finished = [], withEvents = [] }) {
+  const data = { leagueId: Number(leagueId), season: Number(season), updatedAt: new Date().toISOString() };
+  if (ids.length) data.ids = arrayUnion(...ids);
+  if (finished.length) data.finished = arrayUnion(...finished);
+  if (withEvents.length) data.withEvents = arrayUnion(...withEvents);
+  return setDoc(doc(db, 'leagueIndex', `${leagueId}_${season}`), data, { merge: true });
 }

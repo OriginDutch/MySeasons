@@ -4,7 +4,7 @@ import { hl } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import { getSeason } from './seasonstate.js';
 import { normalizeListMatch, normalizeDetail, normalizeStandings } from './normalize.js';
-import { saveMatches, saveMatchDetail, saveStandings, setMeta, countCalls, saveLeagueMatches } from './store.js';
+import { saveMatches, saveMatchDetail, saveStandings, setMeta, countCalls, saveLeagueMatches, addToLeagueIndex } from './store.js';
 import { mainLeague } from './season.js';
 
 export const COST = { season: 3, match: 3, standings: 1, league: 4 };
@@ -125,6 +125,7 @@ export async function syncLeague(leagueId, season = getSeason()) {
     }
     const list = [...new Map(all.map((m) => [m.id, m])).values()].map(normalizeListMatch);
     await saveLeagueMatches(list);
+    await addToLeagueIndex(leagueId, season, { ids: list.map((m) => m.id), finished: list.filter((m) => m.status === 'finished').map((m) => m.id) });
     await setMeta(`league_${leagueId}_${season}`, { fetchedAt: new Date().toISOString(), count: list.length, calls });
     return { count: list.length, calls };
   } finally {

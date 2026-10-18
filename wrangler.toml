@@ -1,0 +1,18 @@
+# Cloudflare Worker: myseasons-api. Wordt automatisch gedeployd via GitHub Actions
+# (.github/workflows/worker-deploy.yml) zodra worker/** of dit bestand verandert.
+# Secrets (HIGHLIGHTLY_KEY) en de tekstvariabele ALLOWED_UID staan in Cloudflare en blijven bewaard.
+
+name = "myseasons-api"
+main = "worker/myseasons-api.js"
+compatibility_date = "2024-09-23"
+workers_dev = true
+keep_vars = true # ALLOWED_UID uit het dashboard niet weggooien bij een deploy
+
+# Nachtploeg: brievenbus en wachtrij. Het id komt uit Cloudflare → Storage & Databases → KV.
+[[kv_namespaces]]
+binding = "MS_KV"
+id = "VUL_KV_ID_IN"
+
+# Wekker: elke minuut; de Worker bepaalt zelf of er gedraaid wordt (stand Uit / Gratis / Turbo).
+[triggers]
+crons = ["* * * * *"]

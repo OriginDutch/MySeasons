@@ -7,7 +7,8 @@
       "README.md",
       "worker/**",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "wrangler.toml"
     ],
     "headers": [
       {

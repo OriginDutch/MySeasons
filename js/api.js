@@ -18,7 +18,7 @@ export function getLastRateLimit() {
   return lastRateLimit;
 }
 
-async function call(path, params) {
+async function call(path, params, { method = 'GET', body } = {}) {
   const user = auth.currentUser;
   if (!user) throw new ApiError('Niet ingelogd', 401);
   const token = await user.getIdToken();
@@ -31,7 +31,9 @@ async function call(path, params) {
 
   let res;
   try {
-    res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const headers = { Authorization: `Bearer ${token}` };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    res = await fetch(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
   } catch {
     throw new ApiError('Geen verbinding met de Worker', 0);
   }
@@ -70,3 +72,13 @@ export function viNews(tag) {
 export function rsssf(year) {
   return call(`/rsssf/ned${year}`);
 }
+
+// ---------- Nachtploeg (Worker-wachtrij + brievenbus) ----------
+export const ns = {
+  state: () => call('/ns/state'),
+  setQueue: (items) => call('/ns/queue', null, { method: 'POST', body: { items } }),
+  setMode: (mode) => call('/ns/mode', null, { method: 'POST', body: { mode } }),
+  runNow: () => call('/ns/run', null, { method: 'POST', body: {} }),
+  inbox: (key) => call(`/ns/inbox/${key}`),
+  ack: (key) => call(`/ns/inbox/${key}`, null, { method: 'DELETE' }),
+};

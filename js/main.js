@@ -7,6 +7,7 @@ import { esc, icons, toast } from './ui.js';
 import { pastSeasonBar, openViewSheet } from './seasonsview.js';
 import { setSeason } from './seasonstate.js';
 import { CURRENT_SEASON } from './config.js';
+import { autoSync } from './nightshift.js';
 
 const appEl = document.getElementById('app');
 
@@ -211,6 +212,10 @@ watchAuth((user) => {
     renderShell();
     if (!trail.length) trackNavigation();
     route();
+    // Nachtploeg op de achtergrond: brievenbus legen en wachtrij verversen.
+    autoSync().then((s) => {
+      if (s && s.items) { toast(`Nachtploeg: ${s.items} items binnengehaald`); route({ keepScroll: true }); }
+    });
   } else {
     renderLogin();
   }

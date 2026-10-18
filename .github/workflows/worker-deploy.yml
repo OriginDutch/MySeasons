@@ -1,0 +1,26 @@
+name: Deploy Worker
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', 'wrangler.toml', '.github/workflows/worker-deploy.yml']
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        id: check
+        run: |
+          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ] || [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ] || grep -q VUL_KV_ID_IN wrangler.toml; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Worker-deploy overgeslagen: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID of het KV-id ontbreekt nog."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy
+        if: steps.check.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
