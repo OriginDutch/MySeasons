@@ -12,6 +12,8 @@ import { preview, seasonStories, matchReport } from './stories.js';
 import { buildSquad } from './players.js';
 import { refreshNews, newsFor } from './news.js';
 import { standingsAndMatches } from './livetable.js';
+import { rulesFor, zonesFor } from './rules.js';
+import { miniStand } from './standview.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
@@ -117,6 +119,20 @@ function seasonCover(list, league, standings, team) {
         <p class="cover__sub">${s.played} duels · ${s.w} winst, ${s.d} gelijk, ${s.l} verlies · ${s.gf}:${s.ga}${me ? ` · ${me.points} punten` : ''}</p>
       </div>
     </div>`;
+}
+
+/** Alleen op desktop: stand rond de eigen club, met zones uit de regelmotor. */
+function standSide(standings, league, leagueMatches) {
+  const g = standings && standings.groups && standings.groups[0];
+  if (!g || !league) return '';
+  const rules = isCurrentSeason() ? rulesFor(league.id, getSeason()) : null;
+  const zones = rules ? zonesFor(rules, g.rows, { matches: leagueMatches || [] }) : null;
+  return `
+    <section class="mag-section desk-only">
+      <div class="mag-section__head"><h2>Stand</h2><span class="mono muted">${esc(league.name)}</span></div>
+      ${miniStand(standings, zones)}
+      <div><a class="link-btn" href="#/stats">Hele stand</a></div>
+    </section>`;
 }
 
 function storiesRow(stories) {
@@ -263,14 +279,21 @@ export const magazineViews = {
         <div class="mag">
           ${masthead(team, league)}
           ${conflicts ? `<div class="mag-pad">${devBar(total, conflicts, '#/afwijkingen')}</div>` : ''}
+          <div class="mag-main">
           ${todoCard(last)}
           ${isCurrentSeason() ? cover(next, preview(next, list, league, standings)) : seasonCover(list, league, standings, team)}
           ${isCurrentSeason() && next && countdown(next.date).state === 'done' ? `<div class="mag-pad"><p class="muted" style="font-size:13px;margin:0 0 8px">${matchTitle(next)} is afgelopen. Haal de uitslag op:</p><button class="btn btn--primary" type="button" data-action="sync-season">${icons.refresh}<span>Uitslag ophalen · ${COST.season} calls</span></button></div>` : ''}
           ${storiesRow(stories)}
           ${lastWeek(last, matchReport(last))}
+          </div>
+          <aside class="mag-side">
+          ${standSide(standings, league, both.matches)}
           ${newsBlock(news, teams)}
+          </aside>
+          <div class="mag-full">
           ${seasonStrip(list, league, standings)}
           <div class="mag-pad">${syncFooter(meta, calls)}</div>
+          </div>
         </div>`;
     },
     mount(root, ctx) {

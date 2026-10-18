@@ -670,3 +670,35 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .bracket .is-me { font-weight: 700; color: var(--accent-text); }
 .season-flag { font-size: 13px; padding: 8px 12px; border-left: 3px solid var(--danger); background: var(--surface-hover); margin: 0; }
 .result--pen { font-weight: 500; font-size: 10px; }
+
+/* ---------- Desktop-magazine (E3): twee kolommen vanaf 1100px ---------- */
+.mag-main, .mag-side, .mag-full { display: contents; }
+.desk-only { display: none; }
+@media (min-width: 1100px) {
+  .view:has(> .mag), .view:has(.mag) { max-width: 1180px; }
+  .mag { display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: 40px; row-gap: 0; align-items: start; }
+  .mag > .mast, .mag > .mag-pad, .mag-full { grid-column: 1 / -1; }
+  .mag > .mast { margin-bottom: 20px; }
+  .mag-main, .mag-side, .mag-full { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .mag-main { grid-column: 1; }
+  .mag-side { grid-column: 2; position: sticky; top: 16px; gap: 24px; }
+  .mag-full { margin-top: 24px; }
+  .desk-only { display: grid; }
+  /* Cover: breder beeld, grotere kop, niet meer tot de rand */
+  .mag-main .cover { margin: 0; }
+  .mag-main .cover__photo { height: 300px; }
+  .mag-main .cover__crests { gap: 40px; }
+  .mag-main .cover__crests img.crest { width: 112px; height: 112px; }
+  .mag-main .cover__crests .crest--txt { width: 96px; height: 96px; }
+  .mag-main .cover__title { font-size: 48px; }
+  .mag-main .cover__band { padding: 24px 28px 28px; }
+  .mag-main .cover__tag, .mag-main .cover__time { top: 20px; }
+  /* Verhalen: raster in plaats van vegen */
+  .mag-main .stories { margin: 0; }
+  .mag-main .stories__head { padding: 0; }
+  .mag-main .stories__head span:last-child { display: none; }
+  .mag-main .stories__track { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; padding: 0; }
+  .mag-main .story { flex: none; }
+  .mag-side .stand .st-wide { display: none; }
+  .mag-side .table-wrap { overflow: visible; }
+}
