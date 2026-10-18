@@ -625,3 +625,5 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .st-mark--interessant { border: 0; padding: 0; font-size: 11px; }
 .flag { width: 18px; height: 14px; border-radius: 2px; box-shadow: 0 0 0 1px var(--hairline); vertical-align: -2px; margin-right: 6px; object-fit: cover; }
 .nat { white-space: nowrap; margin-right: 8px; }
+.row-flags { display: inline-flex; gap: 3px; margin-left: 8px; vertical-align: 1px; }
+.row-flags .flag { width: 16px; height: 12px; margin: 0; }

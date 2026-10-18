@@ -177,9 +177,11 @@ function rowHtml(p, sort) {
     : p.squads ? `${p.squads}× op de bank` : 'nog geen officieel duel';
   const tags = (p.labels || []).map((l) => `<span class="ptag">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '');
   const sub = `${base}${tags ? ' ' + tags : ''}`;
+  const nat = p.nationality || (p.profile && p.profile.nationality);
+  const flags = nat ? nationalities(nat).map((n) => flag(n, 12)).join('') : '';
   return `<a class="list-row player-row" href="#/speler/${encodeURIComponent(p.id)}">
     ${avatar(p)}
-    <span class="list-row__main"><span class="list-row__title">${esc(p.name)}</span>
+    <span class="list-row__main"><span class="list-row__title">${esc(p.name)}${flags ? `<span class="row-flags">${flags}</span>` : ''}</span>
       <span class="list-row__sub">${sort === 'line' ? '' : esc(LINE_SHORT[p.position] || '—') + ' · '}${sub}</span></span>
     <span class="player-row__stats mono">
       <span title="Goals">${p.goals || '·'}</span><span title="Assists">${p.assists || '·'}</span>
@@ -248,7 +250,7 @@ function seasonMembers(list, squadPlayers, profiles) {
     if (!st.member) return;
     members.push({
       id, name: pr.fullName || pr.legacyName || '?', number: pr.shirt ?? null, position: pr.position || '',
-      photo: pr.photoUrl || null,
+      photo: pr.photoUrl || null, nationality: pr.nationality || null,
       apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
       status: pr.squadLevel === 'jeugd' && st.status === 'active' ? 'youth' : st.status, labels: st.labels, conflict: false, profileOnly: true,
     });
@@ -301,7 +303,7 @@ export const playerViews = {
           <p class="muted" style="font-size:13px">Iedereen uit je archief, huidige spelers bovenaan, daarna wie het laatst vertrok.</p>
           <div class="list">${rows.map((r) => `<a class="list-row player-row" href="#/speler/${encodeURIComponent(r.id)}">
             ${avatar({ name: r.name, photo: r.pr.photoUrl, number: r.pr.shirt })}
-            <span class="list-row__main"><span class="list-row__title">${esc(r.name)}</span>
+            <span class="list-row__main"><span class="list-row__title">${esc(r.name)}${r.pr.nationality ? `<span class="row-flags">${nationalities(r.pr.nationality).map((n) => flag(n, 12)).join('')}</span>` : ''}</span>
               <span class="list-row__sub">${esc(LINE_SHORT[r.pr.position] || '—')}${periodText(r.pr) ? ' · ' + esc(periodText(r.pr)) : ''}${String(r.id).startsWith('legacy-') ? ' · niet gekoppeld' : ''}</span></span>
             <span></span></a>`).join('')}</div>
         </section>`;
