@@ -54,6 +54,31 @@ function todoCard(m) {
     </section>`;
 }
 
+// ---------- Countdown op wedstrijddag ----------
+const MATCH_MS = 2 * 3600e3; // aftrap + ~2 uur = afgelopen
+
+/** { state: 'far'|'soon'|'close'|'live'|'done', text } voor een aftrap. */
+export function countdown(iso, now = Date.now()) {
+  const diff = Date.parse(iso) - now;
+  if (diff > 24 * 3600e3) return { state: 'far', text: '' };
+  if (diff > 3600e3) {
+    const h = Math.floor(diff / 3600e3); const m = Math.floor((diff % 3600e3) / 60e3);
+    return { state: 'soon', text: `Nog ${h} u ${String(m).padStart(2, '0')} min` };
+  }
+  if (diff > 0) {
+    const m = Math.max(1, Math.ceil(diff / 60e3));
+    return { state: 'close', text: m === 1 ? 'Over 1 minuut!' : `Over ${m} minuten!` };
+  }
+  if (-diff < MATCH_MS) return { state: 'live', text: 'Bezig' };
+  return { state: 'done', text: 'Afgelopen' };
+}
+
+function countdownChip(next) {
+  const c = countdown(next.date);
+  if (c.state === 'far') return '';
+  return `<span class="cover__count cover__count--${c.state} mono" data-countdown="${esc(next.date)}" data-state="${c.state}">${c.state === 'live' ? '<i class="live-dot"></i>' : ''}${esc(c.text)}</span>`;
+}
+
 function cover(next, p) {
   if (!next || !p) return '';
   const rel = relativeDay(next.date);
@@ -65,6 +90,7 @@ function cover(next, p) {
         <div class="cover__crests">${crest(next.homeTeam, 64)}<span class="cover__vs">vs</span>${crest(next.awayTeam, 64)}</div>
         <span class="cover__tag">${p.cup ? 'Beker' : 'Voorbeschouwing'}</span>
         <span class="cover__time mono">${esc(timeOf(next.date))}</span>
+        ${countdownChip(next)}
       </div>
       <div class="cover__band">
         <span class="cover__kicker mono">${esc(when)} · ${esc(compName(next))}${esc(round)} · ${isHome(next, TEAM) ? 'thuis' : 'uit'}</span>
@@ -238,6 +264,7 @@ export const magazineViews = {
           ${conflicts ? `<div class="mag-pad">${devBar(total, conflicts, '#/afwijkingen')}</div>` : ''}
           ${todoCard(last)}
           ${isCurrentSeason() ? cover(next, preview(next, list, league, standings)) : seasonCover(list, league, standings, team)}
+          ${isCurrentSeason() && next && countdown(next.date).state === 'done' ? `<div class="mag-pad"><p class="muted" style="font-size:13px;margin:0 0 8px">${matchTitle(next)} is afgelopen. Haal de uitslag op:</p><button class="btn btn--primary" type="button" data-action="sync-season">${icons.refresh}<span>Uitslag ophalen · ${COST.season} calls</span></button></div>` : ''}
           ${storiesRow(stories)}
           ${lastWeek(last, matchReport(last))}
           ${newsBlock(news, teams)}
@@ -252,6 +279,16 @@ export const magazineViews = {
         if (btn.dataset.action === 'sync-season') handleSync(btn, ctx);
         if (btn.dataset.action === 'fetch-match') handleFetch(btn, ctx, btn.dataset.id);
       });
+      // Countdown laten aftellen; bij een nieuwe fase (bijv. van 'bezig' naar 'afgelopen') het scherm verversen.
+      const chip = root.querySelector('[data-countdown]');
+      if (chip) {
+        const timer = setInterval(() => {
+          if (!chip.isConnected) { clearInterval(timer); return; }
+          const c = countdown(chip.dataset.countdown);
+          if (c.state !== chip.dataset.state) { clearInterval(timer); ctx.refresh(); return; }
+          chip.innerHTML = `${c.state === 'live' ? '<i class="live-dot"></i>' : ''}${esc(c.text)}`;
+        }, 15000);
+      }
       // Nieuws op de achtergrond verversen (hooguit eens per kwartier).
       if (this._teams && root.querySelector('[data-news]')) {
         refreshNews(this._teams, { focus: this._focus }).then((r) => {

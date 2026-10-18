@@ -630,3 +630,11 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .nat-pick { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: center; gap: 6px; }
 .nat-pick__flag { display: flex; align-items: center; justify-content: center; min-height: 14px; }
 .nat-pick__flag .flag { margin: 0; }
+
+/* ---------- Countdown ---------- */
+.cover__count { position: absolute; left: var(--gutter); bottom: 14px; z-index: 1; background: rgb(0 0 0 / 0.6); color: #fff; font-size: 15px; font-weight: 500; padding: 6px 10px; display: inline-flex; align-items: center; gap: 8px; }
+.cover__count--close { background: var(--tag); color: var(--tag-ink); font-weight: 700; }
+.cover__count--live { background: #D8261A; color: #fff; font-weight: 700; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; display: inline-block; animation: livepulse 1.4s ease-in-out infinite; }
+@keyframes livepulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
