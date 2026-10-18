@@ -828,3 +828,9 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .sq-group-toggle { width: 260px; }
 .segmented--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .vchart__area--now { opacity: .05; }
+.clubpick { position: relative; }
+.clubpick__list { position: absolute; left: 0; right: 0; top: 100%; z-index: 5; display: grid; background: var(--bg); border: 1px solid var(--rule); box-shadow: 0 6px 18px rgb(0 0 0 / .18); max-height: 240px; overflow: auto; }
+.clubpick__opt { display: flex; align-items: center; gap: 8px; padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--hairline); }
+.clubpick__opt:hover, .clubpick__opt:focus-visible { background: var(--surface-hover); }
+.clubpick__chosen { font-size: 12px; display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.transfer-club { display: inline-flex; align-items: center; gap: 6px; vertical-align: -3px; }

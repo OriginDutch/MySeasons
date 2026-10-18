@@ -2,6 +2,7 @@
 
 import { esc, toast } from './ui.js';
 import { savePlayer } from './store.js';
+import { clubField, clubCrest, knownTeams, matchTeam } from './clubpick.js';
 import { autoShort } from './names.js';
 import { openSheet } from './editor.js';
 import { MAIN_CLUB } from './config.js';
@@ -62,8 +63,8 @@ function transfersBlock(pr, id) {
       <div class="section__label"><span>Transfers</span><span>${list.length || ''}</span></div>
       ${list.length ? `<div class="list">${list.map((t) => `
         <button type="button" class="list-row transfer-row" data-edit-transfer="${t.i}" data-pid="${esc(String(id))}">
-          <span class="list-row__main"><span class="list-row__title">${esc(T_LABEL[t.type] || t.type)}${t.club ? ` · ${esc(t.club)}` : ''}</span>
-          <span class="list-row__sub">${esc(dmy(t.date))}${t.dateTo ? ` t/m ${esc(dmy(t.dateTo))}` : ''}${t.amount ? ` · ${euro(t.amount)}` : ''}${t.note ? ` · ${esc(t.note)}` : ''}</span></span>
+          <span class="list-row__main"><span class="list-row__title">${esc(T_LABEL[t.type] || t.type)}${t.club ? ` · <span class="transfer-club">${t.clubId ? clubCrest({ logo: t.clubLogo, name: t.club }, 18) : ''}${esc(t.club)}</span>` : ''}</span>
+          <span class="list-row__sub">${esc(dmy(t.date))}${t.dateTo ? ` t/m ${esc(dmy(t.dateTo))}` : ''}${t.amount ? ` · ${euro(t.amount)}` : ''}${t.note ? ` · ${esc(t.note)}` : ''}${/vrij/i.test(t.note || '') && t.amount > 0 ? ' <span class="ptag ptag--warn">vrije transfer met bedrag?</span>' : ''}</span></span>
           <span class="muted" aria-hidden="true">✎</span></button>`).join('')}</div>`
         : '<p class="muted" style="font-size:13px">Nog geen transfers. Zonder transfers telt alleen het wedstrijdformulier.</p>'}
       <div><button class="btn btn--sm" type="button" data-add-transfer data-pid="${esc(String(id))}">+ Transfer toevoegen</button></div>
@@ -79,7 +80,7 @@ async function editTransfer(ctx, id, index, profiles) {
     body: `<label class="field"><span>Soort</span><select name="type">${T_TYPES.map(([v, l]) => `<option value="${v}" ${t.type === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
       <div class="field-row"><label class="field"><span>Datum</span><input name="date" type="date" value="${esc(t.date || '')}"></label>
       <label class="field"><span>Tot (bij huur)</span><input name="dateTo" type="date" value="${esc(t.dateTo || '')}"></label></div>
-      <label class="field"><span>Club</span><input name="club" maxlength="60" autocomplete="off" placeholder="bijv. Bali United" value="${esc(t.club || '')}"></label>
+      ${clubField('club', 'Club', t)}
       <div class="field-row"><label class="field"><span>Bedrag (€)</span><input name="amount" type="number" inputmode="numeric" min="0" step="1000" placeholder="leeg = onbekend" value="${t.amount ?? ''}"></label>
       <label class="field"><span>Notitie</span><input name="note" maxlength="120" placeholder="bijv. Vrije transfer" value="${esc(t.note || '')}"></label></div>
       ${index != null ? '<label class="field field--check"><input type="checkbox" name="delete"> <span>Deze transfer verwijderen</span></label>' : ''}`,
@@ -95,7 +96,10 @@ async function editTransfer(ctx, id, index, profiles) {
   if (data.get('delete')) next.splice(index, 1);
   else {
     const amount = data.get('amount') === '' ? null : Number(data.get('amount'));
-    const item = { type: data.get('type'), date: data.get('date'), dateTo: data.get('dateTo') || null, club: String(data.get('club') || '').trim() || null, amount, note: String(data.get('note') || '').trim() || null };
+    const club = String(data.get('club') || '').trim() || null;
+    let clubId = data.get('clubId') || null; let clubLogo = data.get('clubLogo') || null;
+    if (club && !clubId) { const hit = matchTeam(await knownTeams(), club); if (hit) { clubId = hit.id; clubLogo = hit.logo || null; } }
+    const item = { type: data.get('type'), date: data.get('date'), dateTo: data.get('dateTo') || null, club, clubId: clubId && !Number.isNaN(Number(clubId)) ? Number(clubId) : clubId, clubLogo: clubId ? clubLogo : null, amount, note: String(data.get('note') || '').trim() || null };
     if (index != null) next[index] = item; else next.push(item);
   }
   try {
