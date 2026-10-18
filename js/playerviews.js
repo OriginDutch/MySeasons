@@ -263,14 +263,15 @@ const COLS = [
   ['min', 'Minuten', 'num'], ['goals', 'G', 'num'], ['assists', 'A', 'num'], ['rating', 'Cijfer', 'num'], ['value', 'Waarde', 'num'],
 ];
 function squadTable(players, profiles) {
-  const rows = players.map((p) => {
+  const posKey = (p) => (LINE_ORDER[p.position] || 9) * 100 + (p.number ?? 99);
+  const rows = players.slice().sort((a, b) => posKey(a) - posKey(b)).map((p) => {
     const pr = p.profile || profiles[String(p.id)] || {};
     const age = ageOf(pr.dob);
     const val = (pr.valueHistory || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
     const nat = p.nationality || pr.nationality;
     const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '');
     const v = { nr: p.number ?? 99, name: p.name, pos: (LINE_ORDER[p.position] || 9) * 100 + (p.number ?? 99), age: age ?? 99, apps: p.apps || 0, min: p.minutes || 0, goals: p.goals || 0, assists: p.assists || 0, rating: p.rating ?? -1, value: val ? val.amount : -1 };
-    return `<tr data-href="#/speler/${encodeURIComponent(p.id)}" ${Object.entries(v).map(([k, x]) => `data-${k}="${esc(String(x))}"`).join(' ')}>
+    return `<tr data-line="${esc(p.position || '')}" data-href="#/speler/${encodeURIComponent(p.id)}" ${Object.entries(v).map(([k, x]) => `data-${k}="${esc(String(x))}"`).join(' ')}>
       <td class="mono sq-nr">${p.number ?? '–'}</td>
       <td class="sq-name"><a href="#/speler/${encodeURIComponent(p.id)}">${avatar(p)}<span class="sq-name__txt"><span class="sq-name__n">${esc(p.name)}${nat ? `<span class="row-flags">${nationalities(nat).map((n) => flag(n, 14)).join('')}</span>` : ''}</span>${tags ? `<span class="sq-name__tags">${tags}</span>` : ''}</span></a></td>
       <td>${esc(LINE_SHORT[p.position] || '—')}</td>
@@ -283,9 +284,30 @@ function squadTable(players, profiles) {
       <td class="mono">${val ? euro(val.amount) : '–'}</td>
     </tr>`;
   }).join('');
-  return `<div class="table-wrap"><table class="table sq-table" data-sort-key="pos" data-sort-dir="asc">
+  const html = `<div class="table-wrap"><table class="table sq-table" data-sort-key="pos" data-sort-dir="asc">
     <thead><tr>${COLS.map(([k, l]) => `<th data-key="${k}" data-type="${COLS.find((c) => c[0] === k)[2]}" ${k === 'pos' ? 'aria-sort="ascending"' : ''}><button type="button">${l}</button></th>`).join('')}</tr></thead>
     <tbody>${rows}</tbody></table></div>`;
+  return html;
+}
+
+/** Kopjes Keepers / Verdedigers / ... tussen de rijen, alleen als er op positie gesorteerd is. */
+const LINE_LABEL = Object.fromEntries(LINES.map(([k, l]) => [k, l]));
+function groupRows(table) {
+  table.querySelectorAll('tr.sq-group').forEach((r) => r.remove());
+  if (table.dataset.sortKey !== 'pos' || table.dataset.sortDir !== 'asc') return;
+  const body = table.tBodies[0];
+  const rows = [...body.rows];
+  let last = null;
+  rows.forEach((r) => {
+    const line = r.dataset.line || '';
+    if (line === last) return;
+    last = line;
+    const n = rows.filter((x) => (x.dataset.line || '') === line).length;
+    const g = document.createElement('tr');
+    g.className = 'sq-group';
+    g.innerHTML = `<th colspan="${COLS.length}"><span>${esc(LINE_LABEL[line] || 'Overig')}</span><span class="mono">${n}</span></th>`;
+    body.insertBefore(g, r);
+  });
 }
 
 function sortTable(table, key) {
@@ -295,6 +317,7 @@ function sortTable(table, key) {
   const asc = same ? table.dataset.sortDir !== 'asc' : ['nr', 'name', 'pos', 'age'].includes(key);
   table.dataset.sortKey = key; table.dataset.sortDir = asc ? 'asc' : 'desc';
   const body = table.tBodies[0];
+  table.querySelectorAll('tr.sq-group').forEach((r) => r.remove());
   const rows = [...body.rows];
   rows.sort((a, b) => {
     const x = a.dataset[key]; const y = b.dataset[key];
@@ -302,7 +325,8 @@ function sortTable(table, key) {
     return (asc ? c : -c) || Number(a.dataset.pos) - Number(b.dataset.pos);
   });
   rows.forEach((r) => body.append(r));
-  table.querySelectorAll('th').forEach((th) => { if (th.dataset.key === key) th.setAttribute('aria-sort', asc ? 'ascending' : 'descending'); else th.removeAttribute('aria-sort'); });
+  groupRows(table);
+  table.querySelectorAll('thead th').forEach((th) => { if (th.dataset.key === key) th.setAttribute('aria-sort', asc ? 'ascending' : 'descending'); else th.removeAttribute('aria-sort'); });
 }
 
 function sorted(players, sort) {
@@ -468,10 +492,11 @@ export const playerViews = {
         <section class="section"><a class="link-btn" href="#/archief">Alle spelers uit je archief</a></section>`;
     },
     mount(root, ctx) {
+      root.querySelectorAll('.sq-table').forEach(groupRows);
       root.addEventListener('click', (e) => {
         const th = e.target.closest('.sq-table th[data-key]');
         if (th) { sortTable(th.closest('table'), th.dataset.key); return; }
-        const tr = e.target.closest('.sq-table tbody tr');
+        const tr = e.target.closest('.sq-table tbody tr:not(.sq-group)');
         if (tr && !e.target.closest('a')) location.hash = tr.dataset.href;
       });
       root.querySelectorAll('input[name="sq-sort"]').forEach((input) => input.addEventListener('change', () => {

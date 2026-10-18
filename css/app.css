@@ -806,3 +806,9 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
   .st-form .form__tile { display: inline-flex; width: 18px; height: 18px; font-size: 10px; font-style: normal; margin-left: 2px; align-items: center; justify-content: center; }
   .view[data-view="stats"] .stats-side .stand .st-wide { display: none; }
 }
+@media (min-width: 1100px) {
+  .sq-table tr.sq-group th { text-align: left; padding: 22px 10px 8px; border-bottom: 1px solid var(--rule); font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .04em; }
+  .sq-table tr.sq-group th span:last-child { float: right; }
+  .sq-table tbody tr.sq-group { cursor: default; }
+  .sq-table tbody tr.sq-group:hover th { background: none; }
+}
