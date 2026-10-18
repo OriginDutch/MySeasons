@@ -1,7 +1,8 @@
 // Schermen met wedstrijddata: Home, Wedstrijden en de wedstrijdpagina.
 
 import { esc, icons, toast } from './ui.js';
-import { MAIN_CLUB, SYNC_SUGGEST_DAYS, CURRENT_SEASON } from './config.js';
+import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
+import { getSeason, seasonLabel, inSeason, isCurrentSeason } from './seasonstate.js';
 import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers } from './store.js';
 import { applyNames } from './names.js';
 import { applyCorrections, correctionSummary, goalCheck } from './corrections.js';
@@ -96,7 +97,8 @@ export async function handleFetch(btn, ctx, id) {
 
 /** Alle wedstrijden met jouw correcties erover, plus het aantal afwijkingen. */
 export async function correctedList() {
-  const [list, notes, profiles] = await Promise.all([getAllMatches(), getAllNotes(), getPlayers()]);
+  const [all, notes, profiles] = await Promise.all([getAllMatches(), getAllNotes(), getPlayers()]);
+  const list = all.filter(inSeason(getSeason()));
   let total = 0; let conflicts = 0;
   const out = list.map((m) => {
     const n = notes[m.id];
@@ -259,10 +261,10 @@ export const matchViews = {
   home: {
     title: 'Home',
     async render() {
-      const [{ list, total, conflicts }, meta, calls] = await Promise.all([correctedList(), getMeta('sync'), getCallsToday()]);
+      const [{ list, total, conflicts }, meta, calls] = await Promise.all([correctedList(), getMeta(`sync_${getSeason()}`).then((m) => m || (isCurrentSeason() ? getMeta('sync') : null)), getCallsToday()]);
       const league = mainLeague(list);
-      const standings = league ? await getStandings(league.id, CURRENT_SEASON) : null;
-      const kicker = `MySeasons / ${league ? league.name + ' ' : ''}2026–27`;
+      const standings = league ? await getStandings(league.id, getSeason()) : null;
+      const kicker = `MySeasons / ${league ? league.name + ' ' : ''}${seasonLabel()}`;
       if (!list.length) {
         return `
           ${head({ kicker, title: MAIN_CLUB.name })}
@@ -307,13 +309,13 @@ export const matchViews = {
     async render() {
       const { list } = await correctedList();
       const league = mainLeague(list);
-      const kicker = `MySeasons / ${league ? league.name + ' ' : ''}2026–27`;
+      const kicker = `MySeasons / ${league ? league.name + ' ' : ''}${seasonLabel()}`;
       if (!league) {
         return `${head({ kicker, title: 'Stand' })}
           <section class="section"><div class="empty"><span class="empty__title">Nog geen competitie</span>
           <p class="muted">Synchroniseer eerst het seizoen op Home.</p><div><a class="btn" href="#/home">Naar Home</a></div></div></section>`;
       }
-      const st = await getStandings(league.id, CURRENT_SEASON);
+      const st = await getStandings(league.id, getSeason());
       const g = st && st.groups && st.groups[0];
       const refresh = `<button class="btn" type="button" data-action="sync-standings" data-league="${league.id}">${icons.refresh}<span>Stand bijwerken · ${COST.standings} call</span></button>`;
       if (!g) {
@@ -364,7 +366,7 @@ export const matchViews = {
     async render() {
       const list = sortByDate((await correctedList()).list);
       if (!list.length) {
-        return `${head({ kicker: 'MySeasons / 2026–27', title: 'Wedstrijden' })}
+        return `${head({ kicker: `MySeasons / ${seasonLabel()}`, title: 'Wedstrijden' })}
           <section class="section"><div class="empty"><span class="empty__title">Nog leeg</span>
           <p class="muted">Synchroniseer eerst het seizoen op Home.</p><div><a class="btn" href="#/home">Naar Home</a></div></div></section>`;
       }
@@ -375,7 +377,7 @@ export const matchViews = {
         groups.get(k).push(m);
       });
       return `
-        ${head({ kicker: 'MySeasons / 2026–27', title: 'Wedstrijden' })}
+        ${head({ kicker: `MySeasons / ${seasonLabel()}`, title: 'Wedstrijden' })}
         ${[...groups].map(([month, games]) => `
           <section class="section">
             <div class="section__label"><span>${esc(month)}</span><span>${games.length}</span></div>

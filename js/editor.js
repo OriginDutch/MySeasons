@@ -12,7 +12,7 @@ import { MAIN_CLUB } from './config.js';
 // ---------- Sheet (onderkant op mobiel, midden op desktop) ----------
 
 /** Opent een formulier-sheet. Resolvet met FormData bij Opslaan, of null bij Annuleren. */
-export function openSheet({ title, body, validate }) {
+export function openSheet({ title, body, validate, submitLabel = 'Opslaan' }) {
   return new Promise((resolve) => {
     const dlg = document.createElement('dialog');
     dlg.className = 'sheet';
@@ -23,7 +23,7 @@ export function openSheet({ title, body, validate }) {
         <p class="sheet__error" role="alert" hidden></p>
         <div class="sheet__actions">
           <button class="btn" type="button" value="cancel" data-cancel>Annuleren</button>
-          <button class="btn btn--primary" type="submit" value="ok">Opslaan</button>
+          <button class="btn btn--primary" type="submit" value="ok">${esc(submitLabel)}</button>
         </div>
       </form>`;
     document.body.append(dlg);

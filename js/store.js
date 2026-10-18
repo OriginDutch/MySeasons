@@ -128,3 +128,15 @@ export async function saveNews(items) {
   items.forEach((n) => batch.set(doc(db, 'news', n.id), n, { merge: true }));
   await batch.commit();
 }
+
+// ---------- Seizoenen: seasons/{jaar} ----------
+// { year, source: 'highlightly' | 'manual', follows: [leagueId], createdAt }
+
+export async function getSeasons() {
+  const snap = await getDocs(collection(db, 'seasons'));
+  return snap.docs.map((d) => d.data());
+}
+
+export function saveSeason(year, data) {
+  return setDoc(doc(db, 'seasons', String(year)), { year: Number(year), ...data, updatedAt: new Date().toISOString() }, { merge: true });
+}

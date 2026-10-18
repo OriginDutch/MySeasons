@@ -4,6 +4,9 @@ import { initTheme } from './theme.js';
 import { watchAuth, signInWithGoogle, completeRedirectSignIn } from './firebase.js';
 import { views } from './views.js';
 import { esc, icons, toast } from './ui.js';
+import { pastSeasonBar, openViewSheet } from './seasonsview.js';
+import { setSeason } from './seasonstate.js';
+import { CURRENT_SEASON } from './config.js';
 
 const appEl = document.getElementById('app');
 
@@ -97,6 +100,8 @@ function trackNavigation() {
 }
 
 document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-season-now]')) { setSeason(CURRENT_SEASON); route({ keepScroll: false }); return; }
+  if (e.target.closest('[data-open-season]')) { openViewSheet(ctx); return; }
   const back = e.target.closest('.back-btn');
   if (!back || trail.length < 2) return; // geen app-geschiedenis: gewone link naar het hoofdscherm
   e.preventDefault();
@@ -128,7 +133,7 @@ async function route({ keepScroll = false } = {}) {
   // Vervang het view-element zodat oude event listeners verdwijnen.
   const old = document.getElementById('view');
   const fresh = old.cloneNode(false);
-  fresh.innerHTML = html;
+  fresh.innerHTML = pastSeasonBar() + html;
   old.replaceWith(fresh);
   if (view.mount) view.mount(fresh, ctx, args);
 

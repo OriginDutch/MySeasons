@@ -1,7 +1,8 @@
 // Home als clubmagazine: te-doen, voorbeschouwing, verhalen, vorige week, seizoen.
 
 import { esc, icons, toast } from './ui.js';
-import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
+import { MAIN_CLUB } from './config.js';
+import { getSeason, isCurrentSeason, seasonLabel } from './seasonstate.js';
 import { getMeta, getCallsToday, getStandings } from './store.js';
 import { COST } from './sync.js';
 import {
@@ -26,13 +27,14 @@ function clubTeam(list) {
   return { id: TEAM, name: MAIN_CLUB.name, logo: null };
 }
 
-function masthead(team) {
+function masthead(team, league) {
   return `
     <header class="mast">
-      <div class="mast__club">
+      <button class="mast__club mast__btn" type="button" data-open-season aria-label="Club of seizoen wisselen">
         <span class="mast__crest">${team.logo ? crest(team, 30) : esc(MAIN_CLUB.short)}</span>
-        <h1 class="mast__name">${esc(MAIN_CLUB.name)}</h1>
-      </div>
+        <span class="mast__titles"><span class="mast__name">${esc(MAIN_CLUB.name)} <svg class="mast__chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+        <span class="mast__sub mono">${league ? esc(league.id === 76523 ? 'KKD' : league.name) + ' · ' : ''}${esc(seasonLabel())}</span></span>
+      </button>
       <span class="mast__date mono">${esc(today())}</span>
     </header>`;
 }
@@ -68,6 +70,24 @@ function cover(next, p) {
         ${p.sub ? `<p class="cover__sub">${esc(p.sub)}</p>` : ''}
       </div>
     </a>`;
+}
+
+function seasonCover(list, league, standings, team) {
+  if (!league) return '';
+  const s = leagueSummary(list, TEAM, league.id);
+  const g = standings && standings.groups && standings.groups[0];
+  const me = g ? g.rows.find((r) => r.team.id === TEAM) : null;
+  const done = s.played && !list.some((m) => m.league && m.league.id === league.id && m.status !== 'finished');
+  const title = me ? `${me.position}e in de ${league.id === 76523 ? 'KKD' : league.name}` : `${MAIN_CLUB.name} in de ${league.name}`;
+  return `
+    <div class="cover">
+      <div class="cover__photo" style="height:150px"><div class="cover__crests">${crest(team, 64)}</div><span class="cover__tag">Seizoensverslag</span></div>
+      <div class="cover__band">
+        <span class="cover__kicker mono">${esc(league.name)} · ${esc(seasonLabel())}${done ? ' · eindstand' : ''}</span>
+        <h2 class="cover__title">${esc(title)}</h2>
+        <p class="cover__sub">${s.played} duels · ${s.w} winst, ${s.d} gelijk, ${s.l} verlies · ${s.gf}:${s.ga}${me ? ` · ${me.points} punten` : ''}</p>
+      </div>
+    </div>`;
 }
 
 function storiesRow(stories) {
@@ -174,10 +194,10 @@ export const magazineViews = {
   home: {
     title: 'Home',
     async render() {
-      const [{ list, total, conflicts, profiles }, meta, calls] = await Promise.all([correctedList(), getMeta('sync'), getCallsToday()]);
+      const [{ list, total, conflicts, profiles }, meta, calls] = await Promise.all([correctedList(), getMeta(`sync_${getSeason()}`).then((m) => m || (isCurrentSeason() ? getMeta('sync') : null)), getCallsToday()]);
       const team = clubTeam(list);
       if (!list.length) {
-        return `${masthead(team)}
+        return `${masthead(team, null)}
           <section class="section"><div class="empty">
             <span class="empty__title">Haal je seizoen op</span>
             <p class="muted">Eén keer synchroniseren haalt het hele programma en alle uitslagen van dit seizoen op. Dat kost ${COST.season} van je 100 API-calls van vandaag.</p>
@@ -185,7 +205,7 @@ export const magazineViews = {
           </div></section>`;
       }
       const league = mainLeague(list);
-      const standings = league ? await getStandings(league.id, CURRENT_SEASON) : null;
+      const standings = league ? await getStandings(league.id, getSeason()) : null;
       const next = nextMatch(list);
       const last = lastMatch(list);
       const { players } = buildSquad(list, TEAM, profiles);
@@ -199,10 +219,10 @@ export const magazineViews = {
       this._focus = [TEAM, ...(nextOpp ? [nextOpp.id] : [])];
       return `
         <div class="mag">
-          ${masthead(team)}
+          ${masthead(team, league)}
           ${conflicts ? `<div class="mag-pad">${devBar(total, conflicts, '#/afwijkingen')}</div>` : ''}
           ${todoCard(last)}
-          ${cover(next, preview(next, list, league, standings))}
+          ${isCurrentSeason() ? cover(next, preview(next, list, league, standings)) : seasonCover(list, league, standings, team)}
           ${storiesRow(stories)}
           ${lastWeek(last, matchReport(last))}
           ${newsBlock(news, teams)}

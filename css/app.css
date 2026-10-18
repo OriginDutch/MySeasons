@@ -551,3 +551,28 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
    Invoervelden en je eigen notities blijven selecteerbaar. */
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+
+/* ---------- Seizoenen ---------- */
+.mast__btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.mast__titles { display: grid; gap: 2px; }
+.mast__name { display: inline-flex; align-items: center; gap: 6px; }
+.mast__sub { font-size: 11px; color: var(--muted); }
+.past-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--tag); color: var(--tag-ink); margin: 0 calc(-1 * var(--gutter)); padding: 10px var(--gutter); font-size: 13px; font-weight: 600; position: sticky; top: 0; z-index: 5; }
+.past-bar button { background: none; border: 0; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; min-height: 32px; cursor: pointer; }
+.pick-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 6px; }
+.pick-label a { color: inherit; }
+.pick { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 52px; border-top: 1px solid var(--hairline); cursor: pointer; position: relative; }
+.pick:has(.pick__crest) { grid-template-columns: 52px minmax(0, 1fr) auto; }
+.pick input { position: absolute; opacity: 0; pointer-events: none; }
+.pick b { font-weight: 600; display: block; } .pick small { display: block; font-size: 12px; color: var(--muted); }
+.pick__year { font-size: 12px; }
+.pick__crest { width: 28px; height: 28px; border-radius: 50%; background: var(--crest-bg); color: var(--crest-ink); font-weight: 800; font-size: 8px; display: flex; align-items: center; justify-content: center; }
+.pick__tick { color: var(--accent); font-weight: 800; visibility: hidden; }
+.pick--on .pick__tick, .pick:has(input:checked) .pick__tick { visibility: visible; }
+.pick:has(input:checked), .pick--on { box-shadow: inset 3px 0 0 var(--accent); padding-left: 0; }
+.pick:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sheet__body { max-height: 60vh; overflow-y: auto; }
+.season-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 4px 10px; align-items: center; padding: 12px 0; border-top: 1px solid var(--hairline); }
+.season-row__year { font-size: 13px; }
+.season-row__actions { grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; }
+.btn--sm { min-height: 36px; padding: 0 12px; font-size: 13px; }

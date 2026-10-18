@@ -2,6 +2,7 @@
 
 import { hl } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
+import { getSeason } from './seasonstate.js';
 import { normalizeListMatch, normalizeDetail, normalizeStandings } from './normalize.js';
 import { saveMatches, saveMatchDetail, saveStandings, setMeta, countCalls } from './store.js';
 import { mainLeague } from './season.js';
@@ -16,7 +17,7 @@ async function fetchAndSaveStandings(leagueId, season) {
   return data;
 }
 
-export async function syncStandings(leagueId, season = CURRENT_SEASON) {
+export async function syncStandings(leagueId, season = getSeason()) {
   let calls = 0;
   try {
     calls++;
@@ -30,25 +31,27 @@ export async function syncStandings(leagueId, season = CURRENT_SEASON) {
  * Programma + uitslagen van de hoofdclub dit seizoen, en daarna de stand
  * van de hoofdcompetitie. Kost 3 calls (thuis, uit, stand).
  */
-export async function syncSeason() {
+export async function syncSeason(season = getSeason()) {
   const teamId = MAIN_CLUB.id;
   let calls = 0;
   try {
-    const home = await hl('/matches', { homeTeamId: teamId, season: CURRENT_SEASON, limit: 100 });
+    const home = await hl('/matches', { homeTeamId: teamId, season, limit: 100 });
     calls++;
-    const away = await hl('/matches', { awayTeamId: teamId, season: CURRENT_SEASON, limit: 100 });
+    const away = await hl('/matches', { awayTeamId: teamId, season, limit: 100 });
     calls++;
     const all = [...(home && home.data || []), ...(away && away.data || [])];
     const unique = [...new Map(all.map((m) => [m.id, m])).values()];
     const list = unique.map(normalizeListMatch);
     await saveMatches(list);
-    await setMeta('sync', { lastSeasonSync: new Date().toISOString(), season: CURRENT_SEASON, matchCount: list.length });
+    const stamp = { lastSeasonSync: new Date().toISOString(), season, matchCount: list.length };
+    await setMeta(`sync_${season}`, stamp);
+    if (season === CURRENT_SEASON) await setMeta('sync', stamp);
 
     const league = mainLeague(list);
     if (league) {
       calls++;
       try {
-        await fetchAndSaveStandings(league.id, CURRENT_SEASON);
+        await fetchAndSaveStandings(league.id, season);
       } catch (err) {
         console.warn('Stand ophalen mislukt', err); // programma is wel binnen; stand later opnieuw
       }

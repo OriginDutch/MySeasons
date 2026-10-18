@@ -5,6 +5,7 @@ import { savePlayer } from './store.js';
 import { autoShort } from './names.js';
 import { openSheet } from './editor.js';
 import { MAIN_CLUB } from './config.js';
+import { seasonLabel } from './seasonstate.js';
 import { COST, missingDetails, fetchMany } from './sync.js';
 import { buildSquad, playerFacts, LINES, LINE_SHORT } from './players.js';
 import { correctedList, runWithButton, explain, head, crest } from './matchviews.js';
@@ -90,7 +91,7 @@ export const playerViews = {
     async render() {
       const { list, profiles } = await correctedList();
       const { players, matches } = buildSquad(list, TEAM, profiles);
-      const kicker = `MySeasons / ${MAIN_CLUB.name} 2026–27`;
+      const kicker = `MySeasons / ${MAIN_CLUB.name} ${seasonLabel()}`;
       if (!players.length) {
         return `${head({ kicker, title: 'Selectie' })}
           ${missingBlock(list) || `<section class="section"><div class="empty"><span class="empty__title">Nog geen spelers</span>
