@@ -42,15 +42,15 @@ async function call(path, params, { method = 'GET', body } = {}) {
   const limit = res.headers.get('X-MS-RateLimit-Limit');
   if (remaining !== null) lastRateLimit = { remaining: Number(remaining), limit: limit !== null ? Number(limit) : null };
 
-  let body = null;
-  try { body = await res.json(); } catch { /* geen JSON */ }
+  let data = null;
+  try { data = await res.json(); } catch { /* geen JSON */ }
 
   if (!res.ok) {
     if (res.status === 429) throw new ApiError('API-quotum voor vandaag is op', 429);
-    const msg = (body && body.error) || `Fout ${res.status}`;
-    throw new ApiError(msg, res.status, body && body.detail);
+    const msg = (data && data.error) || `Fout ${res.status}`;
+    throw new ApiError(msg, res.status, data && data.detail);
   }
-  return body;
+  return data;
 }
 
 /** Test login en Worker-instellingen. Kost geen Highlightly-quotum. */
