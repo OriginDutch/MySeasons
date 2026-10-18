@@ -723,7 +723,8 @@ function statsBlock(m) {
 
 function lineupList(l, title) {
   if (!l) return '';
-  const row = (p) => `<li><span class="mono muted">${p.number ?? ''}</span> ${esc(p.name)} <span class="muted">${esc((p.position || '').slice(0, 3))}</span></li>`;
+  const POS_ABBR = { Goalkeeper: 'K', Defender: 'V', Midfielder: 'M', Forward: 'A' };
+  const row = (p) => `<li><span class="mono muted">${p.number ?? ''}</span> ${esc(p.name)} <span class="muted">${esc(POS_ABBR[p.position] || (p.position || '').slice(0, 3))}</span></li>`;
   return `
     <div class="lineup">
       <div class="lineup__head"><span>${esc(title)}</span><span class="mono muted">${esc(l.formation || '')}</span></div>

@@ -237,13 +237,20 @@ function avatar(p) {
   return `<span class="avatar">${photo ? photoImg(photo, 'avatar__img', ini) : `<span class="avatar__ini">${ini}</span>`}${p.number != null ? `<span class="avatar__num mono">${p.number}</span>` : ''}</span>`;
 }
 
+/** Twee spelers in de huidige selectie met hetzelfde rugnummer: waarschuwen (archief maakt niet uit). */
+function markDuplicateNumbers(players) {
+  const byNr = new Map();
+  players.forEach((p) => { p.dupWith = null; if (p.number != null) byNr.set(p.number, [...(byNr.get(p.number) || []), p]); });
+  byNr.forEach((ps) => { if (ps.length > 1) ps.forEach((p) => { p.dupWith = ps.filter((x) => x !== p).map((x) => x.name); }); });
+}
+const dupTag = (p) => (p.dupWith && p.dupWith.length ? `<span class="ptag ptag--warn" title="Pas het nummer aan op de spelerspagina als het niet klopt">⚠ nr. ${esc(String(p.number))} ook: ${esc(p.dupWith.join(', '))}</span>` : '');
 const fmtLabel = (l) => l.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, d) => new Date(`${y}-${m}-${d}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: y === String(new Date().getFullYear()) ? undefined : 'numeric' }));
 
 function rowHtml(p, sort) {
   const base = p.apps
     ? `${p.apps} ${p.apps === 1 ? 'duel' : 'duels'}${p.subIns ? ` (${p.subIns} in)` : ''} · ${p.minutes}'`
     : p.squads ? `${p.squads}× op de bank` : 'nog geen officieel duel';
-  const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '');
+  const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p);
   const sub = `${base}${tags ? ' ' + tags : ''}`;
   const nat = p.nationality || (p.profile && p.profile.nationality);
   const flags = nat ? nationalities(nat).map((n) => flag(n, 12)).join('') : '';
@@ -273,7 +280,7 @@ function squadTable(players, profiles) {
     const age = ageOf(pr.dob);
     const val = (pr.valueHistory || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
     const nat = p.nationality || pr.nationality;
-    const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '');
+    const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p);
     const v = { nr: p.number ?? 99, name: p.name, pos: (LINE_ORDER[p.position] || 9) * 100 + (p.number ?? 99), age: age ?? 99, apps: p.apps || 0, min: p.minutes || 0, goals: p.goals || 0, assists: p.assists || 0, rating: p.rating ?? -1, value: val ? val.amount : -1 };
     return `<tr data-line="${esc(p.position || '')}" data-href="#/speler/${encodeURIComponent(p.id)}" ${Object.entries(v).map(([k, x]) => `data-${k}="${esc(String(x))}"`).join(' ')}>
       <td class="mono sq-nr">${p.number ?? '–'}</td>
@@ -469,6 +476,7 @@ export const playerViews = {
       const { matches } = built;
       const { members, groups } = seasonMembers(list, built.players, profiles);
       const players = groups.active;
+      markDuplicateNumbers(players);
       const kicker = `MySeasons / ${MAIN_CLUB.name} ${seasonLabel()}`;
       if (!members.length) {
         return `${head({ kicker, title: 'Selectie' })}
