@@ -7,6 +7,7 @@ import { editorViews } from './editor.js';
 import { playerViews } from './playerviews.js';
 import { magazineViews } from './magazine.js';
 import { seasonViews } from './seasonsview.js';
+import { importViews } from './importer.js';
 import { getCallsToday, getAllMatches, getAllNotes } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
 import { getThemePref, setThemePref, getClubColors, setClubColors } from './theme.js';
@@ -39,6 +40,7 @@ export const views = {
   ...playerViews,
   ...magazineViews,
   ...seasonViews,
+  ...importViews,
 
   meer: {
     title: 'Meer',
@@ -62,6 +64,10 @@ export const views = {
             </a>
             <a class="list-row" href="#/seizoenen">
               <span class="list-row__main"><span class="list-row__title">Seizoenen</span><span class="list-row__sub">Oude seizoenen bekijken, ophalen of aanmaken</span></span>
+              ${icons.chevron}
+            </a>
+            <a class="list-row" href="#/importeren">
+              <span class="list-row__main"><span class="list-row__title">Importeren</span><span class="list-row__sub">Oude Cambuur Tracker-export: spelers (meer volgt)</span></span>
               ${icons.chevron}
             </a>
             <a class="list-row" href="#/afwijkingen">

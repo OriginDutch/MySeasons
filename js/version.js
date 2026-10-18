@@ -1,3 +1,3 @@
 // Ophogen bij elke release, samen met CACHE_VERSION in sw.js.
-export const APP_VERSION = '0.8.2';
+export const APP_VERSION = '0.9.0';
 export const APP_PHASE = 'Fase 5 · seizoenen en import';

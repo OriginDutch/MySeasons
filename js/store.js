@@ -159,3 +159,13 @@ export async function getAllRsssf() {
 export function saveRsssf(year, data) {
   return setDoc(doc(db, 'rsssf', String(year)), data);
 }
+
+/** Meerdere spelersprofielen tegelijk (merge), in batches van 400. writes: [[id, data], ...] */
+export async function savePlayersBatch(writes) {
+  const at = new Date().toISOString();
+  for (let i = 0; i < writes.length; i += 400) {
+    const batch = writeBatch(db);
+    writes.slice(i, i + 400).forEach(([id, data]) => batch.set(doc(db, 'players', String(id)), { ...data, updatedAt: at }, { merge: true }));
+    await batch.commit();
+  }
+}

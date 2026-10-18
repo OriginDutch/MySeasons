@@ -577,3 +577,15 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .season-row__year { font-size: 13px; }
 .season-row__actions { grid-column: 2; display: flex; gap: 6px; flex-wrap: wrap; }
 .btn--sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+
+/* ---------- Import en profiel ---------- */
+.link-list { display: grid; }
+.link-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--hairline); }
+.link-row__old b { display: block; font-weight: 600; font-size: 14px; } .link-row__old small { font-size: 11px; }
+.link-row select { font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--rule); min-height: 40px; padding: 0 8px; width: 100%; border-radius: 0; }
+.profile { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; }
+.profile__photo { width: 84px; height: 108px; object-fit: cover; background: var(--photo); }
+.value-bars { display: flex; align-items: flex-end; gap: 6px; height: 70px; }
+.value-bar { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+.value-bar i { display: block; width: 100%; max-width: 28px; background: var(--accent); }
+.value-bar small { font-size: 9px; color: var(--muted); }

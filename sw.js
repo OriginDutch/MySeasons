@@ -1,7 +1,7 @@
 // MySeasons service worker: cachet de app-schil zodat de app offline opent.
 // Data komt niet via deze cache maar via de Firestore offline-cache.
 // Ophogen bij elke release, samen met APP_VERSION in js/version.js.
-const CACHE_VERSION = 'ms-shell-v0.8.2';
+const CACHE_VERSION = 'ms-shell-v0.9.0';
 const RUNTIME = 'ms-runtime-v1';
 
 const SHELL = [
@@ -36,6 +36,7 @@ const SHELL = [
   'js/seasonsview.js',
   'js/rsssf.js',
   'js/rsssfimport.js',
+  'js/importer.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',

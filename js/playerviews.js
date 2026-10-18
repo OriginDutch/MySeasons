@@ -41,6 +41,45 @@ async function handleMissing(btn, ctx) {
   ctx.refresh();
 }
 
+const euro = (v) => (v == null ? '—' : v >= 1e6 ? `€${(v / 1e6).toLocaleString('nl-NL', { maximumFractionDigits: 2 })} mln` : `€${Math.round(v / 1e3).toLocaleString('nl-NL')}k`);
+const dmy = (iso) => (iso ? new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+function ageOf(dob) {
+  if (!dob) return null;
+  const b = new Date(dob + 'T12:00:00'); const n = new Date();
+  return n.getFullYear() - b.getFullYear() - (n < new Date(n.getFullYear(), b.getMonth(), b.getDate()) ? 1 : 0);
+}
+const T_LABEL = { 'transfer-in': 'Gekomen', 'transfer-uit': 'Vertrokken', 'huur-in': 'Gehuurd', 'huur-uit': 'Verhuurd', promotie: 'Doorgestroomd', verlenging: 'Verlengd' };
+
+function profileBlock(pr) {
+  if (!pr || !pr.legacyId) return '';
+  const age = ageOf(pr.dob);
+  const val = pr.valueHistory && pr.valueHistory[0];
+  const kv = [
+    ['Geboren', pr.dob ? `${dmy(pr.dob)}${age != null ? ` (${age})` : ''}` : null],
+    ['Nationaliteit', pr.nationality],
+    ['Voet', pr.foot],
+    ['Lengte', pr.height ? `${pr.height} cm` : null],
+    ['Bij de club sinds', pr.joined ? dmy(pr.joined) : null],
+    ['Contract tot', pr.contractUntil ? dmy(pr.contractUntil) : null],
+    ['Marktwaarde', val ? `${euro(val.amount)} <span class="muted">· ${esc(dmy(val.date))}</span>` : null],
+  ].filter(([, v]) => v);
+  const trend = (pr.valueHistory || []).slice(0, 6).reverse();
+  const max = Math.max(...trend.map((v) => v.amount || 0), 1);
+  return `
+    <section class="section">
+      <div class="section__label"><span>Profiel</span><span>uit je oude tracker</span></div>
+      <div class="profile">
+        ${pr.photoUrl ? `<img class="profile__photo" src="${esc(pr.photoUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
+        <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Marktwaarde' ? v : esc(v)}</dd>`).join('')}</dl>
+      </div>
+      ${trend.length > 1 ? `<div class="value-bars" aria-label="Marktwaarde-verloop">${trend.map((v) => `<span class="value-bar"><i style="height:${Math.max(6, Math.round(((v.amount || 0) / max) * 48))}px"></i><small class="mono">${esc(String(v.date).slice(2, 7).replace('-', '/'))}</small></span>`).join('')}</div>` : ''}
+      ${(pr.transfers || []).length ? `<div class="list">${pr.transfers.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((t) => `
+        <div class="list-row" style="cursor:default"><span class="list-row__main"><span class="list-row__title">${esc(T_LABEL[t.type] || t.type)}${t.club ? ` · ${esc(t.club)}` : ''}</span>
+        <span class="list-row__sub">${esc(dmy(t.date))}${t.dateTo ? ` t/m ${esc(dmy(t.dateTo))}` : ''}${t.amount ? ` · ${euro(t.amount)}` : ''}${t.note ? ` · ${esc(t.note)}` : ''}</span></span></div>`).join('')}</div>` : ''}
+      ${pr.note ? `<p class="note-text">${esc(pr.note)}</p>` : ''}
+    </section>`;
+}
+
 const SORTS = [['line', 'Linie'], ['goals', 'Goals'], ['minutes', 'Minuten'], ['rating', 'Cijfer']];
 
 function rowHtml(p, sort) {
@@ -176,6 +215,7 @@ export const playerViews = {
           <div><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}">Naam aanpassen</button></div>
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>
+        ${profileBlock(p.profile)}
         ${facts.length ? `<section class="section"><div class="section__label"><span>Feitjes</span></div>
           <div class="facts">${facts.map((f) => `<div class="fact"><span>${esc(f)}</span></div>`).join('')}</div></section>` : ''}
         <section class="section">
