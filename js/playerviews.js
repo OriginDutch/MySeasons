@@ -7,6 +7,7 @@ import { openSheet } from './editor.js';
 import { MAIN_CLUB } from './config.js';
 import { seasonLabel, isCurrentSeason, getSeason } from './seasonstate.js';
 import { statusIn, seasonWindow, spells } from './membership.js';
+import { flag, nationalities, countryCode } from './flags.js';
 import { COST, missingDetails, fetchMany } from './sync.js';
 import { buildSquad, playerFacts, LINES, LINE_SHORT } from './players.js';
 import { correctedList, runWithButton, explain, head, crest } from './matchviews.js';
@@ -121,7 +122,7 @@ function profileBlock(pr) {
   const val = pr.valueHistory && pr.valueHistory[0];
   const kv = [
     ['Geboren', pr.dob ? `${dmy(pr.dob)}${age != null ? ` (${age})` : ''}` : null],
-    ['Nationaliteit', pr.nationality],
+    ['Nationaliteit', pr.nationality ? nationalities(pr.nationality).map((n) => `<span class="nat">${flag(n, 14)}${esc(n)}</span>`).join(' ') : null],
     ['Voet', pr.foot],
     ['Lengte', pr.height ? `${pr.height} cm` : null],
     ['Bij de club sinds', pr.joined ? dmy(pr.joined) : null],
@@ -134,7 +135,7 @@ function profileBlock(pr) {
     <section class="section">
       <div class="section__label"><span>Profiel</span><span>uit je oude tracker</span></div>
       <div class="profile">
-        <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Marktwaarde' ? v : esc(v)}</dd>`).join('')}</dl>
+        <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Marktwaarde' || k === 'Nationaliteit' ? v : esc(v)}</dd>`).join('')}</dl>
       </div>
       ${trend.length > 1 ? `<div class="value-bars" aria-label="Marktwaarde-verloop">${trend.map((v) => `<span class="value-bar"><i style="height:${Math.max(6, Math.round(((v.amount || 0) / max) * 48))}px"></i><small class="mono">${esc(String(v.date).slice(2, 7).replace('-', '/'))}</small></span>`).join('')}</div>` : ''}
       ${pr.note ? `<p class="note-text">${esc(pr.note)}</p>` : ''}
@@ -212,6 +213,15 @@ function squadList(players, sort) {
       ${statHead}<div class="list">${group.map((p) => rowHtml(p, sort)).join('')}</div>
     </section>`;
   }).join('');
+}
+
+/** "· 9 nationaliteiten", alleen als we van de meeste spelers de nationaliteit kennen. */
+function natFact(players, profiles) {
+  const nats = players.map((p) => { const pr = p.profile || profiles[String(p.id)]; return pr && pr.nationality ? nationalities(pr.nationality) : []; });
+  const known = nats.filter((n) => n.length).length;
+  if (known < Math.max(5, players.length * 0.6)) return '';
+  const set = new Set(nats.flat().map((n) => countryCode(n) || n.toLowerCase()));
+  return set.size > 1 ? ` · ${set.size} nationaliteiten` : '';
 }
 
 /**
@@ -323,7 +333,7 @@ export const playerViews = {
       return `
         ${head({ kicker, title: 'Selectie' })}
         <section class="section">
-          <p class="muted" style="font-size:13px">${players.length} ${isCurrentSeason() ? 'spelers nu bij de club' : 'spelers aan het eind van het seizoen'} · ${used} kwamen in actie in ${matches} officiële ${matches === 1 ? 'duel' : 'duels'}</p>
+          <p class="muted" style="font-size:13px">${players.length} ${isCurrentSeason() ? 'spelers nu bij de club' : 'spelers aan het eind van het seizoen'} · ${used} kwamen in actie in ${matches} officiële ${matches === 1 ? 'duel' : 'duels'}${natFact(players, profiles)}</p>
           <fieldset class="segmented segmented--4" style="margin:0;padding:0">
             <legend class="visually-hidden">Sorteren</legend>
             ${SORTS.map(([v, l], i) => `<input type="radio" name="sq-sort" id="sq-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sq-${v}">${l}</label>`).join('')}

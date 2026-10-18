@@ -1,7 +1,7 @@
 // MySeasons service worker: cachet de app-schil zodat de app offline opent.
 // Data komt niet via deze cache maar via de Firestore offline-cache.
 // Ophogen bij elke release, samen met APP_VERSION in js/version.js.
-const CACHE_VERSION = 'ms-shell-v0.12.0';
+const CACHE_VERSION = 'ms-shell-v0.12.1';
 const RUNTIME = 'ms-runtime-v1';
 
 const SHELL = [
@@ -40,6 +40,7 @@ const SHELL = [
   'js/clubview.js',
   'js/membership.js',
   'js/coaches.js',
+  'js/flags.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
@@ -104,6 +105,10 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate' && url.origin === self.location.origin) {
     event.respondWith(networkFirstPage(request));
+    return;
+  }
+  if (url.origin === self.location.origin && url.pathname.includes('/flags/')) {
+    event.respondWith(cacheFirst(request)); // vlaggen veranderen nooit: blijven bewaard over releases heen
     return;
   }
   if (url.origin === self.location.origin) {
