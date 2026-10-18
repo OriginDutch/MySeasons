@@ -56,6 +56,8 @@ export async function syncSeason(season = getSeason()) {
         console.warn('Stand ophalen mislukt', err); // programma is wel binnen; stand later opnieuw
       }
     }
+    // Meldingen: programma klaarzetten bij de Worker (alleen als er iets veranderd is). Fout = niet erg.
+    if (season === CURRENT_SEASON) import('./meldingen.js').then((m) => m.pushSchedule()).catch(() => {});
     return list.length;
   } finally {
     if (calls) await countCalls(calls);

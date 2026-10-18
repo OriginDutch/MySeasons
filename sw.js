@@ -1,7 +1,7 @@
 // MySeasons service worker: cachet de app-schil zodat de app offline opent.
 // Data komt niet via deze cache maar via de Firestore offline-cache.
 // Ophogen bij elke release, samen met APP_VERSION in js/version.js.
-const CACHE_VERSION = 'ms-shell-v0.18.2';
+const CACHE_VERSION = 'ms-shell-v0.19.0';
 const RUNTIME = 'ms-runtime-v1';
 
 const SHELL = [
@@ -48,6 +48,7 @@ const SHELL = [
   'js/playerextra.js',
   'js/rules.js',
   'js/inbox.js',
+  'js/meldingen.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
@@ -104,6 +105,30 @@ async function networkFirstPage(request) {
     return (await caches.match('index.html')) || Response.error();
   }
 }
+
+// ---------- Pushmeldingen (wedstrijddag) ----------
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'MySeasons', body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(data.title || 'MySeasons', {
+    body: data.body || '',
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    tag: data.tag || 'myseasons',
+    data: { url: data.url || '#/home' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL('./' + (event.notification.data && event.notification.data.url || '#/home'), self.registration.scope).href;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const win = wins.find((w) => w.url.startsWith(self.registration.scope));
+    if (win) { await win.focus(); return win.navigate ? win.navigate(target) : null; }
+    return self.clients.openWindow(target);
+  })());
+});
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;

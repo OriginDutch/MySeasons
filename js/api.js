@@ -86,3 +86,12 @@ export const ns = {
   inbox: (key) => call(`/ns/inbox/${key}`),
   ack: (key) => call(`/ns/inbox/${key}`, null, { method: 'DELETE' }),
 };
+
+// ---------- Meldingen op wedstrijddag (Web Push via de Worker) ----------
+export const push = {
+  key: () => call('/push/key'),
+  subscribe: (subscription, label) => call('/push/subscribe', null, { method: 'POST', body: { subscription, label } }),
+  unsubscribe: (endpoint) => call('/push/unsubscribe', null, { method: 'POST', body: { endpoint } }),
+  schedule: (matches) => call('/push/schedule', null, { method: 'POST', body: { matches } }),
+  test: () => call('/push/test', null, { method: 'POST', body: {} }),
+};

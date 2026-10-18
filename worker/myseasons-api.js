@@ -18,6 +18,8 @@
 //   HIGHLIGHTLY_KEY  (type Secret)  je Highlightly API-key
 //   ALLOWED_UID      (type Text)    je Firebase UID uit MySeasons → Meer → Instellingen
 
+import { pushApi, pushScheduled } from './push.js';
+
 const PROJECT_ID = 'myseasons-c1dd9';
 const HIGHLIGHTLY_BASE = 'https://soccer.highlightly.net';
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
@@ -343,7 +345,7 @@ async function nsApi(request, env, url, origin) {
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(nsScheduled(env, event.scheduledTime));
+    ctx.waitUntil(Promise.all([nsScheduled(env, event.scheduledTime), pushScheduled(env, event.scheduledTime).catch(() => {})]));
   },
 
   async fetch(request, env) {
@@ -354,7 +356,8 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
     const isNs = url.pathname.startsWith('/ns/');
-    if (request.method !== 'GET' && !(isNs && ['POST', 'DELETE'].includes(request.method))) {
+    const isPush = url.pathname.startsWith('/push/');
+    if (request.method !== 'GET' && !(isNs && ['POST', 'DELETE'].includes(request.method)) && !(isPush && request.method === 'POST')) {
       return json({ error: 'Methode niet toegestaan' }, 405, origin);
     }
 
@@ -379,6 +382,12 @@ export default {
 
     // Nachtploeg: wachtrij, stand, handmatige run en de brievenbus.
     if (isNs) return nsApi(request, env, url, origin);
+
+    // Meldingen op wedstrijddag: sleutel, aanmelden, programma klaarzetten, testmelding.
+    if (isPush) {
+      if (!env.MS_KV) return json({ error: 'Meldingen: KV-namespace MS_KV is nog niet gekoppeld' }, 501, origin);
+      return pushApi(request, env, url, (b, st) => json(b, st, origin));
+    }
 
     // Gezondheidscheck: geen Highlightly-call, kost geen quotum.
     if (url.pathname === '/health') {

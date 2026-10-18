@@ -12,6 +12,7 @@ import { clubViews } from './clubview.js';
 import { nightViews } from './nightview.js';
 import { backupViews } from './backup.js';
 import { inboxViews } from './inbox.js';
+import { meldingenViews } from './meldingen.js';
 import { getCallsToday, getAllMatches, getAllNotes } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
 import { getThemePref, setThemePref, getClubColors, setClubColors } from './theme.js';
@@ -49,6 +50,7 @@ export const views = {
   ...nightViews,
   ...backupViews,
   ...inboxViews,
+  ...meldingenViews,
 
   meer: {
     title: 'Meer',
@@ -76,6 +78,10 @@ export const views = {
             </a>
             <a class="list-row" href="#/inbox">
               <span class="list-row__main"><span class="list-row__title">Inbox</span><span class="list-row__sub">Wat je nog kunt aanvullen of nakijken</span></span>
+              ${icons.chevron}
+            </a>
+            <a class="list-row" href="#/meldingen">
+              <span class="list-row__main"><span class="list-row__title">Meldingen</span><span class="list-row__sub">“Veel plezier bij…” om 09:00 op wedstrijddag</span></span>
               ${icons.chevron}
             </a>
             <a class="list-row" href="#/backup">

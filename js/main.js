@@ -216,6 +216,8 @@ watchAuth((user) => {
     autoSync().then((s) => {
       if (s && s.items) { toast(`Nachtploeg: ${s.items} items binnengehaald`); route({ keepScroll: true }); }
     });
+    // Meldingen: programma bij de Worker actueel houden (stuurt alleen bij wijzigingen).
+    import('./meldingen.js').then((m) => m.pushSupported() && m.pushSchedule()).catch(() => {});
   } else {
     renderLogin();
   }
