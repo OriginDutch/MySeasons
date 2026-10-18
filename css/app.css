@@ -627,3 +627,6 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .nat { white-space: nowrap; margin-right: 8px; }
 .row-flags { display: inline-flex; gap: 3px; margin-left: 8px; vertical-align: 1px; }
 .row-flags .flag { width: 16px; height: 12px; margin: 0; }
+.nat-pick { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: center; gap: 6px; }
+.nat-pick__flag { display: flex; align-items: center; justify-content: center; min-height: 14px; }
+.nat-pick__flag .flag { margin: 0; }

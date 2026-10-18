@@ -7,7 +7,7 @@ import { openSheet } from './editor.js';
 import { MAIN_CLUB } from './config.js';
 import { seasonLabel, isCurrentSeason, getSeason } from './seasonstate.js';
 import { statusIn, seasonWindow, spells } from './membership.js';
-import { flag, nationalities, countryCode } from './flags.js';
+import { flag, nationalities, countryCode, NAT_TOP, NAT_ALL } from './flags.js';
 import { COST, missingDetails, fetchMany } from './sync.js';
 import { buildSquad, playerFacts, LINES, LINE_SHORT } from './players.js';
 import { correctedList, runWithButton, explain, head, crest } from './matchviews.js';
@@ -107,6 +107,8 @@ async function editTransfer(ctx, id, index, profiles) {
 
 function mountTransfers(root, ctx) {
   root.addEventListener('click', async (e) => {
+    const prof = e.target.closest('[data-edit-profile]');
+    if (prof) { const { profiles } = await correctedList(); editProfile(ctx, prof.dataset.editProfile, profiles); return; }
     const add = e.target.closest('[data-add-transfer]');
     const ed = e.target.closest('[data-edit-transfer]');
     if (!add && !ed) return;
@@ -116,8 +118,8 @@ function mountTransfers(root, ctx) {
   });
 }
 
-function profileBlock(pr) {
-  if (!pr || !pr.legacyId) return '';
+function profileBlock(pr, id) {
+  pr = pr || {};
   const age = ageOf(pr.dob);
   const val = pr.valueHistory && pr.valueHistory[0];
   const kv = [
@@ -131,16 +133,83 @@ function profileBlock(pr) {
   ].filter(([, v]) => v);
   const trend = (pr.valueHistory || []).slice(0, 6).reverse();
   const max = Math.max(...trend.map((v) => v.amount || 0), 1);
+  const editBtn = id != null ? `<div><button class="btn btn--sm" type="button" data-edit-profile="${esc(String(id))}">Profiel bewerken</button></div>` : '';
+  if (!kv.length) {
+    return `<section class="section"><div class="section__label"><span>Profiel</span></div>
+      <p class="muted" style="font-size:13px">Nog geen profiel: nationaliteit, geboortedatum, voet, lengte en contract vul je zelf in.</p>${editBtn}</section>`;
+  }
   return `
     <section class="section">
-      <div class="section__label"><span>Profiel</span><span>uit je oude tracker</span></div>
+      <div class="section__label"><span>Profiel</span><span>${pr.legacyId ? 'uit je oude tracker' : ''}</span></div>
       <div class="profile">
         <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Marktwaarde' || k === 'Nationaliteit' ? v : esc(v)}</dd>`).join('')}</dl>
       </div>
       ${trend.length > 1 ? `<div class="value-bars" aria-label="Marktwaarde-verloop">${trend.map((v) => `<span class="value-bar"><i style="height:${Math.max(6, Math.round(((v.amount || 0) / max) * 48))}px"></i><small class="mono">${esc(String(v.date).slice(2, 7).replace('-', '/'))}</small></span>`).join('')}</div>` : ''}
       ${pr.note ? `<p class="note-text">${esc(pr.note)}</p>` : ''}
+      ${editBtn}
     </section>`;
 }
+
+const POS_OPTS = [['', '—'], ['Goalkeeper', 'Keeper'], ['Defender', 'Verdediger'], ['Midfielder', 'Middenvelder'], ['Forward', 'Aanvaller']];
+const FOOT_OPTS = ['', 'rechts', 'links', 'tweebenig'];
+
+function natSelect(name, current, allowNone) {
+  const cur = current || '';
+  const known = [...NAT_TOP, ...NAT_ALL].includes(cur);
+  const opt = (n) => `<option value="${esc(n)}" ${n === cur ? 'selected' : ''}>${esc(n)}</option>`;
+  return `<span class="nat-pick"><span class="nat-pick__flag" data-flag-for="${name}">${cur ? flag(cur, 14) : ''}</span>
+    <select name="${name}" data-nat>${allowNone ? '<option value="">Geen</option>' : '<option value="">Onbekend</option>'}
+      ${cur && !known ? opt(cur) : ''}<optgroup label="Vaak">${NAT_TOP.map(opt).join('')}</optgroup><optgroup label="Alle">${NAT_ALL.map(opt).join('')}</optgroup>
+    </select></span>`;
+}
+
+async function editProfile(ctx, id, profiles) {
+  const pr = profiles[String(id)] || {};
+  const [n1, n2] = nationalities(pr.nationality);
+  const data = await openSheet({
+    title: 'Profiel bewerken',
+    body: `<label class="field"><span>Nationaliteit</span>${natSelect('nat1', n1, false)}</label>
+      <label class="field"><span>Tweede nationaliteit</span>${natSelect('nat2', n2, true)}</label>
+      <div class="field-row"><label class="field"><span>Geboortedatum</span><input name="dob" type="date" value="${esc(pr.dob || '')}"></label>
+      <label class="field"><span>Rugnummer</span><input name="shirt" type="number" inputmode="numeric" min="1" max="99" value="${pr.shirt ?? ''}"></label></div>
+      <div class="field-row"><label class="field"><span>Positie</span><select name="position">${POS_OPTS.map(([v, l]) => `<option value="${v}" ${(pr.position || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="field"><span>Voet</span><select name="foot">${FOOT_OPTS.map((f) => `<option value="${f}" ${(pr.foot || '') === f ? 'selected' : ''}>${f || '—'}</option>`).join('')}</select></label></div>
+      <div class="field-row"><label class="field"><span>Lengte (cm)</span><input name="height" type="number" inputmode="numeric" min="140" max="220" value="${pr.height ?? ''}"></label>
+      <label class="field"><span>Contract tot</span><input name="contract" type="date" value="${esc(pr.contractUntil || '')}"></label></div>
+      <p class="muted sheet__note">Positie en rugnummer van Highlightly blijven leidend in de opstellingen; dit is je profiel.</p>`,
+    validate: (fd) => {
+      if (fd.get('nat2') && fd.get('nat2') === fd.get('nat1')) return 'Twee keer dezelfde nationaliteit.';
+      const h = fd.get('height'); if (h && (Number(h) < 140 || Number(h) > 220)) return 'Lengte tussen 140 en 220 cm.';
+      const s = fd.get('shirt'); if (s && (Number(s) < 1 || Number(s) > 99)) return 'Rugnummer tussen 1 en 99.';
+      return null;
+    },
+  });
+  if (!data) return;
+  const nats = [data.get('nat1'), data.get('nat2')].filter(Boolean);
+  const next = {
+    nationality: nats.length ? nats.join(' / ') : null,
+    dob: data.get('dob') || null,
+    shirt: data.get('shirt') ? Number(data.get('shirt')) : null,
+    position: data.get('position') || null,
+    foot: data.get('foot') || null,
+    height: data.get('height') ? Number(data.get('height')) : null,
+    contractUntil: data.get('contract') || null,
+  };
+  const before = Object.fromEntries(Object.keys(next).map((k) => [k, pr[k] ?? null]));
+  try {
+    await savePlayer(id, next);
+    toast('Profiel opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await savePlayer(id, before); ctx.refresh(); } });
+    ctx.refresh();
+  } catch (err) { toast(`Opslaan lukte niet: ${err.message || err}`); }
+}
+
+// Vlag naast de dropdown live bijwerken (native dropdowns kunnen geen plaatjes tonen).
+document.addEventListener('change', (e) => {
+  const s = e.target.closest && e.target.closest('select[data-nat]');
+  if (!s) return;
+  const slot = s.closest('.nat-pick').querySelector('.nat-pick__flag');
+  if (slot) slot.innerHTML = s.value ? flag(s.value, 14) : '';
+});
 
 const SORTS = [['line', 'Linie'], ['goals', 'Goals'], ['minutes', 'Minuten'], ['rating', 'Cijfer']];
 
@@ -280,7 +349,7 @@ function profileOnlyPage(pr, id) {
         ? 'Nog niet gekoppeld aan Highlightly. Stats verschijnen zodra hij in een opgehaald seizoen voorkomt en je hem koppelt via Meer → Importeren.'
         : 'Geen officiële duels in dit seizoen. Kies een ander seizoen via de clubnaam op Home.'}</p>
     </section>
-    ${profileBlock(pr)}
+    ${profileBlock(pr, id)}
     ${transfersBlock(pr, id)}`;
 }
 
@@ -419,7 +488,7 @@ export const playerViews = {
           <div><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}" data-photo="${esc((p.profile && p.profile.photoUrl) || '')}">Naam en foto</button></div>
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>
-        ${profileBlock(p.profile)}
+        ${profileBlock(p.profile, p.id)}
         ${transfersBlock(p.profile, p.id)}
         ${facts.length ? `<section class="section"><div class="section__label"><span>Feitjes</span></div>
           <div class="facts">${facts.map((f) => `<div class="fact"><span>${esc(f)}</span></div>`).join('')}</div></section>` : ''}

@@ -16,7 +16,7 @@ const N = {
   boliviaans: 'bo', mexicaans: 'mx', amerikaans: 'us', canadees: 'ca', jamaicaans: 'jm', haitiaans: 'ht', 'costa ricaans': 'cr', hondurees: 'hn', panamees: 'pa',
   'trinidadiaans': 'tt', japans: 'jp', 'zuid-koreaans': 'kr', koreaans: 'kr', chinees: 'cn', indonesisch: 'id', australisch: 'au', 'nieuw-zeelands': 'nz', iraans: 'ir',
   iraaks: 'iq', saoedisch: 'sa', 'saoedi-arabisch': 'sa', qatarees: 'qa', syrisch: 'sy', libanees: 'lb', jordaans: 'jo', afghaans: 'af', filipijns: 'ph', thais: 'th',
-  vietnamees: 'vn', indiaas: 'in', pakistaans: 'pk', oezbeeks: 'uz', kazachs: 'kz', moldavisch: 'md', faeroers: 'fo', gibraltarees: 'gi', andorrees: 'ad',
+  vietnamees: 'vn', 'wit-russisch': 'by', 'haitiaans': 'ht', israelisch: 'il', oekraiens: 'ua', faeroers: 'fo', indiaas: 'in', pakistaans: 'pk', oezbeeks: 'uz', kazachs: 'kz', moldavisch: 'md', faeroers: 'fo', gibraltarees: 'gi', andorrees: 'ad',
 };
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ij/g, 'ij').trim();
@@ -41,3 +41,20 @@ export function flag(nationality, size = 16) {
 
 /** Splitst "Nederlands / Marokkaans" of "Nederlands, Marokkaans" in losse nationaliteiten. */
 export const nationalities = (s) => String(s || '').split(/\s*[\/,;&+]\s*|\s+en\s+/i).map((x) => x.trim()).filter(Boolean);
+
+/** Keuzelijst voor de dropdown: eerst de veelvoorkomende, daarna alles op alfabet. */
+export const NAT_TOP = ['Nederlands', 'Belgisch', 'Duits', 'Frans', 'Marokkaans', 'Surinaams', 'Curaçaos', 'Kaapverdisch', 'Noors', 'Deens', 'Zweeds', 'Engels', 'Spaans', 'Portugees'];
+export const NAT_ALL = [
+  'Afghaans', 'Albanees', 'Algerijns', 'Amerikaans', 'Andorrees', 'Angolees', 'Argentijns', 'Armeens', 'Arubaans', 'Australisch', 'Azerbeidzjaans',
+  'Belgisch', 'Beninees', 'Bosnisch', 'Boliviaans', 'Braziliaans', 'Brits', 'Bulgaars', 'Burkinees', 'Burundees', 'Canadees', 'Chileens', 'Chinees',
+  'Colombiaans', 'Congolees', 'Costa Ricaans', 'Curaçaos', 'Cypriotisch', 'Deens', 'Duits', 'Ecuadoraans', 'Egyptisch', 'Engels', 'Equatoriaal-Guinees',
+  'Estisch', 'Ethiopisch', 'Faeröers', 'Filipijns', 'Fins', 'Frans', 'Gabonees', 'Gambiaans', 'Georgisch', 'Ghanees', 'Gibraltarees', 'Grieks', 'Guinees',
+  'Guinee-Bissaus', 'Haïtiaans', 'Hondurees', 'Hongaars', 'Iers', 'IJslands', 'Indiaas', 'Indonesisch', 'Iraaks', 'Iraans', 'Israëlisch', 'Italiaans',
+  'Ivoriaans', 'Jamaicaans', 'Japans', 'Jordaans', 'Kaapverdisch', 'Kameroens', 'Kazachs', 'Keniaans', 'Kosovaars', 'Kroatisch', 'Lets', 'Libanees',
+  'Liberiaans', 'Libisch', 'Litouws', 'Luxemburgs', 'Macedonisch', 'Malinees', 'Maltees', 'Marokkaans', 'Mauritaans', 'Mexicaans', 'Moldavisch',
+  'Montenegrijns', 'Mozambikaans', 'Nederlands', 'Nieuw-Zeelands', 'Nigeriaans', 'Noord-Iers', 'Noors', 'Oegandees', 'Oekraïens', 'Oezbeeks',
+  'Oostenrijks', 'Pakistaans', 'Panamees', 'Paraguayaans', 'Peruaans', 'Pools', 'Portugees', 'Qatarees', 'Roemeens', 'Russisch', 'Rwandees',
+  'Saoedisch', 'Schots', 'Senegalees', 'Servisch', 'Sierra Leoons', 'Sloveens', 'Slowaaks', 'Spaans', 'Sudanees', 'Surinaams', 'Syrisch', 'Tanzaniaans',
+  'Thais', 'Togolees', 'Trinidadiaans', 'Tsjechisch', 'Tunesisch', 'Turks', 'Uruguayaans', 'Venezolaans', 'Vietnamees', 'Welsh', 'Wit-Russisch',
+  'Zambiaans', 'Zimbabwaans', 'Zuid-Afrikaans', 'Zuid-Koreaans', 'Zweeds', 'Zwitsers',
+];
