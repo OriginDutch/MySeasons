@@ -370,7 +370,8 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .crest--sm { width: 20px; height: 20px; font-size: 7px; }
 .stand td, .stand th { padding-left: 3px; padding-right: 3px; }
 .stand th:nth-child(n+3), .stand td:nth-child(n+3) { text-align: right; }
-.st-pos { width: 24px; color: var(--muted); }
+.stand td.st-pos, .stand th:first-child { width: 34px; padding-left: 12px; box-sizing: border-box; }
+.st-pos { color: var(--muted); }
 .st-club { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .st-club span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-pts { font-weight: 600; }
