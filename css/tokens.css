@@ -112,3 +112,7 @@
   --win: #FFD100; --win-ink: #0A2A66; --draw: #2B3550; --draw-ink: #F2F2F3;
   --photo: #0E2A63; --card: #131315;
 }
+
+/* Dunne outline die de vorm van een clubschild volgt (alleen op Home). */
+:root { --crest-outline: drop-shadow(1px 0 0 rgb(0 0 0 / .18)) drop-shadow(-1px 0 0 rgb(0 0 0 / .18)) drop-shadow(0 1px 0 rgb(0 0 0 / .18)) drop-shadow(0 -1px 0 rgb(0 0 0 / .18)); }
+:root[data-theme="dim"], :root[data-theme="dark"] { --crest-outline: drop-shadow(1px 0 0 rgb(255 255 255 / .35)) drop-shadow(-1px 0 0 rgb(255 255 255 / .35)) drop-shadow(0 1px 0 rgb(255 255 255 / .35)) drop-shadow(0 -1px 0 rgb(255 255 255 / .35)); }

@@ -484,7 +484,8 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .mast { display: flex; align-items: center; justify-content: space-between; padding: 20px 0 12px; border-bottom: 2px solid var(--rule); }
 .mast__club { display: flex; align-items: center; gap: 10px; }
 .mast__crest { width: 40px; height: 40px; border-radius: 50%; background: var(--crest-bg); color: var(--crest-ink); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 10px; flex: none; }
-.mast__crest .crest { width: 30px; height: 30px; }
+.mast__crest:has(img.crest) { background: none; border-radius: 0; }
+.mast__crest img.crest { width: 40px; height: 40px; filter: var(--crest-outline); }
 .mast__name { margin: 0; font-weight: 800; font-size: 26px; letter-spacing: -0.03em; }
 .mast__date { font-size: 11px; color: var(--muted); }
 
@@ -496,7 +497,8 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .cover__photo { position: relative; height: 200px; background: var(--photo); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .cover__photo::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.04) 0 14px, transparent 14px 28px); pointer-events: none; }
 .cover__crests { display: flex; align-items: center; gap: 22px; z-index: 1; }
-.cover__crests .crest { width: 64px; height: 64px; background: #fff; border-radius: 50%; padding: 8px; box-sizing: border-box; }
+.cover__crests img.crest { width: 76px; height: 76px; filter: drop-shadow(1px 0 0 rgb(255 255 255 / .85)) drop-shadow(-1px 0 0 rgb(255 255 255 / .85)) drop-shadow(0 1px 0 rgb(255 255 255 / .85)) drop-shadow(0 -1px 0 rgb(255 255 255 / .85)) drop-shadow(0 4px 10px rgb(0 0 0 / .35)); }
+.cover__crests .crest--txt { width: 64px; height: 64px; background: #fff; border-radius: 50%; }
 .cover__crests .crest--txt { color: #111; font-weight: 800; }
 .cover__vs { font-family: var(--font-mono); color: rgb(255 255 255 / 0.7); font-size: 13px; }
 .cover__tag { position: absolute; left: var(--gutter); top: 16px; background: var(--tag); color: var(--tag-ink); font-weight: 800; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 10px; z-index: 1; }
