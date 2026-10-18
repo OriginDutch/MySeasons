@@ -95,9 +95,27 @@ export async function countCalls(n) {
   }
 }
 
+/**
+ * Wat Highlightly zelf zegt over je quotum (header via de Worker, of de laatste nachtploegronde).
+ * Eigen telling mist calls van de Worker tot de brievenbus geleegd is; Highlightly weet het altijd.
+ */
+let lastNoted = null;
+export async function noteRateLimit({ remaining, limit, at = new Date().toISOString() } = {}) {
+  if (remaining == null || Number.isNaN(Number(remaining))) return;
+  const key = `${String(at).slice(0, 10)}:${remaining}`;
+  if (key === lastNoted) return;
+  lastNoted = key;
+  const q = (await getMeta('quota')) || {};
+  if (q.hl && q.hl.at && q.hl.at > at) return; // nieuwere meting al bekend
+  await setMeta('quota', { hl: { remaining: Number(remaining), limit: Number(limit) || 100, at } });
+}
+
+/** Calls vandaag: het hoogste van je eigen telling en wat Highlightly zegt. */
 export async function getCallsToday() {
-  const q = await getMeta('quota');
-  return q && q.day === today() ? q.count || 0 : 0;
+  const q = (await getMeta('quota')) || {};
+  const own = q.day === today() ? q.count || 0 : 0;
+  const hl = q.hl && String(q.hl.at || '').slice(0, 10) === today() ? Math.max(0, (q.hl.limit || 100) - q.hl.remaining) : 0;
+  return Math.max(own, hl);
 }
 
 // ---------- Spelersprofielen: players/{id} ----------

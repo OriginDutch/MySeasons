@@ -2,6 +2,7 @@
 // de app stuurt alleen je Firebase-login mee zodat de Worker weet dat jij het bent.
 
 import { auth } from './firebase.js';
+import { noteRateLimit } from './store.js';
 
 export const WORKER_URL = 'https://myseasons-api.marcel-19-95.workers.dev';
 
@@ -40,7 +41,10 @@ async function call(path, params, { method = 'GET', body } = {}) {
 
   const remaining = res.headers.get('X-MS-RateLimit-Remaining');
   const limit = res.headers.get('X-MS-RateLimit-Limit');
-  if (remaining !== null) lastRateLimit = { remaining: Number(remaining), limit: limit !== null ? Number(limit) : null };
+  if (remaining !== null) {
+    lastRateLimit = { remaining: Number(remaining), limit: limit !== null ? Number(limit) : null };
+    noteRateLimit(lastRateLimit).catch(() => {});
+  }
 
   let data = null;
   try { data = await res.json(); } catch { /* geen JSON */ }

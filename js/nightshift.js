@@ -8,7 +8,7 @@ import { ns } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import {
   getAllMatches, saveMatches, saveMatchDetail, saveLeagueMatches, saveStandings, setMeta, getMeta,
-  countCalls, getLeagueIndexes, addToLeagueIndex, saveSeason, getSeasons,
+  countCalls, getLeagueIndexes, addToLeagueIndex, saveSeason, getSeasons, noteRateLimit,
 } from './store.js';
 import { normalizeListMatch, normalizeDetail, normalizeEvents, normalizeStandings } from './normalize.js';
 
@@ -141,6 +141,7 @@ const COST_OF = { full: 3, events: 1, league: 1, program: 1, standings: 1 };
 /** Brievenbus legen (oudste eerst), binnen het dagbudget aan Firestore-writes. */
 export async function emptyInbox(onProgress) {
   const st = await ns.state();
+  if (st.state && st.state.lastRun) noteRateLimit({ remaining: st.state.remaining, at: st.state.lastRun }).catch(() => {});
   const keys = (st.inbox || []).slice().sort();
   let budget = await writeBudget();
   const summary = { chunks: 0, items: 0, writes: 0, byType: {}, left: 0 };

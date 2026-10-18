@@ -2,7 +2,7 @@
 
 import { esc, icons, toast } from './ui.js';
 import { ns } from './api.js';
-import { getMeta } from './store.js';
+import { getMeta, noteRateLimit } from './store.js';
 import { pushQueue, emptyInbox, getPrefs, setPrefs, FIRST_BACKFILL } from './nightshift.js';
 import { runWithButton, explain } from './matchviews.js';
 import { dayShort, timeOf } from './season.js';
@@ -29,6 +29,7 @@ export const nightViews = {
           <p class="muted">${esc(err.status === 501 ? 'De KV-opslag (MS_KV) is nog niet gekoppeld aan de Worker.' : err.status === 404 || err.status === 405 ? 'De Worker kent de nachtploeg nog niet: de nieuwe code is nog niet gedeployd.' : explain(err))}</p></div></section>`;
       }
       const [prefs, last, q] = await Promise.all([getPrefs(), getMeta('nsLast').catch(() => null), getMeta('nsQueue').catch(() => null)]);
+      if (st.state.lastRun) noteRateLimit({ remaining: st.state.remaining, at: st.state.lastRun }).catch(() => {});
       const mode = st.state.mode || 'free';
       const log = st.state.log || [];
       return `${head}
