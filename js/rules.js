@@ -17,40 +17,63 @@ import { roundNumber } from './season.js';
 const JONG = /^jong\s/i;
 export const isJong = (team) => JONG.test((team && team.name) || '');
 
+// ---------- Eredivisie ----------
+// Europa als "ladder": tickets op volgorde van waarde voor plek 1, 2, 3...; het bekerticket staat op
+// plek `cupRank` in die ladder; daarna 4 clubs in de play-offs om één Conference League-ticket.
+// Bekerwinnaar al hoger geplaatst → de tickets schuiven één plek door. Anders neemt hij het bekerticket
+// en schuift iedereen onder hem op (KNVB Reglement play-off Europees ticket, art. 2).
+const T = {
+  cl: { kind: 'cl', label: 'Champions League' },
+  clq: { kind: 'clq', label: 'CL-voorronde' },
+  el: { kind: 'el', label: 'Europa League' },
+  elq: { kind: 'elq', label: 'EL-voorronde' },
+  eclq: { kind: 'eclq', label: 'Conference League-voorronde' },
+};
+const ED_BOTTOM = [
+  { positions: [16, 16], kind: 'playoff', label: 'Nacompetitie' },
+  { positions: [17, 18], kind: 'down', label: 'Degradatie' },
+];
+const ED_NOTE = 'De bekerwinnaar krijgt een Europa League-ticket. Staat die al hoger, dan schuiven de tickets een plek door; anders doet de eerstvolgende club mee aan de play-offs.';
+const ed = (from, to, ladder, cupRank, source) => ({
+  from, to, source,
+  tiebreak: ['points', 'gd', 'gf', 'h2h'],
+  europe: { ladder, cupRank, cup: { ...T.el, label: 'Europa League (beker)' }, playoff: { count: 4, kind: 'po', label: 'Play-offs Conference League' } },
+  zones: ED_BOTTOM,
+  cup: { leagueId: 77374 },
+  note: ED_NOTE,
+});
+
+const KKD_NOTE = 'Periodewinnaars plaatsen zich voor de nacompetitie. Is de winnaar al geplaatst of een beloftenteam, dan gaat de plek naar nummer 2 van die periode, anders naar de hoogste in de stand zonder periodetitel. Een periodewinnaar die direct promoveert, geeft zijn plek ook door aan de stand.';
+const kkd = (from, to, periods, bracket, source) => ({
+  from, to, source,
+  tiebreak: ['points', 'gd', 'gf', 'h2h'],
+  eligible: 'firstTeams', // beloftenteams kunnen niet promoveren en geen nacompetitie spelen
+  direct: { count: 2, kind: 'up', label: 'Promotie' },
+  periods: periods.map((r, i) => ({ key: `P${i + 1}`, rounds: r })),
+  periodTiebreak: ['points', 'gd', 'gf'], // geen onderling resultaat; daarna strafpunten, dan een beslissingswedstrijd
+  playoff: { fillTo: 6, kind: 'playoff', label: 'Nacompetitie', excludeLast: true, bracket },
+  note: KKD_NOTE,
+});
+
 export const RULES = {
-  // Eredivisie
-  75672: [{
-    from: 2026, to: 2026,
-    source: 'KNVB-reglementen 2026/27',
-    tiebreak: ['points', 'gd', 'gf', 'h2h'],
-    zones: [
-      { positions: [1, 1], kind: 'cl', label: 'Champions League' },
-      { positions: [2, 2], kind: 'clq', label: 'CL-voorronde' },
-      { positions: [3, 3], kind: 'el', label: 'EL-voorronde' },
-      { positions: [4, 7], kind: 'po', label: 'Play-offs Conference League' },
-      { positions: [16, 16], kind: 'playoff', label: 'Nacompetitie' },
-      { positions: [17, 18], kind: 'down', label: 'Degradatie' },
-    ],
-    cup: { leagueId: 77374, shift: 'knvb-ec-2026' },
-    note: 'De bekerwinnaar krijgt een Europa League-ticket (hoofdtoernooi). Eindigt die bij de eerste drie, dan schuiven de tickets door en worden de play-offs 5 t/m 8. Eindigt die op 4 t/m 7, dan doet nummer 8 mee aan de play-offs.',
-  }],
-  // Eerste Divisie (Keuken Kampioen Divisie)
-  76523: [{
-    from: 2026, to: 2026,
-    source: 'KNVB-reglementen 2026/27',
-    tiebreak: ['points', 'gd', 'gf', 'h2h'],
-    eligible: 'firstTeams', // beloftenteams kunnen niet promoveren en geen nacompetitie spelen
-    direct: { count: 2, kind: 'up', label: 'Promotie' },
-    periods: [
-      { key: 'P1', rounds: [1, 10] },
-      { key: 'P2', rounds: [11, 19] },
-      { key: 'P3', rounds: [21, 28] },
-      { key: 'P4', rounds: [29, 38] },
-    ],
-    periodTiebreak: ['points', 'gd', 'gf'], // geen onderling resultaat; daarna strafpunten, dan een beslissingswedstrijd
-    playoff: { fillTo: 6, kind: 'playoff', label: 'Nacompetitie', excludeLast: true },
-    note: 'Periodewinnaars plaatsen zich voor de nacompetitie. Is de winnaar al geplaatst of een beloftenteam, dan gaat de plek naar nummer 2 van die periode, anders naar de hoogste in de stand zonder periodetitel. Een periodewinnaar die direct promoveert, geeft zijn plek ook door aan de stand.',
-  }],
+  75672: [
+    // 2019-20: afgebroken (zie SPECIAL_SEASONS), geen zones.
+    // 2020-21 t/m 2022-23: bekerwinnaar EL (play-offronde), nr. 3 Conference League-voorronde.
+    ed(2020, 2022, [T.cl, T.clq, T.eclq], 2, 'Wikipedia-seizoensartikelen Eredivisie 2020-21 t/m 2022-23'),
+    // 2023-24 t/m 2025-26 (nieuw UEFA-format): nr. 1-2 CL hoofdtoernooi, nr. 3 CL-voorronde, nr. 4 EL-voorronde.
+    ed(2023, 2025, [T.cl, T.cl, T.clq, T.elq], 3, 'Wikipedia-seizoensartikelen Eredivisie 2023-24 t/m 2025-26'),
+    // 2026-27: Nederland een plek minder: nr. 1 CL, nr. 2 CL-voorronde, nr. 3 EL-voorronde.
+    ed(2026, 2026, [T.cl, T.clq, T.elq], 2, 'KNVB Reglement play-off Europees ticket 2026/27'),
+  ],
+  // Eerste Divisie (Keuken Kampioen Divisie). Format per seizoen gelijk, behalve de periodegrenzen en het
+  // nacompetitieschema. Periodegrenzen 2020-2025 volgens RSSSF/Wikipedia, 2025-26 en 2026-27 volgens de KNVB.
+  76523: [
+    kkd(2020, 2021, [[1, 9], [10, 19], [20, 28], [29, 38]], 'six-ed16-semi', 'RSSSF ned2021-ned2022, Wikipedia'),
+    kkd(2022, 2022, [[1, 10], [11, 19], [20, 28], [29, 38]], 'six-ed16-semi', 'RSSSF ned2023, Wikipedia'),
+    kkd(2023, 2024, [[1, 9], [10, 19], [20, 29], [30, 38]], 'six-ed16-semi', 'RSSSF ned2024-ned2025, Wikipedia'),
+    kkd(2025, 2025, [[1, 10], [11, 20], [21, 29], [30, 38]], 'six-ed16-final', 'KNVB Reglement periodekampioenschappen 2025/26'),
+    kkd(2026, 2026, [[1, 10], [11, 19], [21, 28], [29, 38]], 'six-ed16-semi', 'KNVB-reglementen 2026/27'),
+  ],
 };
 
 /** Seizoenen met een bijzonderheid, voor alle competities. */
@@ -186,30 +209,43 @@ export function cupWinner(matches) {
 }
 
 /**
- * Tickets schuiven door de bekerwinnaar (KNVB Reglement play-off Europees ticket 2026/27, art. 2.2-2.4).
- * Geeft de effectieve zones (op positie) en vaste toewijzingen per team terug.
+ * Europese tickets op de stand. winner = bekerwinnaar ({ id }) of null (nog niet bekend).
+ * Geeft Map(teamId → zone) voor de bovenkant van de stand.
  */
-const ELCUP = { kind: 'elcup', label: 'Europa League (bekerwinnaar)' };
-function cupShift(rules, rows, winner) {
-  const zones = rules.zones || [];
-  if (!rules.cup || !winner) return { zones, fixed: [] };
-  const row = rows.find((r) => String(r.team.id) === String(winner.id));
-  const pos = row ? row.position : null;
-  const base = zones.filter((z) => !['el', 'po'].includes(z.kind));
-  const el = zones.find((z) => z.kind === 'el'); const po = zones.find((z) => z.kind === 'po');
-  if (pos && pos <= 2) {
-    // 2.2: het hoofdtoernooi-ticket gaat naar nr. 3, de EL-voorronde naar nr. 4, play-offs 5 t/m 8.
-    return { zones: [...base, { positions: [3, 3], ...ELCUP, label: 'Europa League (via beker)' }, { ...el, positions: [4, 4] }, { ...po, positions: [5, 8] }], fixed: [] };
+export function europeZones(eu, rows, winner) {
+  const out = new Map();
+  if (!eu) return out;
+  const sorted = rows.slice().sort((a, b) => a.position - b.position);
+  const po = Array.from({ length: eu.playoff.count }, () => ({ kind: eu.playoff.kind, label: eu.playoff.label }));
+  const wRow = winner ? sorted.find((r) => String(r.team.id) === String(winner.id)) : null;
+  const wIdx = wRow ? sorted.indexOf(wRow) : -1;
+  let tickets; let skip = null;
+  if (!winner) tickets = [...eu.ladder, ...po]; // nog geen bekerwinnaar: alleen de ladder
+  else if (wIdx >= 0 && wIdx < eu.cupRank) tickets = [...eu.ladder.slice(0, eu.cupRank), { ...eu.cup, label: 'Europa League (via beker)' }, ...eu.ladder.slice(eu.cupRank), ...po];
+  else {
+    tickets = [...eu.ladder, ...po];
+    if (wRow) { out.set(String(wRow.team.id), eu.cup); skip = String(wRow.team.id); }
   }
-  if (pos === 3) {
-    // 2.3: nr. 3 is zelf de bekerwinnaar; EL-voorronde naar nr. 4, play-offs 5 t/m 8.
-    return { zones: [...base, { ...el, positions: [4, 4] }, { ...po, positions: [5, 8] }], fixed: [{ id: winner.id, ...ELCUP }] };
+  let i = 0;
+  for (const r of sorted) {
+    if (i >= tickets.length) break;
+    if (String(r.team.id) === skip) continue;
+    out.set(String(r.team.id), tickets[i++]);
   }
-  if (pos && pos >= 4 && pos <= 7) {
-    // 2.4: nr. 8 neemt de play-offplek van de bekerwinnaar over.
-    return { zones: [...base, el, { ...po, positions: [4, 8] }], fixed: [{ id: winner.id, ...ELCUP }] };
-  }
-  return { zones, fixed: pos ? [{ id: winner.id, ...ELCUP }] : [] };
+  return out;
+}
+
+/** Bekerwinnaar uit de RSSSF-seizoenspagina (finale), gekoppeld aan een team uit de stand. */
+export function cupWinnerRsssf(rs, rows) {
+  const f = rs && rs.cup && (rs.cup.matches || []).filter((m) => /^final$/i.test(m.label || '') && m.status === 'played').pop();
+  if (!f) return null;
+  let homeWins = f.hs > f.as ? true : f.hs < f.as ? false : null;
+  if (homeWins === null && f.penalties) homeWins = f.penalties.home > f.penalties.away;
+  if (homeWins === null) return null;
+  const name = homeWins ? f.home : f.away;
+  const key = (n) => String(n || '').toLowerCase().replace(/\s*\(.*?\)\s*/g, ' ').replace(/[^a-z0-9 ]/g, '').split(' ').filter((w) => w && !['fc', 'sc', 'sv', 'afc', 'bv'].includes(w)).join(' ');
+  const row = rows.find((r) => key(r.team.name) === key(name)) || rows.find((r) => key(r.team.name).includes(key(name)) || key(name).includes(key(r.team.name)));
+  return { team: row ? row.team : { id: `rs:${name}`, name }, source: 'rsssf' };
 }
 
 // ---------- Zones ----------
@@ -225,14 +261,20 @@ export function zonesFor(rules, rows, { matches = [], final = false, cup = null 
   const legend = [];
   const set = (r, z) => { if (!map.has(String(r.team.id))) map.set(String(r.team.id), z); };
 
-  const shifted = cupShift(rules, rows, cup && cup.team);
-  shifted.fixed.forEach((f) => map.set(String(f.id), { kind: f.kind, label: f.label }));
-  shifted.zones.slice().sort((x, y) => x.positions[0] - y.positions[0]).forEach((z) => {
+  if (rules.europe) {
+    const eu = europeZones(rules.europe, rows, cup && cup.team);
+    eu.forEach((z, id) => map.set(id, { kind: z.kind, label: z.label }));
+    // Legenda in volgorde van de stand, zonder dubbele.
+    rows.slice().sort((a, b) => a.position - b.position).forEach((r) => {
+      const z = eu.get(String(r.team.id));
+      if (z && !legend.some((l) => l.label === z.label)) legend.push({ kind: z.kind, label: z.label });
+    });
+  }
+  (rules.zones || []).forEach((z) => {
     const [a, b] = z.positions;
     rows.filter((r) => r.position >= a && r.position <= b).forEach((r) => set(r, { kind: z.kind, label: z.label }));
     if (!legend.some((l) => l.kind === z.kind)) legend.push({ kind: z.kind, label: z.label });
   });
-  if (shifted.fixed.length && !legend.some((l) => l.kind === 'elcup')) legend.splice(1, 0, { ...ELCUP });
 
   let periods = [];
   if (rules.direct) {
@@ -267,16 +309,39 @@ export function zonesFor(rules, rows, { matches = [], final = false, cup = null 
 }
 
 /**
- * Nacompetitie KKD als het nu zou eindigen: fictieve ranglijst ED1..ED6 op de reguliere stand (art. 2),
- * A: ED6–ED1, B: ED5–ED2, C: ED4–ED3, halve finales D: A–B en E: Eredivisie-16 – C, finale E–D.
+ * Nacompetitie KKD: fictieve ranglijst E1..E6 op de reguliere stand.
+ * 'six-ed16-semi' (t/m 2024-25 en vanaf 2026-27): A E6–E1, B E5–E2, C E4–E3; halve finales A–B en Eredivisie-16 – C; finale.
+ * 'six-ed16-final' (2025-26): ronde 1 E6–E3 en E5–E4; ronde 2 met E2 en E1; ronde 3; finale tegen Eredivisie-16.
  */
 export function playoffBracket(rules, rows, zones) {
   if (!rules || !rules.playoff) return null;
   const seeds = rows.filter((r) => { const z = zones.map.get(String(r.team.id)); return z && z.kind === rules.playoff.kind; }).slice(0, 6);
   if (seeds.length < 6) return null;
-  const ed = (n) => seeds[n - 1].team;
+  const e = (n) => seeds[n - 1].team;
+  if (rules.playoff.bracket === 'six-ed16-final') {
+    return {
+      format: rules.playoff.bracket, seeds: seeds.map((r) => r.team),
+      first: [{ key: 'A', home: e(6), away: e(3) }, { key: 'B', home: e(5), away: e(4) }],
+      later: [['C', `Winnaar A – ${e(2).name}`], ['D', `Winnaar B – ${e(1).name}`], ['E', 'Winnaar C – winnaar D'], ['F', 'Finale: nr. 16 Eredivisie – winnaar E, om een plek in de Eredivisie']],
+    };
+  }
   return {
-    seeds: seeds.map((r) => r.team),
-    first: [{ key: 'A', home: ed(6), away: ed(1) }, { key: 'B', home: ed(5), away: ed(2) }, { key: 'C', home: ed(4), away: ed(3) }],
+    format: 'six-ed16-semi', seeds: seeds.map((r) => r.team),
+    first: [{ key: 'A', home: e(6), away: e(1) }, { key: 'B', home: e(5), away: e(2) }, { key: 'C', home: e(4), away: e(3) }],
+    later: [['D', 'Winnaar A – winnaar B'], ['E', 'Nr. 16 Eredivisie – winnaar C'], ['F', 'Finale: winnaar E – winnaar D, om een plek in de Eredivisie']],
   };
+}
+
+/** RSSSF-uitslagen in de vorm van Highlightly-wedstrijden (voor periodes van oude seizoenen). */
+export function rsssfAsMatches(division, idOf) {
+  return ((division && division.matches) || []).filter((m) => m.stage === 'regular' && m.round).map((m, i) => {
+    const h = String(m.homeFull || m.home).replace(/\s*\(.*?\)\s*/g, ' ').trim();
+    const a = String(m.awayFull || m.away).replace(/\s*\(.*?\)\s*/g, ' ').trim();
+    return {
+      id: `rs${i}`, date: m.date, round: `Regular Season - ${m.round}`,
+      status: m.status === 'played' ? 'finished' : m.status,
+      score: m.hs != null ? { home: m.hs, away: m.as } : null,
+      homeTeam: { id: idOf(h), name: h }, awayTeam: { id: idOf(a), name: a },
+    };
+  });
 }

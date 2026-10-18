@@ -60,13 +60,13 @@ export function standTable(rows, { zones = null, marks = null, highlight = null 
     </table></div>`;
 }
 
-export function zoneLegend(zones, rules, { provisional = true } = {}) {
+export function zoneLegend(zones, rules, { provisional = zones ? zones.provisional !== false : true } = {}) {
   if (!zones || !zones.legend.length) return '';
   const hasJong = [...zones.map.values()].some((z) => z.kind === 'jong');
   const hasTag = [...zones.map.values()].some((z) => z.tag);
   return `<div class="zone-legend">${zones.legend.map((x) => `<span><i class="zone-key zone-key--${x.kind}"></i>${esc(x.label)}</span>`).join('')}${hasJong ? '<span><i class="zone-key zone-key--jong"></i>Beloftenteam, telt niet mee</span>' : ''}${hasTag ? '<span><i class="st-tag mono">P1</i> periodekampioen</span>' : ''}</div>
     ${provisional ? '<p class="muted" style="font-size:12px;margin:0">Voorlopig: zo zou het zijn als de competitie nu eindigt.</p>' : ''}
-    ${rules && rules.cup ? `<p class="muted" style="font-size:12px;margin:0">${zones.cup ? `Bekerwinnaar: <strong>${esc(zones.cup.team.name)}</strong>. De tickets zijn daarop aangepast.` : 'Bekerwinnaar nog niet bekend: de tickets schuiven door zodra de bekerfinale gespeeld is.'}</p>` : ''}
+    ${rules && rules.cup ? `<p class="muted" style="font-size:12px;margin:0">${zones.cup ? `Bekerwinnaar: <strong>${esc(zones.cup.team.name)}</strong>. De tickets zijn daarop aangepast.` : provisional ? 'Bekerwinnaar nog niet bekend: de tickets schuiven door zodra de bekerfinale gespeeld is.' : 'Bekerwinnaar onbekend in je data: tickets zonder bekerverschuiving.'}</p>` : ''}
     ${rules && rules.note ? `<p class="muted" style="font-size:12px">${esc(rules.note)}</p>` : ''}`;
 }
 

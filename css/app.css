@@ -667,6 +667,7 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .bracket__row { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--hairline); }
 .bracket__row:last-child { border-bottom: 0; }
 .bracket__key { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.bracket__row--res { grid-template-columns: 112px 1fr; }
 .bracket .is-me { font-weight: 700; color: var(--accent-text); }
 .season-flag { font-size: 13px; padding: 8px 12px; border-left: 3px solid var(--danger); background: var(--surface-hover); margin: 0; }
 .result--pen { font-weight: 500; font-size: 10px; }
@@ -717,6 +718,6 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .inbox__x { background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; padding: 12px 4px 12px 12px; cursor: pointer; }
 .bk-row { align-items: center; }
 .bk-row__btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-:root { --z-elcup: #A855F7; }
-.stand tr.zone--elcup { --z: var(--z-elcup); }
-.zone-key--elcup { background: var(--z-elcup); }
+:root { --z-elq: #A78BFA; --z-eclq: #14B8A6; }
+.stand tr.zone--elq { --z: var(--z-elq); } .stand tr.zone--eclq { --z: var(--z-eclq); }
+.zone-key--elq { background: var(--z-elq); } .zone-key--eclq { background: var(--z-eclq); }

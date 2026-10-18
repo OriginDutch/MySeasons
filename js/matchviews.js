@@ -6,7 +6,8 @@ import { getSeason, seasonLabel, inSeason, isCurrentSeason } from './seasonstate
 import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers, getLeagueMatches } from './store.js';
 import { applyNames } from './names.js';
 import { bestStandings, standingsAndMatches } from './livetable.js';
-import { rulesFor, zonesFor, playoffBracket, SPECIAL_SEASONS, cupWinner } from './rules.js';
+import { rulesFor, zonesFor, playoffBracket, SPECIAL_SEASONS, cupWinner, cupWinnerRsssf, rsssfAsMatches } from './rules.js';
+import { tokens } from './rsssf.js';
 import { coachOn, coachName } from './coaches.js';
 import { getCoaches, getClubMarks } from './store.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
@@ -153,7 +154,7 @@ export function devBar(total, conflicts, href) {
 
 function periodLine(p, zones) {
   const upNow = p.holder && (zones.map.get(String(p.holder.id)) || {}).kind === 'up';
-  const upNote = upNow ? ` Staat nu op een directe promotieplek: promoveert ${esc(p.holder.name)} direct, dan gaat de plek naar de stand.` : '';
+  const upNote = upNow ? (isCurrentSeason() ? ` Staat nu op een directe promotieplek: promoveert ${esc(p.holder.name)} direct, dan gaat de plek naar de stand.` : ` ${esc(p.holder.name)} promoveerde direct, dus de plek ging naar de stand.`) : '';
   const [a, b] = p.rounds;
   if (p.state === 'done') {
     const w = esc(p.winner.name);
@@ -192,18 +193,38 @@ function periodsBlock(zones, rules, lm, marks) {
     </section>`;
 }
 
-function bracketBlock(rules, rows, zones) {
+const nmMe = (t) => `<span class="${t.id === TEAM || /cambuur/i.test(t.name || '') ? 'is-me' : ''}">${esc(t.name)}</span>`;
+const roundNl = (l) => String(l || '').replace(/Round (\d+)/, 'Ronde $1').replace(/Semifinals?/, 'Halve finale').replace(/Quarterfinals?/, 'Kwartfinale').replace(/\bFinals?\b/, 'Finale')
+  .replace(/First Legs?/, 'heen').replace(/Second Legs?/, 'terug').replace(/Replay/, 'replay');
+
+/** Oud seizoen: de echte play-offs en nacompetitie van RSSSF (staan bij de Eredivisie op de pagina). */
+function pastPlayoffsBlock(rs, leagueId) {
+  if (!rs || !rs.divisions || isCurrentSeason()) return '';
+  const all = rs.divisions.flatMap((d) => d.matches || []);
+  const groups = [
+    ...(leagueId === 75672 ? [['Play-offs Europa', all.filter((m) => m.stage === 'europe-playoff')]] : []),
+    ['Nacompetitie promotie/degradatie', all.filter((m) => m.stage === 'nacompetitie')],
+  ].filter(([, ms]) => ms.length);
+  if (!groups.length) return '';
+  return groups.map(([title, ms]) => `
+    <section class="section">
+      <div class="section__label"><span>${esc(title)}</span><span>${ms.length} duels</span></div>
+      <div class="bracket">${ms.map((m) => `<div class="bracket__row bracket__row--res"><span class="bracket__key">${esc(roundNl(m.label))}</span><span>${nmMe({ name: String(m.homeFull || m.home) })} – ${nmMe({ name: String(m.awayFull || m.away) })} <span class="mono">${m.hs ?? ''}–${m.as ?? ''}</span>${m.note ? ` <span class="muted">(${esc(m.note)})</span>` : ''}</span></div>`).join('')}</div>
+      <p class="muted" style="font-size:12px">${esc(rs.credit || 'Bron: RSSSF')}</p>
+    </section>`).join('');
+}
+
+function bracketBlock(rules, rows, zones, rs) {
+  const nm = nmMe;
+  if (!isCurrentSeason() && rs && rs.divisions && rs.divisions.some((d) => (d.matches || []).some((m) => m.stage === 'nacompetitie'))) return ''; // echte uitslagen staan in pastPlayoffsBlock
   const b = playoffBracket(rules, rows, zones);
   if (!b) return '';
-  const nm = (t) => `<span class="${t.id === TEAM ? 'is-me' : ''}">${esc(t.name)}</span>`;
   return `
     <section class="section">
-      <div class="section__label"><span>Nacompetitie als het nu eindigt</span><span>voorlopig</span></div>
+      <div class="section__label"><span>${isCurrentSeason() ? 'Nacompetitie als het nu eindigt' : 'Nacompetitie volgens de regels'}</span><span>${isCurrentSeason() ? 'voorlopig' : ''}</span></div>
       <div class="bracket">
         ${b.first.map((m) => `<div class="bracket__row"><span class="bracket__key">${m.key}</span><span>${nm(m.home)} – ${nm(m.away)}</span></div>`).join('')}
-        <div class="bracket__row"><span class="bracket__key">D</span><span class="muted">Winnaar A – winnaar B</span></div>
-        <div class="bracket__row"><span class="bracket__key">E</span><span class="muted">Nr. 16 Eredivisie – winnaar C</span></div>
-        <div class="bracket__row"><span class="bracket__key">F</span><span class="muted">Finale: winnaar E – winnaar D, om een plek in de Eredivisie</span></div>
+        ${b.later.map(([k, t]) => `<div class="bracket__row"><span class="bracket__key">${k}</span><span class="muted">${esc(t)}</span></div>`).join('')}
       </div>
       <p class="muted" style="font-size:12px">Alles over twee duels. De hoogst geplaatste club speelt de return thuis, de Eredivisie-club altijd. Plaatsing op de reguliere stand, beloftenteams tellen niet mee.</p>
     </section>`;
@@ -407,7 +428,12 @@ export const matchViews = {
       const modes = fromRsssf ? [['total', 'Totaal']] : [['total', 'Totaal'], ['home', 'Thuis'], ['away', 'Uit']];
       const rules = rulesFor(league.id, getSeason());
       const cupList = rules && rules.cup ? [...(await getLeagueMatches(rules.cup.leagueId, getSeason()).catch(() => [])), ...list.filter((m) => m.league && m.league.id === rules.cup.leagueId)] : [];
-      const zones = rules && isCurrentSeason() && !special ? zonesFor(rules, g.rows, { matches: lm, cup: cupWinner(cupList) }) : null;
+      const cup = cupWinner(cupList) || (rs ? cupWinnerRsssf(rs, g.rows) : null);
+      // Periodes van oude seizoenen: Highlightly-wedstrijden als die er zijn, anders de RSSSF-uitslagen.
+      const rsDivL = rs && rs.divisions ? rs.divisions.find((d) => d.leagueId === league.id) : null;
+      const idOf = (name) => { const r = g.rows.find((x) => tokens(x.team.name).join(' ') === tokens(name).join(' ')); return r ? r.team.id : `rs:${name}`; };
+      const lmUse = lm.length ? lm : rsDivL ? rsssfAsMatches(rsDivL, idOf) : [];
+      const zones = rules && !special ? zonesFor(rules, g.rows, { matches: lmUse, cup, final: !isCurrentSeason() }) : null;
       return `
         ${head({ kicker, title: 'Stand' })}
         ${flag}
@@ -420,8 +446,9 @@ export const matchViews = {
           ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks })}</div>`).join('')}
           ${zones ? zoneLegend(zones, rules) : ''}
         </section>
-        ${zones && rules.periods ? periodsBlock(zones, rules, lm, marks) : ''}
-        ${zones && rules.playoff ? bracketBlock(rules, rowsFor(g, 'total'), zones) : ''}
+        ${zones && rules.periods ? periodsBlock(zones, rules, lmUse, marks) : ''}
+        ${zones && rules.playoff ? bracketBlock(rules, rowsFor(g, 'total'), zones, rs) : ''}
+        ${pastPlayoffsBlock(rs, league.id)}
         ${crowdBlock(list, league)}
         <section class="section">
           <div class="section__label"><span>Bijgewerkt</span><span>${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
