@@ -3,10 +3,10 @@
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
 import { getSeason, seasonLabel, inSeason, isCurrentSeason } from './seasonstate.js';
-import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers } from './store.js';
+import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers, getLeagueMatches } from './store.js';
 import { applyNames } from './names.js';
 import { bestStandings, standingsAndMatches } from './livetable.js';
-import { rulesFor, zonesFor, playoffBracket, SPECIAL_SEASONS } from './rules.js';
+import { rulesFor, zonesFor, playoffBracket, SPECIAL_SEASONS, cupWinner } from './rules.js';
 import { coachOn, coachName } from './coaches.js';
 import { getCoaches, getClubMarks } from './store.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
@@ -406,7 +406,8 @@ export const matchViews = {
       }
       const modes = fromRsssf ? [['total', 'Totaal']] : [['total', 'Totaal'], ['home', 'Thuis'], ['away', 'Uit']];
       const rules = rulesFor(league.id, getSeason());
-      const zones = rules && isCurrentSeason() && !special ? zonesFor(rules, g.rows, { matches: lm }) : null;
+      const cupList = rules && rules.cup ? [...(await getLeagueMatches(rules.cup.leagueId, getSeason()).catch(() => [])), ...list.filter((m) => m.league && m.league.id === rules.cup.leagueId)] : [];
+      const zones = rules && isCurrentSeason() && !special ? zonesFor(rules, g.rows, { matches: lm, cup: cupWinner(cupList) }) : null;
       return `
         ${head({ kicker, title: 'Stand' })}
         ${flag}

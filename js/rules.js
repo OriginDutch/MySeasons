@@ -31,7 +31,8 @@ export const RULES = {
       { positions: [16, 16], kind: 'playoff', label: 'Nacompetitie' },
       { positions: [17, 18], kind: 'down', label: 'Degradatie' },
     ],
-    note: 'De bekerwinnaar krijgt een Europa League-ticket. Eindigt die bij de eerste drie, dan schuiven de tickets door en worden de play-offs 5 t/m 8. Eindigt die op 4 t/m 7, dan doet nummer 8 mee aan de play-offs.',
+    cup: { leagueId: 77374, shift: 'knvb-ec-2026' },
+    note: 'De bekerwinnaar krijgt een Europa League-ticket (hoofdtoernooi). Eindigt die bij de eerste drie, dan schuiven de tickets door en worden de play-offs 5 t/m 8. Eindigt die op 4 t/m 7, dan doet nummer 8 mee aan de play-offs.',
   }],
   // Eerste Divisie (Keuken Kampioen Divisie)
   76523: [{
@@ -170,24 +171,68 @@ export function resolvePeriods(rules, matches, teams) {
   });
 }
 
+// ---------- Bekerwinnaar ----------
+
+/** Winnaar van de bekerfinale uit een lijst bekerwedstrijden (Highlightly), of null als die nog niet gespeeld is. */
+export function cupWinner(matches) {
+  const finals = (matches || []).filter((m) => /\bfinal\b/i.test(m.round || '') && !/semi|quarter|1\/\d|round of/i.test(m.round || '') && m.status === 'finished' && m.score);
+  const f = finals.sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0];
+  if (!f) return null;
+  const { home, away } = f.score;
+  let winHome = home > away ? true : home < away ? false : null;
+  if (winHome === null && f.penalties) winHome = f.penalties.home > f.penalties.away ? true : f.penalties.home < f.penalties.away ? false : null;
+  if (winHome === null) return null;
+  return { team: winHome ? f.homeTeam : f.awayTeam, match: f };
+}
+
+/**
+ * Tickets schuiven door de bekerwinnaar (KNVB Reglement play-off Europees ticket 2026/27, art. 2.2-2.4).
+ * Geeft de effectieve zones (op positie) en vaste toewijzingen per team terug.
+ */
+const ELCUP = { kind: 'elcup', label: 'Europa League (bekerwinnaar)' };
+function cupShift(rules, rows, winner) {
+  const zones = rules.zones || [];
+  if (!rules.cup || !winner) return { zones, fixed: [] };
+  const row = rows.find((r) => String(r.team.id) === String(winner.id));
+  const pos = row ? row.position : null;
+  const base = zones.filter((z) => !['el', 'po'].includes(z.kind));
+  const el = zones.find((z) => z.kind === 'el'); const po = zones.find((z) => z.kind === 'po');
+  if (pos && pos <= 2) {
+    // 2.2: het hoofdtoernooi-ticket gaat naar nr. 3, de EL-voorronde naar nr. 4, play-offs 5 t/m 8.
+    return { zones: [...base, { positions: [3, 3], ...ELCUP, label: 'Europa League (via beker)' }, { ...el, positions: [4, 4] }, { ...po, positions: [5, 8] }], fixed: [] };
+  }
+  if (pos === 3) {
+    // 2.3: nr. 3 is zelf de bekerwinnaar; EL-voorronde naar nr. 4, play-offs 5 t/m 8.
+    return { zones: [...base, { ...el, positions: [4, 4] }, { ...po, positions: [5, 8] }], fixed: [{ id: winner.id, ...ELCUP }] };
+  }
+  if (pos && pos >= 4 && pos <= 7) {
+    // 2.4: nr. 8 neemt de play-offplek van de bekerwinnaar over.
+    return { zones: [...base, el, { ...po, positions: [4, 8] }], fixed: [{ id: winner.id, ...ELCUP }] };
+  }
+  return { zones, fixed: pos ? [{ id: winner.id, ...ELCUP }] : [] };
+}
+
 // ---------- Zones ----------
 
 /**
  * Zone per team voor een (berekende of echte) stand.
  * rows: gerangschikte rijen met .position. Geeft Map(teamId → { kind, label, tag }) en de legenda.
  */
-export function zonesFor(rules, rows, { matches = [], final = false } = {}) {
+export function zonesFor(rules, rows, { matches = [], final = false, cup = null } = {}) {
   const map = new Map();
   if (!rules) return { map, legend: [], periods: [] };
   const firstTeams = rules.eligible === 'firstTeams' ? rows.filter((r) => !isJong(r.team)) : rows;
   const legend = [];
   const set = (r, z) => { if (!map.has(String(r.team.id))) map.set(String(r.team.id), z); };
 
-  (rules.zones || []).forEach((z) => {
+  const shifted = cupShift(rules, rows, cup && cup.team);
+  shifted.fixed.forEach((f) => map.set(String(f.id), { kind: f.kind, label: f.label }));
+  shifted.zones.slice().sort((x, y) => x.positions[0] - y.positions[0]).forEach((z) => {
     const [a, b] = z.positions;
     rows.filter((r) => r.position >= a && r.position <= b).forEach((r) => set(r, { kind: z.kind, label: z.label }));
-    legend.push({ kind: z.kind, label: z.label });
+    if (!legend.some((l) => l.kind === z.kind)) legend.push({ kind: z.kind, label: z.label });
   });
+  if (shifted.fixed.length && !legend.some((l) => l.kind === 'elcup')) legend.splice(1, 0, { ...ELCUP });
 
   let periods = [];
   if (rules.direct) {
@@ -218,7 +263,7 @@ export function zonesFor(rules, rows, { matches = [], final = false } = {}) {
     }
   }
   rows.forEach((r) => { if (rules.eligible === 'firstTeams' && isJong(r.team) && !map.has(String(r.team.id))) map.set(String(r.team.id), { kind: 'jong', label: 'Beloftenteam', tag: null }); });
-  return { map, legend, periods, provisional: !final };
+  return { map, legend, periods, provisional: !final, cup };
 }
 
 /**

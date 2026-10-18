@@ -717,3 +717,6 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .inbox__x { background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; padding: 12px 4px 12px 12px; cursor: pointer; }
 .bk-row { align-items: center; }
 .bk-row__btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+:root { --z-elcup: #A855F7; }
+.stand tr.zone--elcup { --z: var(--z-elcup); }
+.zone-key--elcup { background: var(--z-elcup); }

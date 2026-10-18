@@ -3,7 +3,7 @@
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB } from './config.js';
 import { getSeason, isCurrentSeason, seasonLabel } from './seasonstate.js';
-import { getMeta, getCallsToday, getStandings } from './store.js';
+import { getMeta, getCallsToday, getStandings, getLeagueMatches } from './store.js';
 import { COST } from './sync.js';
 import {
   correctedList, resultChip, crest, devBar, syncFooter, handleSync, handleFetch, scoreText, compName, matchTitle,
@@ -12,7 +12,7 @@ import { preview, seasonStories, matchReport } from './stories.js';
 import { buildSquad } from './players.js';
 import { refreshNews, newsFor } from './news.js';
 import { standingsAndMatches } from './livetable.js';
-import { rulesFor, zonesFor } from './rules.js';
+import { rulesFor, zonesFor, cupWinner } from './rules.js';
 import { miniStand } from './standview.js';
 import { bellButton, unreadCount } from './inbox.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
@@ -123,11 +123,11 @@ function seasonCover(list, league, standings, team) {
 }
 
 /** Alleen op desktop: stand rond de eigen club, met zones uit de regelmotor. */
-function standSide(standings, league, leagueMatches) {
+function standSide(standings, league, leagueMatches, cup) {
   const g = standings && standings.groups && standings.groups[0];
   if (!g || !league) return '';
   const rules = isCurrentSeason() ? rulesFor(league.id, getSeason()) : null;
-  const zones = rules ? zonesFor(rules, g.rows, { matches: leagueMatches || [] }) : null;
+  const zones = rules ? zonesFor(rules, g.rows, { matches: leagueMatches || [], cup }) : null;
   return `
     <section class="mag-section desk-only">
       <div class="mag-section__head"><h2>Stand</h2><span class="mono muted">${esc(league.name)}</span></div>
@@ -270,7 +270,9 @@ export const magazineViews = {
       const { players } = buildSquad(list, TEAM, profiles);
       const topScorer = players.slice().sort((a, b) => b.goals - a.goals)[0] || null;
       const crowd = league ? crowdSummary(list, TEAM, league.id) : {};
-      const stories = seasonStories(list, league, standings, { topScorer, homeAvg: crowd.homeAvg, homeCount: crowd.homeCount, season: getSeason(), current: isCurrentSeason(), leagueMatches: both.matches });
+      const rulesNow = league && isCurrentSeason() ? rulesFor(league.id, getSeason()) : null;
+      const cupNow = rulesNow && rulesNow.cup ? cupWinner([...(await getLeagueMatches(rulesNow.cup.leagueId, getSeason()).catch(() => [])), ...list.filter((m) => m.league && m.league.id === rulesNow.cup.leagueId)]) : null;
+      const stories = seasonStories(list, league, standings, { topScorer, homeAvg: crowd.homeAvg, homeCount: crowd.homeCount, season: getSeason(), current: isCurrentSeason(), leagueMatches: both.matches, cup: cupNow });
       const teams = knownTeams(list);
       const nextOpp = next ? opponentOf(next, TEAM) : null;
       const news = await newsFor([TEAM, ...(nextOpp ? [nextOpp.id] : [])], 3).catch(() => []);
@@ -288,7 +290,7 @@ export const magazineViews = {
           ${lastWeek(last, matchReport(last))}
           </div>
           <aside class="mag-side">
-          ${standSide(standings, league, both.matches)}
+          ${standSide(standings, league, both.matches, cupNow)}
           ${newsBlock(news, teams)}
           </aside>
           <div class="mag-full">

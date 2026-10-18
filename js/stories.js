@@ -110,7 +110,7 @@ export function seasonStories(list, league, standings, extra = {}) {
   const rules = extra.current === false ? null : rulesFor(league.id, extra.season);
   if (me && g && rules) {
     const rows = g.rows.slice().sort((x, y) => x.position - y.position);
-    const zones = zonesFor(rules, rows, { matches: extra.leagueMatches || [] });
+    const zones = zonesFor(rules, rows, { matches: extra.leagueMatches || [], cup: extra.cup || null });
     const zoneOf = (r) => zones.map.get(String(r.team.id));
     const mine = zoneOf(me);
     if (rules.playoff) {
