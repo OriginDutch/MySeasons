@@ -371,6 +371,7 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .stand td, .stand th { padding-left: 3px; padding-right: 3px; }
 .stand th:nth-child(n+3), .stand td:nth-child(n+3) { text-align: right; }
 .stand td.st-pos, .stand th:first-child { width: 34px; padding-left: 12px; box-sizing: border-box; }
+.stand td:last-child, .stand th:last-child { padding-right: 12px; }
 .st-pos { color: var(--muted); }
 .st-club { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .st-club span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
