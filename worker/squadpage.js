@@ -29,6 +29,7 @@ const LINE_OF = [
   [/aanval|forward|spits|attack|voorhoede/i, 'Forward'],
 ];
 const STAFF = /staf|staff|trainer|begeleid|coach|medisch|management|directie/i;
+const STAFF_PATH = /staf|staff|trainer|begeleid|coach|medisch|management|directie|kader/i;
 const PARTICLES = new Set(['van', 'der', 'de', 'den', 'het', 'ter', 'ten', 'te', 'el', 'al', 'da', 'dos', 'di', 'le', 'la', 'du', 'op', 'in', "'t", 'bin', 'ben', 'von', 'y']);
 const NAV = /^(home|nieuws|tickets|selectie|naam|functie|contact|lees meer|meer|bekijk|shop|partners|club|jeugd|o\d\d|eerste elftal|keepers|verdediging|middenveld|aanvallers)$/i;
 
@@ -123,8 +124,22 @@ export function extractSquad(html, pageUrl) {
       const d = i < c.idx ? c.idx - i : (i - c.idx) + 0.5;
       if (d < dist) { dist = d; best = events[i].n; }
     }
-    add(c.name, best, c.line, c.staff);
+    c.number = best;
   });
+  // Staf eruit: (1) links met een staf-woord in het pad, (2) alleen de meest voorkomende linkdiepte
+  // (spelers /eerste-elftal/naam/, staf /eerste-elftal/technische-staf/naam/), (3) als bijna iedereen
+  // een rugnummer heeft, zijn de kaarten zonder nummer geen spelers.
+  const depth = (h) => (h ? new URL(h).pathname.split('/').filter(Boolean).length : 0);
+  let keep = uniq.filter((c) => !c.href || !STAFF_PATH.test(new URL(c.href).pathname));
+  const hrefCards = keep.filter((c) => c.href);
+  if (hrefCards.length >= 5) {
+    const hist = {}; hrefCards.forEach((c) => { const d = depth(c.href); hist[d] = (hist[d] || 0) + 1; });
+    const top = Number(Object.entries(hist).sort((x, y) => y[1] - x[1])[0][0]);
+    keep = keep.filter((c) => !c.href || depth(c.href) === top);
+  }
+  const numbered = keep.filter((c) => c.number != null).length;
+  if (keep.length >= 5 && numbered / keep.length >= 0.7) keep = keep.filter((c) => c.number != null);
+  keep.forEach((c) => add(c.name, c.number, c.line, c.staff));
   return [...found.values()];
 }
 
