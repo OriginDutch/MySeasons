@@ -223,6 +223,8 @@ watchAuth((user) => {
     });
     // Meldingen: programma bij de Worker actueel houden (stuurt alleen bij wijzigingen).
     import('./meldingen.js').then((m) => m.pushSupported() && m.pushSchedule()).catch(() => {});
+    // Eenmalig: losse rugnummers omzetten naar rugnummers per seizoen.
+    import('./shirts.js').then((m) => m.migrateShirts()).catch(() => {});
     // Eenmalig: bestaande transfers aan bekende clubs koppelen.
     setTimeout(() => import('./clubpick.js').then((m) => m.linkTransferClubs()).catch(() => {}), 8000);
     // Wekelijkse back-up naar de Worker, rustig na het opstarten.

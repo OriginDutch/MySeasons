@@ -15,6 +15,7 @@ import { correctedList, runWithButton, explain, head, crest } from './matchviews
 import { dayShort, opponentOf, isHome } from './season.js';
 import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './playerextra.js';
 import { currentSquad } from './importer.js';
+import { shirtFor, latestShirt, seasonOfDate, shirtsOf } from './shirts.js';
 
 const TEAM = MAIN_CLUB.id;
 const r1 = (v) => (v == null ? '–' : v.toFixed(2));
@@ -175,7 +176,7 @@ async function addPlayer(ctx) {
   const id = `legacy-m${Date.now().toString(36)}`;
   const shirt = data.get('shirt') === '' ? null : Number(data.get('shirt'));
   const prof = {
-    fullName: String(data.get('name')).trim(), position: data.get('position') || null, shirt,
+    fullName: String(data.get('name')).trim(), position: data.get('position') || null, shirts: shirt != null ? { [seasonOfDate(data.get('date'))]: shirt } : null,
     nationality: data.get('nat1') || null, dob: data.get('dob') || null, manual: true, linkedTo: null,
     transfers: [{ type: data.get('type'), date: data.get('date'), dateTo: null, club, clubId: clubId && !Number.isNaN(Number(clubId)) ? Number(clubId) : clubId, clubLogo: clubId ? clubLogo : null, amount: null, note: null }],
   };
@@ -204,9 +205,11 @@ async function linkPlayer(ctx, id) {
   const to = String(data.get('to'));
   const target = profiles[to] || {};
   const merged = {};
-  ['fullName', 'shortName', 'photoUrl', 'position', 'shirt', 'nationality', 'dob', 'foot', 'height', 'joined', 'contractUntil', 'note', 'legacyId', 'legacyName'].forEach((k) => {
+  ['fullName', 'shortName', 'photoUrl', 'position', 'nationality', 'dob', 'foot', 'height', 'joined', 'contractUntil', 'note', 'legacyId', 'legacyName'].forEach((k) => {
     if (pr[k] != null && pr[k] !== '' && (target[k] == null || target[k] === '')) merged[k] = pr[k];
   });
+  const myShirts = shirtsOf(pr);
+  if (Object.keys(myShirts).length) merged.shirts = { ...myShirts, ...shirtsOf(target) };
   const key = (t) => `${t.type}|${t.date}`;
   ['transfers', 'valueHistory', 'injuries'].forEach((k) => {
     if (!(pr[k] || []).length) return;
@@ -286,12 +289,12 @@ async function editProfile(ctx, id, profiles) {
     body: `<label class="field"><span>Nationaliteit</span>${natSelect('nat1', n1, false)}</label>
       <label class="field"><span>Tweede nationaliteit</span>${natSelect('nat2', n2, true)}</label>
       <div class="field-row"><label class="field"><span>Geboortedatum</span><input name="dob" type="date" value="${esc(pr.dob || '')}"></label>
-      <label class="field"><span>Rugnummer</span><input name="shirt" type="number" inputmode="numeric" min="1" max="99" value="${pr.shirt ?? ''}"></label></div>
+      <label class="field"><span>Rugnummer in ${esc(seasonLabel())}</span><input name="shirt" type="number" inputmode="numeric" min="1" max="99" placeholder="uit de opstellingen" value="${shirtFor(pr, getSeason()) ?? ''}"></label></div>
       <div class="field-row"><label class="field"><span>Positie</span><select name="position">${POS_OPTS.map(([v, l]) => `<option value="${v}" ${(pr.position || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="field"><span>Voet</span><select name="foot">${FOOT_OPTS.map((f) => `<option value="${f}" ${(pr.foot || '') === f ? 'selected' : ''}>${f || '—'}</option>`).join('')}</select></label></div>
       <div class="field-row"><label class="field"><span>Lengte (cm)</span><input name="height" type="number" inputmode="numeric" min="140" max="220" value="${pr.height ?? ''}"></label>
       <label class="field"><span>Contract tot</span><input name="contract" type="date" value="${esc(pr.contractUntil || '')}"></label></div>
-      <p class="muted sheet__note">Positie en rugnummer van Highlightly blijven leidend in de opstellingen; dit is je profiel.</p>`,
+      <p class="muted sheet__note">Het rugnummer geldt alleen voor ${esc(seasonLabel())}; leeg = het nummer uit de opstellingen. Ander seizoen? Kies dat eerst via de clubnaam op Home.</p>`,
     validate: (fd) => {
       if (fd.get('nat2') && fd.get('nat2') === fd.get('nat1')) return 'Twee keer dezelfde nationaliteit.';
       const h = fd.get('height'); if (h && (Number(h) < 140 || Number(h) > 220)) return 'Lengte tussen 140 en 220 cm.';
@@ -304,13 +307,15 @@ async function editProfile(ctx, id, profiles) {
   const next = {
     nationality: nats.length ? nats.join(' / ') : null,
     dob: data.get('dob') || null,
-    shirt: data.get('shirt') ? Number(data.get('shirt')) : null,
+    shirts: { ...(pr.shirts || shirtsOf(pr)), [getSeason()]: data.get('shirt') ? Number(data.get('shirt')) : null },
+    shirt: null,
     position: data.get('position') || null,
     foot: data.get('foot') || null,
     height: data.get('height') ? Number(data.get('height')) : null,
     contractUntil: data.get('contract') || null,
   };
   const before = Object.fromEntries(Object.keys(next).map((k) => [k, pr[k] ?? null]));
+  before.shirts = { ...(pr.shirts || {}), [getSeason()]: (pr.shirts || {})[getSeason()] ?? null }; // merge-veilig terugzetten
   try {
     await savePlayer(id, next);
     toast('Profiel opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await savePlayer(id, before); ctx.refresh(); } });
@@ -520,7 +525,7 @@ function seasonMembers(list, squadPlayers, profiles) {
     const st = statusIn(pr, win, ref);
     if (!st.member) return;
     members.push({
-      id, name: pr.fullName || pr.legacyName || '?', number: pr.shirt ?? null, position: pr.position || '',
+      id, name: pr.fullName || pr.legacyName || '?', number: shirtFor(pr, getSeason()) ?? latestShirt(pr, getSeason()), position: pr.position || '',
       photo: pr.photoUrl || null, nationality: pr.nationality || null,
       apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
       status: pr.squadLevel === 'jeugd' && st.status === 'active' ? 'youth' : st.status, labels: [...(injuryLabel(pr, ref, isCurrentSeason()) ? [injuryLabel(pr, ref, isCurrentSeason())] : []), ...(st.labels || [])], conflict: false, profileOnly: true,
@@ -546,7 +551,7 @@ function profileOnlyPage(pr, id) {
   return `
     ${head({ kicker: `Archief · ${LINE_SHORT[pr.position] || '—'}`, title: name, back: 'selectie' })}
     <section class="section">
-      <div class="player-hero">${pr.photoUrl ? photoImg(pr.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${pr.shirt ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
+      <div class="player-hero">${pr.photoUrl ? photoImg(pr.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${shirtFor(pr, getSeason()) ?? latestShirt(pr) ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
       <div><button class="btn btn--sm" type="button" data-action="edit-name" data-id="${esc(id)}" data-api="" data-full="${esc(pr.fullName || '')}" data-short="${esc(pr.shortName || '')}" data-photo="${esc(pr.photoUrl || '')}">Naam en foto</button></div>
       <p class="muted" style="font-size:13px;margin:0">${pr.linkedTo === null || String(id).startsWith('legacy-')
         ? 'Nog niet gekoppeld aan Highlightly. Stats verschijnen zodra hij in een opgehaald seizoen voorkomt en je hem hieronder koppelt.'
@@ -578,7 +583,7 @@ export const playerViews = {
           <p class="muted" style="font-size:13px">Iedereen uit je archief, huidige spelers bovenaan, daarna wie het laatst vertrok.</p>
           <div><button class="btn btn--sm" type="button" data-add-player>+ Speler toevoegen</button></div>
           <div class="list">${rows.map((r) => `<a class="list-row player-row" href="#/speler/${encodeURIComponent(r.id)}">
-            ${avatar({ name: r.name, photo: r.pr.photoUrl, number: r.pr.shirt })}
+            ${avatar({ name: r.name, photo: r.pr.photoUrl, number: latestShirt(r.pr) })}
             <span class="list-row__main"><span class="list-row__title">${esc(r.name)}${r.pr.nationality ? `<span class="row-flags">${nationalities(r.pr.nationality).map((n) => flag(n, 12)).join('')}</span>` : ''}</span>
               <span class="list-row__sub">${esc(LINE_SHORT[r.pr.position] || '—')}${periodText(r.pr) ? ' · ' + esc(periodText(r.pr)) : ''}${String(r.id).startsWith('legacy-') ? ' · niet gekoppeld' : ''}</span></span>
             <span></span></a>`).join('')}</div>
