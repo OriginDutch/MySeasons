@@ -11,6 +11,7 @@ const dmy = (iso) => (iso ? new Date(iso + 'T12:00:00').toLocaleDateString('nl-N
 const dm = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const days = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);
+const daysUntil = (d) => Math.round((Date.parse(`${d}T12:00:00`) - Date.now()) / 864e5);
 const weeks = (n) => (n < 14 ? `${n} ${n === 1 ? 'dag' : 'dagen'}` : `${Math.round(n / 7)} weken`);
 
 export const INJURY_TYPES = ['Hamstring', 'Enkel', 'Knie', 'Kruisband', 'Meniscus', 'Lies', 'Kuit', 'Dijbeen', 'Rug', 'Schouder', 'Voet', 'Hersenschudding', 'Spierblessure', 'Ziek', 'Overig'];
@@ -229,7 +230,7 @@ export function injuryBlock(pr, id) {
       ${list.length ? `<div class="list">${list.map((x) => `
         <button type="button" class="list-row transfer-row ${x.state === 'out' ? 'is-injured' : ''}" data-edit-injury="${x.i}" data-pid="${pid}">
           <span class="list-row__main"><span class="list-row__title">${x.state === 'out' ? '<span class="inj-dot" aria-hidden="true"></span>' : ''}${esc(x.type || 'Blessure')}</span>
-          <span class="list-row__sub">${esc(dmy(x.startDate))} → ${x.state === 'healed' ? esc(dmy(x.actualReturn)) + ` · ${weeks(x.out)} out` : x.state === 'out' ? `nog geblesseerd · ${x.out ? weeks(x.out) : 'sinds vandaag'}${x.expected ? ` · verwacht ${esc(dmy(x.expected))}` : ''}` : x.state === 'planned' ? 'gepland' : '?'}${x.note ? ` · ${esc(x.note)}` : ''}</span></span>
+          <span class="list-row__sub">${esc(dmy(x.startDate))} → ${x.state === 'healed' ? esc(dmy(x.actualReturn)) + ` · ${weeks(x.out)} out` : x.state === 'out' ? `nog geblesseerd · ${x.out ? `${weeks(x.out)} tot nu toe` : 'sinds vandaag'}${x.expected ? ` · verwacht terug ${esc(dmy(x.expected))}${daysUntil(x.expected) > 0 ? ` (nog ${weeks(daysUntil(x.expected))})` : ' (over tijd)'}` : ''}` : x.state === 'planned' ? 'gepland' : '?'}${x.note ? ` · ${esc(x.note)}` : ''}</span></span>
           <span class="muted" aria-hidden="true">✎</span></button>`).join('')}</div>`
         : '<p class="muted" style="font-size:13px">Geen blessures bekend.</p>'}
       <div><button class="btn btn--sm" type="button" data-add-injury data-pid="${pid}">+ Blessure toevoegen</button></div>
