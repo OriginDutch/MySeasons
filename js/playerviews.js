@@ -17,6 +17,7 @@ import { correctedList, runWithButton, explain, head, crest } from './matchviews
 import { dayShort, opponentOf, isHome } from './season.js';
 import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './playerextra.js';
 import { currentSquad } from './importer.js';
+import { hlTestBlock, mountHlTest } from './hltest.js';
 import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf } from './shirts.js';
 
 const TEAM = MAIN_CLUB.id;
@@ -754,6 +755,7 @@ export const playerViews = {
     navKey: 'selectie',
     mount(root, ctx) {
       mountTransfers(root, ctx);
+      mountHlTest(root);
       mountExtra(root, ctx, async () => (await correctedList()).profiles);
       root.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-action="edit-name"]');
@@ -812,6 +814,7 @@ export const playerViews = {
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>
         ${profileBlock(p.profile, p.id)}
+        ${hlTestBlock(p.id)}
         ${valueBlock(p.profile || {}, p.id)}
         ${injuryBlock(p.profile || {}, p.id)}
         ${transfersBlock(p.profile, p.id)}
