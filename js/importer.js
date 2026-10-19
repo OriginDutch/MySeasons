@@ -60,7 +60,8 @@ export function suggest(p, squad) {
   return scored[0].s.id;
 }
 
-async function currentSquad() {
+/** Alle Highlightly-spelers van Cambuur over alle opgehaalde seizoenen. */
+export async function currentSquad() {
   const all = await getAllMatches();
   const withNotes = await Promise.all(all.map(async (m) => (m.detail ? applyCorrections(m, await getNotes(m.id).catch(() => null)).match : m)));
   const seasons = [...new Set(withNotes.map((m) => m.league && m.league.season).filter((x) => x != null))];
