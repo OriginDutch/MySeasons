@@ -850,3 +850,8 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 [data-dup] { font-size: 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 [data-dup][hidden] { display: none; }
 .kv-note { white-space: pre-wrap; }
+.nat-pick__flag:empty::before { content: ''; width: 20px; height: 14px; border: 1px dashed var(--hairline); border-radius: 2px; }
+.photo-preview { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.photo-preview[hidden] { display: none; }
+.photo-preview img { width: 44px; height: 56px; object-fit: cover; border-radius: 4px; background: var(--surface-hover); flex: none; }
+.photo-preview img[hidden] { display: none; }

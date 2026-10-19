@@ -111,6 +111,25 @@ async function editTransfer(ctx, id, index, profiles) {
   } catch (err) { toast(`Opslaan lukte niet: ${err.message || err}`); }
 }
 
+/** Foto-link met voorbeeld, zodat je meteen ziet of de link een afbeelding is. */
+function photoField(value) {
+  return `<label class="field"><span>Foto-link</span><input name="photo" type="url" inputmode="url" autocomplete="off" placeholder="https://… (link naar de afbeelding zelf)" value="${esc(value)}" data-photo-input></label>
+    <div class="photo-preview" data-photo-preview ${value ? '' : 'hidden'}><img alt="" referrerpolicy="no-referrer"${value ? ` src="${esc(value)}"` : ''}><span class="muted" data-photo-msg></span></div>`;
+}
+document.addEventListener('input', (e) => {
+  const inp = e.target.closest && e.target.closest('[data-photo-input]');
+  if (!inp) return;
+  const box = inp.closest('form').querySelector('[data-photo-preview]');
+  const url = inp.value.trim();
+  box.hidden = !/^https:\/\/\S+$/.test(url);
+  if (box.hidden) return;
+  const img = box.querySelector('img'); const msg = box.querySelector('[data-photo-msg]');
+  msg.textContent = 'Laden…'; img.hidden = false;
+  img.onload = () => { msg.textContent = 'Werkt.'; };
+  img.onerror = () => { img.hidden = true; msg.textContent = 'Deze link laadt geen afbeelding. Gebruik "Afbeeldingsadres kopiëren", niet de link van de pagina. Sommige sites blokkeren gebruik buiten hun site.'; };
+  img.src = url;
+});
+
 // ---------- Speler zelf toevoegen (bijv. een oude selectie klaarzetten) ----------
 const normName = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
 /** Lijkt deze naam op iemand die je al hebt? Zelfde achternaam + zelfde eerste letter, of de ene naam zit in de andere. */
@@ -149,11 +168,17 @@ async function addPlayer(ctx) {
       <label class="field"><span>Geboortedatum</span><input name="dob" type="date"></label></div>
       <div class="field-row"><label class="field"><span>Hoe kwam hij</span><select name="type">${T_TYPES.filter(([v]) => ['transfer-in', 'huur-in', 'promotie'].includes(v)).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select></label>
       <label class="field"><span>Datum</span><input name="date" type="date" value="${esc(start)}"></label></div>
+      <div class="field-row"><label class="field"><span>Tot (bij huur)</span><input name="dateTo" type="date"></label>
+      <label class="field"><span>Bedrag (€)</span><input name="amount" type="number" inputmode="numeric" min="0" step="1000" placeholder="leeg = onbekend"></label></div>
       ${clubField('club', 'Van club', {})}
+      <label class="field"><span>Notitie bij de transfer</span><input name="tnote" maxlength="120" placeholder="bijv. Vrije transfer"></label>
+      ${photoField('')}
       <p class="muted sheet__note">Hij staat dan in de selectie van elk seizoen vanaf die datum. Vertrek, waarde en contract zet je daarna op zijn spelerspagina. Komt hij later in een Highlightly-opstelling voor, dan koppel je hem daar.</p>`,
     validate: (fd) => {
       if (!String(fd.get('name') || '').trim()) return 'Vul een naam in.';
       if (!fd.get('date')) return 'Vul de datum in waarop hij kwam.';
+      if (fd.get('dateTo') && fd.get('dateTo') < fd.get('date')) return '"Tot" ligt vóór de datum.';
+      if (fd.get('photo') && !/^https:\/\/\S+$/.test(String(fd.get('photo')).trim())) return 'De foto-link moet met https:// beginnen.';
       return null;
     },
   });
@@ -178,7 +203,8 @@ async function addPlayer(ctx) {
   const prof = {
     fullName: String(data.get('name')).trim(), position: data.get('position') || null, shirts: shirt != null ? { [seasonOfDate(data.get('date'))]: shirt } : null,
     nationality: data.get('nat1') || null, dob: data.get('dob') || null, manual: true, linkedTo: null,
-    transfers: [{ type: data.get('type'), date: data.get('date'), dateTo: null, club, clubId: clubId && !Number.isNaN(Number(clubId)) ? Number(clubId) : clubId, clubLogo: clubId ? clubLogo : null, amount: null, note: null }],
+    photoUrl: String(data.get('photo') || '').trim() || null,
+    transfers: [{ type: data.get('type'), date: data.get('date'), dateTo: data.get('dateTo') || null, club, clubId: clubId && !Number.isNaN(Number(clubId)) ? Number(clubId) : clubId, clubLogo: clubId ? clubLogo : null, amount: data.get('amount') === '' || data.get('amount') == null ? null : Number(data.get('amount')), note: String(data.get('tnote') || '').trim() || null }],
   };
   try {
     await savePlayer(id, prof);
@@ -676,7 +702,7 @@ export const playerViews = {
           title: 'Naam aanpassen',
           body: `<label class="field"><span>Volledige naam</span><input name="full" maxlength="60" autocomplete="off" placeholder="${esc(api)}" value="${esc(full)}"></label>
             <label class="field"><span>Korte naam (tijdlijn, opstellingen)</span><input name="short" maxlength="30" autocomplete="off" placeholder="${esc(autoShort(full || api))}" value="${esc(short)}"></label>
-            <label class="field"><span>Foto-link</span><input name="photo" type="url" inputmode="url" autocomplete="off" placeholder="https://…" value="${esc(photo || '')}"></label>
+            ${photoField(photo || '')}
             <p class="muted sheet__note">Leeg laten = automatisch. ${api ? `Highlightly noemt hem: ${esc(api)}` : ''}</p>`,
           validate: (fd) => (fd.get('photo') && !/^https:\/\/\S+$/.test(String(fd.get('photo')).trim()) ? 'De foto-link moet met https:// beginnen.' : null),
         });
