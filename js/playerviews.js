@@ -3,6 +3,7 @@
 import { esc, toast } from './ui.js';
 import { savePlayer, deletePlayer } from './store.js';
 import { addMessageOnce } from './inbox.js';
+import { similarNames, siteSnapshot, compareSquad, siteBlock, ignoredKeys, ignoreKey } from './squadsite.js';
 import { clubField, clubCrest, knownTeams, matchTeam } from './clubpick.js';
 import { autoShort } from './names.js';
 import { openSheet } from './editor.js';
@@ -132,18 +133,6 @@ document.addEventListener('input', (e) => {
 });
 
 // ---------- Speler zelf toevoegen (bijv. een oude selectie klaarzetten) ----------
-const normName = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
-/** Lijkt deze naam op iemand die je al hebt? Zelfde achternaam + zelfde eerste letter, of de ene naam zit in de andere. */
-function similarNames(name, known) {
-  const n = normName(name); if (n.length < 3) return [];
-  const parts = n.split(' '); const last = parts[parts.length - 1]; const first = parts[0][0];
-  return known.filter((k) => {
-    const m = normName(k.name); if (!m) return false;
-    const mp = m.split(' ');
-    return m === n || (mp[mp.length - 1] === last && last.length > 2 && mp[0][0] === first) || (n.length > 5 && (m.includes(n) || n.includes(m)));
-  }).slice(0, 3);
-}
-
 async function knownPeople(profiles) {
   const out = []; const seen = new Set();
   const squad = await currentSquad().catch(() => []);
@@ -155,16 +144,16 @@ async function knownPeople(profiles) {
   return out;
 }
 
-async function addPlayer(ctx) {
+async function addPlayer(ctx, pre = {}) {
   const { profiles } = await correctedList();
   const known = await knownPeople(profiles);
   const start = `${getSeason()}-07-01`;
   const sheet = openSheet({
     title: 'Speler toevoegen',
-    body: `<label class="field"><span>Naam</span><input name="name" maxlength="60" autocomplete="off" required placeholder="Voor- en achternaam"></label>
+    body: `<label class="field"><span>Naam</span><input name="name" maxlength="60" autocomplete="off" required placeholder="Voor- en achternaam" value="${esc(pre.name || '')}"></label>${pre.level === 'o21' ? '<input type="hidden" name="level" value="o21"><p class="muted sheet__note">Komt bij O21 (staat op de O21-pagina van de club).</p>' : ''}
       <div data-dup class="sheet__note" hidden></div>
-      <div class="field-row"><label class="field"><span>Positie</span><select name="position">${POS_OPTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
-      <label class="field"><span>Rugnummer</span><input name="shirt" type="number" inputmode="numeric" min="1" max="99"></label></div>
+      <div class="field-row"><label class="field"><span>Positie</span><select name="position">${POS_OPTS.map(([v, l]) => `<option value="${v}" ${pre.position === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="field"><span>Rugnummer</span><input name="shirt" type="number" inputmode="numeric" min="1" max="99" value="${pre.shirt ?? ''}"></label></div>
       <div class="field-row"><label class="field"><span>Nationaliteit</span>${natSelect('nat1', '', false)}</label>
       <label class="field"><span>Geboortedatum</span><input name="dob" type="date"></label></div>
       <div class="field-row"><label class="field"><span>Hoe kwam hij</span><select name="type">${T_TYPES.filter(([v]) => ['transfer-in', 'huur-in', 'promotie'].includes(v)).map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select></label>
@@ -205,6 +194,7 @@ async function addPlayer(ctx) {
     fullName: String(data.get('name')).trim(), position: data.get('position') || null, shirts: shirt != null ? { [seasonOfDate(data.get('date'))]: shirt } : null,
     nationality: data.get('nat1') || null, dob: data.get('dob') || null, manual: true, linkedTo: null,
     photoUrl: String(data.get('photo') || '').trim() || null,
+    levels: data.get('level') === 'o21' ? { [seasonOfDate(data.get('date'))]: 'o21' } : null,
     transfers: [{ type: data.get('type'), date: data.get('date'), dateTo: data.get('dateTo') || null, club, clubId: clubId && !Number.isNaN(Number(clubId)) ? Number(clubId) : clubId, clubLogo: clubId ? clubLogo : null, amount: data.get('amount') === '' || data.get('amount') == null ? null : Number(data.get('amount')), note: String(data.get('tnote') || '').trim() || null }],
   };
   try {
@@ -212,6 +202,21 @@ async function addPlayer(ctx) {
     toast(`${prof.fullName} toegevoegd`, { action: 'Bekijken', onAction: () => { location.hash = `#/speler/${encodeURIComponent(id)}`; } });
     ctx.refresh();
   } catch (err) { toast(`Opslaan lukte niet: ${err.message || err}`); }
+}
+
+async function siteFix(ctx, d) {
+  if (!d) return;
+  const { profiles } = await correctedList();
+  const pr = profiles[d.id] || {};
+  const y = getSeason();
+  try {
+    if (d.kind === 'missing') { await addPlayer(ctx, { name: d.site.name, shirt: d.site.number, position: d.site.line, level: d.site.level }); return; }
+    if (d.kind === 'number') await savePlayer(d.id, { shirts: { ...(pr.shirts || shirtsOf(pr)), [y]: d.site }, shirt: null });
+    else if (d.kind === 'to-o21' || d.kind === 'to-first') await savePlayer(d.id, { levels: { ...(pr.levels || levelsOf(pr)), [y]: d.kind === 'to-o21' ? 'o21' : 'first' }, squadLevel: null });
+    else if (d.kind === 'line') await savePlayer(d.id, { position: d.site });
+    else if (d.kind === 'gone') { await editTransfer(ctx, d.id, null, profiles); return; }
+    toast(`${d.name}: overgenomen`); ctx.refresh();
+  } catch (err) { toast(`Lukte niet: ${err.message || err}`); }
 }
 
 async function removePlayer(ctx, id) {
@@ -273,6 +278,10 @@ function mountTransfers(root, ctx) {
   root.addEventListener('click', async (e) => {
     const addP = e.target.closest('[data-add-player]');
     if (addP) { addPlayer(ctx); return; }
+    const ign = e.target.closest('[data-sq-ignore]');
+    if (ign) { await ignoreKey(ign.dataset.sqIgnore); toast('Genegeerd'); ctx.refresh(); return; }
+    const fix = e.target.closest('[data-sq-fix]');
+    if (fix) { await siteFix(ctx, SITE_DIFFS.get(fix.dataset.sqFix)); return; }
     const del = e.target.closest('[data-delete-player]');
     if (del) { removePlayer(ctx, del.dataset.deletePlayer); return; }
     const pro = e.target.closest('[data-promote]');
@@ -418,6 +427,7 @@ function avatar(p) {
 
 /** Twee spelers in de huidige selectie met hetzelfde rugnummer: waarschuwen (archief maakt niet uit). */
 const PROMOTE_AT = 5;
+let SITE_DIFFS = new Map(); // laatste vergelijking met de clubsite, voor de knoppen
 
 function markDuplicateNumbers(players) {
   const byNr = new Map();
@@ -663,6 +673,16 @@ export const playerViews = {
       const { members, groups } = seasonMembers(list, built.players, profiles);
       const players = groups.active;
       markDuplicateNumbers(players);
+      let site = '';
+      if (isCurrentSeason()) {
+        const s = await siteSnapshot();
+        if (s && s.snap && (s.pages || []).length) {
+          const ign = await ignoredKeys();
+          const diffs = compareSquad(s.snap, members).filter((d) => !ign.has(d.key));
+          SITE_DIFFS = new Map(diffs.map((d) => [d.key, d]));
+          site = siteBlock(diffs, s.snap);
+        }
+      }
       if (isCurrentSeason()) groups.youth.filter((p) => !p.profileOnly && p.apps >= PROMOTE_AT).forEach((p) => addMessageOnce({
         id: `promote:${p.id}:${getSeason()}`, kind: 'info', title: `${p.name} speelde ${p.apps} duels in het eerste`,
         text: 'Hij staat bij O21. Doorschuiven naar het eerste elftal?', href: `#/speler/${encodeURIComponent(p.id)}`,
@@ -691,6 +711,7 @@ export const playerViews = {
           </fieldset>
         </section>
         ${missingBlock(list)}
+        ${site}
         <div class="mob-only">${SORTS.map(([v], i) => `<div data-sq="${v}" ${i === 0 ? '' : 'hidden'}>${squadList(players, v)}</div>`).join('')}</div>
         <section class="section desk-only-block">
           <div class="sq-tools"><fieldset class="segmented segmented--2 sq-group-toggle" style="margin:0;padding:0"><legend class="visually-hidden">Indeling</legend>

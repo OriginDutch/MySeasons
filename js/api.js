@@ -99,6 +99,13 @@ export const push = {
   prefs: (p) => call('/push/prefs', null, { method: 'POST', body: p }),
 };
 
+// ---------- Selectiepagina's van de clubsite ----------
+export const squad = {
+  get: () => call('/squad'),
+  setPages: (pages) => call('/squad/pages', null, { method: 'POST', body: { pages } }),
+  refresh: () => call('/squad/refresh', null, { method: 'POST', body: {} }),
+};
+
 // ---------- Automatische back-ups (gzip, bewaard in de Worker-KV) ----------
 export const backups = {
   list: () => call('/backup/list'),

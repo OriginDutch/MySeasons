@@ -21,6 +21,7 @@
 import { pushApi, pushScheduled } from './push.js';
 import { backupApi } from './backup.js';
 import { followUp } from './followup.js';
+import { squadApi, squadScheduled } from './squadpage.js';
 
 const PROJECT_ID = 'myseasons-c1dd9';
 const HIGHLIGHTLY_BASE = 'https://soccer.highlightly.net';
@@ -350,6 +351,7 @@ export default {
     ctx.waitUntil(Promise.all([
       nsScheduled(env, event.scheduledTime),
       pushScheduled(env, event.scheduledTime).catch(() => {}),
+      squadScheduled(env, event.scheduledTime).catch(() => {}),
       followUp(env, event.scheduledTime, {
         base: HIGHLIGHTLY_BASE, inboxPrefix: NS_INBOX, remainingOf,
         state: () => nsGet(env, NS_STATE, {}),
@@ -368,7 +370,8 @@ export default {
     const isNs = url.pathname.startsWith('/ns/');
     const isPush = url.pathname.startsWith('/push/');
     const isBackup = url.pathname.startsWith('/backup/');
-    if (request.method !== 'GET' && !(isNs && ['POST', 'DELETE'].includes(request.method)) && !((isPush || isBackup) && request.method === 'POST')) {
+    const isSquad = url.pathname === '/squad' || url.pathname.startsWith('/squad/');
+    if (request.method !== 'GET' && !(isNs && ['POST', 'DELETE'].includes(request.method)) && !((isPush || isBackup || isSquad) && request.method === 'POST')) {
       return json({ error: 'Methode niet toegestaan' }, 405, origin);
     }
 
@@ -404,6 +407,12 @@ export default {
     if (isBackup) {
       if (!env.MS_KV) return json({ error: 'Back-ups: KV-namespace MS_KV is nog niet gekoppeld' }, 501, origin);
       return backupApi(request, env, url, (b, st) => json(b, st, origin), corsHeaders(origin));
+    }
+
+    // Selectiepagina's van de clubsite: instellen, snapshot lezen, nu ophalen.
+    if (isSquad) {
+      if (!env.MS_KV) return json({ error: 'Selectiepagina: KV-namespace MS_KV is nog niet gekoppeld' }, 501, origin);
+      return squadApi(request, env, url, (b, st) => json(b, st, origin));
     }
 
     // Gezondheidscheck: geen Highlightly-call, kost geen quotum.

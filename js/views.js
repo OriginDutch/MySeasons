@@ -14,6 +14,7 @@ import { backupViews } from './backup.js';
 import { inboxViews } from './inbox.js';
 import { meldingenViews } from './meldingen.js';
 import { clubNamesViews } from './clubnamesview.js';
+import { squadSiteViews } from './squadsite.js';
 import { getCallsToday, getAllMatches, getAllNotes } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
 import { getThemePref, setThemePref, getClubColors, setClubColors } from './theme.js';
@@ -53,6 +54,7 @@ export const views = {
   ...inboxViews,
   ...meldingenViews,
   ...clubNamesViews,
+  ...squadSiteViews,
 
   meer: {
     title: 'Meer',
@@ -84,6 +86,10 @@ export const views = {
             </a>
             <a class="list-row" href="#/meldingen">
               <span class="list-row__main"><span class="list-row__title">Meldingen</span><span class="list-row__sub">“Veel plezier bij…” om 09:00 op wedstrijddag</span></span>
+              ${icons.chevron}
+            </a>
+            <a class="list-row" href="#/clubsite">
+              <span class="list-row__main"><span class="list-row__title">Clubsite</span><span class="list-row__sub">Selectiepagina's volgen: verschillen met je selectie</span></span>
               ${icons.chevron}
             </a>
             <a class="list-row" href="#/clubnamen">
