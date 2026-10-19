@@ -54,7 +54,7 @@ export async function migrateShirts() {
   return { moved: writes.length };
 }
 
-// ---------- Selectie per seizoen: eerste elftal of Onder 21 ----------
+// ---------- Selectie per seizoen: eerste elftal of O21 ----------
 // players/{id}.levels = { 2025: 'o21', 2026: 'first' }. Een keuze geldt ook voor de seizoenen erna,
 // tot je iets anders kiest of tot een transfer "Doorgestroomd uit de jeugd" (dan eerste elftal).
 // Oud formaat: squadLevel 'jeugd' uit je oude tracker hoort bij zijn laatste seizoen.

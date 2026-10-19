@@ -347,7 +347,7 @@ async function editProfile(ctx, id, profiles) {
       <label class="field"><span>Voet</span><select name="foot">${FOOT_OPTS.map((f) => `<option value="${f}" ${(pr.foot || '') === f ? 'selected' : ''}>${f || '—'}</option>`).join('')}</select></label></div>
       <div class="field-row"><label class="field"><span>Lengte (cm)</span><input name="height" type="number" inputmode="numeric" min="140" max="220" value="${pr.height ?? ''}"></label>
       <label class="field"><span>Contract tot</span><input name="contract" type="date" value="${esc(pr.contractUntil || '')}"></label></div>
-      <label class="field"><span>Selectie in ${esc(seasonLabel())}</span><select name="level"><option value="first" ${levelFor(pr, getSeason()) === 'first' ? 'selected' : ''}>Eerste elftal</option><option value="o21" ${levelFor(pr, getSeason()) === 'o21' ? 'selected' : ''}>Onder 21</option></select></label>
+      <label class="field"><span>Selectie in ${esc(seasonLabel())}</span><select name="level"><option value="first" ${levelFor(pr, getSeason()) === 'first' ? 'selected' : ''}>Eerste elftal</option><option value="o21" ${levelFor(pr, getSeason()) === 'o21' ? 'selected' : ''}>O21</option></select></label>
       <label class="field"><span>Notitie</span><textarea name="note" rows="3" maxlength="500" placeholder="bijv. Clubopties +1 jaar">${esc(pr.note || '')}</textarea></label>
       <p class="muted sheet__note">Het rugnummer geldt alleen voor ${esc(seasonLabel())}; leeg = het nummer uit de opstellingen. Ander seizoen? Kies dat eerst via de clubnaam op Home.</p>`,
     validate: (fd) => {
@@ -665,7 +665,7 @@ export const playerViews = {
       markDuplicateNumbers(players);
       if (isCurrentSeason()) groups.youth.filter((p) => !p.profileOnly && p.apps >= PROMOTE_AT).forEach((p) => addMessageOnce({
         id: `promote:${p.id}:${getSeason()}`, kind: 'info', title: `${p.name} speelde ${p.apps} duels in het eerste`,
-        text: 'Hij staat bij Onder 21. Doorschuiven naar het eerste elftal?', href: `#/speler/${encodeURIComponent(p.id)}`,
+        text: 'Hij staat bij O21. Doorschuiven naar het eerste elftal?', href: `#/speler/${encodeURIComponent(p.id)}`,
       }).catch(() => {}));
       const kicker = `MySeasons / ${MAIN_CLUB.name} ${seasonLabel()}`;
       if (!members.length) {
@@ -677,7 +677,7 @@ export const playerViews = {
       const used = members.filter((p) => p.apps).length;
       const extra = [
         ['left', isCurrentSeason() ? 'Vertrokken dit seizoen' : 'Vertrokken tijdens het seizoen'],
-        ['youth', 'Onder 21'],
+        ['youth', 'O21'],
         ['loaned', 'Verhuurd'],
         ['future', 'Komt nog'],
       ].filter(([k]) => groups[k].length);
@@ -779,9 +779,9 @@ export const playerViews = {
       ];
       const log = p.log.slice().reverse();
       return `
-        ${head({ kicker: `Selectie${levelFor(p.profile, getSeason()) === 'o21' ? ' · Onder 21' : ''} · ${LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
+        ${head({ kicker: `Selectie${levelFor(p.profile, getSeason()) === 'o21' ? ' · O21' : ''} · ${LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
         <section class="section">
-          ${levelFor(p.profile, getSeason()) === 'o21' && p.apps >= PROMOTE_AT ? `<div class="promote-line"><span>Staat bij Onder 21, maar speelde ${p.apps} duels in het eerste.</span><button class="btn btn--sm btn--primary" type="button" data-promote="${esc(String(p.id))}">Naar eerste elftal</button></div>` : ''}
+          ${levelFor(p.profile, getSeason()) === 'o21' && p.apps >= PROMOTE_AT ? `<div class="promote-line"><span>Staat bij O21, maar speelde ${p.apps} duels in het eerste.</span><button class="btn btn--sm btn--primary" type="button" data-promote="${esc(String(p.id))}">Naar eerste elftal</button></div>` : ''}
           <div class="player-hero">${p.profile && p.profile.photoUrl ? photoImg(p.profile.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${p.number ?? '–'}</span>
             <span class="muted">${esc(LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
           <p class="muted" style="font-size:12px;margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>
