@@ -75,10 +75,10 @@ function transfersBlock(pr, id) {
     </section>`;
 }
 
-async function editTransfer(ctx, id, index, profiles) {
+async function editTransfer(ctx, id, index, profiles, preset = {}) {
   const pr = profiles[String(id)] || {};
   const all = (pr.transfers || []).slice();
-  const t = index != null ? all[index] : { type: 'transfer-uit', date: new Date().toISOString().slice(0, 10) };
+  const t = index != null ? all[index] : { type: preset.type || 'transfer-uit', date: new Date().toISOString().slice(0, 10) };
   const data = await openSheet({
     title: index != null ? 'Transfer aanpassen' : 'Transfer toevoegen',
     body: `<label class="field"><span>Soort</span><select name="type">${T_TYPES.map(([v, l]) => `<option value="${v}" ${t.type === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
@@ -204,17 +204,18 @@ async function addPlayer(ctx, pre = {}) {
   } catch (err) { toast(`Opslaan lukte niet: ${err.message || err}`); }
 }
 
-async function siteFix(ctx, d) {
+async function siteFix(ctx, d, act) {
   if (!d) return;
   const { profiles } = await correctedList();
   const pr = profiles[d.id] || {};
   const y = getSeason();
   try {
+    if (act === 'open') { location.hash = `#/speler/${encodeURIComponent(d.id)}`; return; }
+    if (act === 'out' || act === 'loan') { await editTransfer(ctx, d.id, null, profiles, { type: act === 'out' ? 'transfer-uit' : 'huur-uit' }); return; }
     if (d.kind === 'missing') { await addPlayer(ctx, { name: d.site.name, shirt: d.site.number, position: d.site.line, level: d.site.level }); return; }
     if (d.kind === 'number') await savePlayer(d.id, { shirts: { ...(pr.shirts || shirtsOf(pr)), [y]: d.site }, shirt: null });
     else if (d.kind === 'to-o21' || d.kind === 'to-first') await savePlayer(d.id, { levels: { ...(pr.levels || levelsOf(pr)), [y]: d.kind === 'to-o21' ? 'o21' : 'first' }, squadLevel: null });
     else if (d.kind === 'line') await savePlayer(d.id, { position: d.site });
-    else if (d.kind === 'gone') { await editTransfer(ctx, d.id, null, profiles); return; }
     toast(`${d.name}: overgenomen`); ctx.refresh();
   } catch (err) { toast(`Lukte niet: ${err.message || err}`); }
 }
@@ -278,10 +279,11 @@ function mountTransfers(root, ctx) {
   root.addEventListener('click', async (e) => {
     const addP = e.target.closest('[data-add-player]');
     if (addP) { addPlayer(ctx); return; }
-    const ign = e.target.closest('[data-sq-ignore]');
-    if (ign) { await ignoreKey(ign.dataset.sqIgnore); toast('Genegeerd'); ctx.refresh(); return; }
     const fix = e.target.closest('[data-sq-fix]');
-    if (fix) { await siteFix(ctx, SITE_DIFFS.get(fix.dataset.sqFix)); return; }
+    if (fix) {
+      if (fix.dataset.sqAct === 'ignore') { await ignoreKey(fix.dataset.sqFix); toast('Verborgen'); ctx.refresh(); return; }
+      await siteFix(ctx, SITE_DIFFS.get(fix.dataset.sqFix), fix.dataset.sqAct); return;
+    }
     const del = e.target.closest('[data-delete-player]');
     if (del) { removePlayer(ctx, del.dataset.deletePlayer); return; }
     const pro = e.target.closest('[data-promote]');
@@ -678,7 +680,7 @@ export const playerViews = {
         const s = await siteSnapshot();
         if (s && s.snap && (s.pages || []).length) {
           const ign = await ignoredKeys();
-          const diffs = compareSquad(s.snap, members).filter((d) => !ign.has(d.key));
+          const diffs = compareSquad(s.snap, members, profiles).filter((d) => !ign.has(d.key));
           SITE_DIFFS = new Map(diffs.map((d) => [d.key, d]));
           site = siteBlock(diffs, s.snap);
         }

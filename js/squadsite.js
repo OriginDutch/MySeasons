@@ -44,21 +44,44 @@ export async function checkSquadSite() {
 
 // ---------- Vergelijken ----------
 const LEVEL_TXT = { first: 'eerste elftal', o21: 'O21' };
+const LAG_DAYS = 14; // zo lang mag de site achterlopen na een vertrek
+
+const dmyShort = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+function lastOut(pr) {
+  return ((pr && pr.transfers) || []).filter((t) => (t.type === 'transfer-uit' || t.type === 'huur-uit') && t.date).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+}
 
 /**
- * members: seasonMembers().members van het huidige seizoen. Geeft een lijst verschillen:
- * { key, kind: 'missing'|'number'|'to-o21'|'to-first'|'line'|'gone', id?, name, site?, app? }
+ * members: seasonMembers().members van het huidige seizoen; profiles: alle profielen (archief).
+ * Geeft verschillen: { key, kind, id?, name, site?, app?, date? }
+ * kind: missing | number | to-o21 | to-first | line | gone | left-listed
  */
-export function compareSquad(snap, members) {
+export function compareSquad(snap, members, profiles = {}) {
   if (!snap || !snap.pages) return [];
-  const live = members.filter((m) => m.status !== 'left' && m.status !== 'future');
-  const known = live.map((m) => ({ id: String(m.id), name: m.name }));
+  const byId = new Map(members.map((m) => [String(m.id), m]));
+  // Iedereen die je kent: huidige selectie, vertrokken, verhuurd én het archief (zodat een oud-speler niet als "nieuw" verschijnt).
+  const known = members.map((m) => ({ id: String(m.id), name: m.name }));
+  Object.entries(profiles).forEach(([id, pr]) => {
+    if (byId.has(id) || !pr || pr.linkedTo) return;
+    const name = pr.fullName || pr.legacyName; if (name) known.push({ id, name, archived: true });
+  });
+  const today = Date.now();
   const out = []; const matched = new Set();
   snap.pages.forEach((page) => (page.players || []).forEach((sp) => {
     const hit = similarNames(sp.name, known)[0];
     if (!hit) { out.push({ key: `missing:${normName(sp.name)}`, kind: 'missing', name: sp.name, site: { ...sp, level: page.level } }); return; }
     matched.add(hit.id);
-    const m = live.find((x) => String(x.id) === hit.id);
+    const m = byId.get(hit.id);
+    const pr = (m && m.profile) || profiles[hit.id] || null;
+    // Volgens jou weg (of verhuurd), maar nog op de site
+    if (!m || m.status === 'left' || m.status === 'loaned') {
+      if (m && m.status === 'loaned') return; // verhuurde spelers laten clubs vaak gewoon staan
+      const out1 = lastOut(pr);
+      if (out1 && (today - Date.parse(`${out1.date}T12:00:00`)) / 864e5 < LAG_DAYS) return; // site loopt nog achter, normaal
+      out.push({ key: `left-listed:${hit.id}`, kind: 'left-listed', id: hit.id, name: (m && m.name) || hit.name, date: out1 ? out1.date : null });
+      return;
+    }
+    if (m.status === 'future') return;
     if (sp.number != null && m.number !== sp.number) out.push({ key: `number:${hit.id}:${sp.number}`, kind: 'number', id: hit.id, name: m.name, site: sp.number, app: m.number });
     if (page.level === 'o21' && m.status !== 'youth') out.push({ key: `to-o21:${hit.id}`, kind: 'to-o21', id: hit.id, name: m.name });
     if (page.level === 'first' && m.status === 'youth') out.push({ key: `to-first:${hit.id}`, kind: 'to-first', id: hit.id, name: m.name });
@@ -66,8 +89,8 @@ export function compareSquad(snap, members) {
   }));
   // Wie staat er niet (meer) op? Alleen als die pagina goed uitgelezen is.
   const okLevels = new Set(snap.pages.filter((p) => !p.error && (p.players || []).length >= 8).map((p) => p.level));
-  live.forEach((m) => {
-    if (matched.has(String(m.id)) || m.status === 'loaned') return;
+  members.forEach((m) => {
+    if (matched.has(String(m.id)) || !['active', 'youth'].includes(m.status)) return;
     const lvl = m.status === 'youth' ? 'o21' : 'first';
     if (!okLevels.has(lvl)) return;
     out.push({ key: `gone:${m.id}`, kind: 'gone', id: String(m.id), name: m.name, app: lvl });
@@ -84,13 +107,15 @@ export async function ignoreKey(key) {
   await setMeta('sqIgnore', { keys });
 }
 
+// Per soort: uitleg + knoppen [label, actie]. Actie 'ignore' = deze ene afwijking verbergen.
 const ACTION = {
-  missing: (d) => [`Niet in je app${d.site.number != null ? ` · nr. ${d.site.number}` : ''}${d.site.line ? ` · ${LINE_SHORT[d.site.line]}` : ''} · ${LEVEL_TXT[d.site.level]}`, '+ Toevoegen'],
-  number: (d) => [`Site: nr. ${d.site} · app: ${d.app ?? '–'}`, `Nr. ${d.site} overnemen`],
-  'to-o21': () => ['Staat op de O21-pagina', 'Naar O21'],
-  'to-first': () => ['Staat op de pagina van het eerste elftal', 'Naar eerste elftal'],
-  line: (d) => [`Site: ${LINE_SHORT[d.site]} · app: ${LINE_SHORT[d.app] || '–'}`, 'Positie overnemen'],
-  gone: (d) => [`Niet (meer) op de ${LEVEL_TXT[d.app]}-pagina`, 'Vertrek invullen'],
+  missing: (d) => [`Niet in je app${d.site.number != null ? ` · nr. ${d.site.number}` : ''}${d.site.line ? ` · ${LINE_SHORT[d.site.line]}` : ''} · ${LEVEL_TXT[d.site.level]}`, [['+ Toevoegen', 'add'], ['Negeren', 'ignore']]],
+  number: (d) => [`Site: nr. ${d.site} · app: ${d.app ?? '–'}`, [[`Nr. ${d.site} overnemen`, 'number'], ['Negeren', 'ignore']]],
+  'to-o21': () => ['Staat op de O21-pagina', [['Naar O21', 'level'], ['Mijn keuze houden', 'ignore']]],
+  'to-first': () => ['Staat op de pagina van het eerste elftal', [['Naar eerste elftal', 'level'], ['Mijn keuze houden', 'ignore']]],
+  line: (d) => [`Site: ${LINE_SHORT[d.site]} · app: ${LINE_SHORT[d.app] || '–'}`, [['Positie overnemen', 'line'], ['Negeren', 'ignore']]],
+  gone: (d) => [`Niet (meer) op de ${LEVEL_TXT[d.app]}-pagina`, [['Vertrokken', 'out'], ['Verhuurd', 'loan'], ['Is er nog', 'ignore']]],
+  'left-listed': (d) => [`Volgens jou vertrokken${d.date ? ` op ${dmyShort(d.date)}` : ''}, staat nog op de site`, [['Site loopt achter', 'ignore'], ['Toch nog bij de club', 'open']]],
 };
 
 /** Blok voor Selectie. */
@@ -103,11 +128,11 @@ export function siteBlock(diffs, snap) {
   }
   return `<section class="section"><div class="section__label"><span>Volgens de clubsite</span><span>${diffs.length} · ${esc(when)}</span></div>
     <div class="list">${diffs.map((d) => {
-      const [txt, btn] = ACTION[d.kind](d);
+      const [txt, btns] = ACTION[d.kind](d);
       return `<div class="list-row site-row"><span class="list-row__main"><span class="list-row__title">${d.id ? `<a href="#/speler/${encodeURIComponent(d.id)}">${esc(d.name)}</a>` : esc(d.name)}</span><span class="list-row__sub">${esc(txt)}</span></span>
-        <span class="site-row__btns"><button class="btn btn--sm" type="button" data-sq-fix="${esc(d.key)}">${esc(btn)}</button><button class="btn btn--sm btn--ghost" type="button" data-sq-ignore="${esc(d.key)}" title="Niet meer tonen">Negeren</button></span></div>`;
+        <span class="site-row__btns">${btns.map(([l, a], i) => `<button class="btn btn--sm ${i ? 'btn--ghost' : ''}" type="button" data-sq-fix="${esc(d.key)}" data-sq-act="${a}">${esc(l)}</button>`).join('')}</span></div>`;
     }).join('')}</div>
-    <p class="muted" style="font-size:12px">De site heeft niet altijd gelijk: jij beslist. <a href="#/clubsite">Pagina's</a></p></section>`;
+    <p class="muted" style="font-size:12px">De site heeft niet altijd gelijk: jij beslist. Verbergen geldt alleen voor die ene afwijking; verandert de site iets aan die speler, dan zie je het weer. <a href="#/clubsite">Pagina's</a></p></section>`;
 }
 
 // ---------- Meer → Clubsite ----------
