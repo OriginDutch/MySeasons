@@ -1,7 +1,7 @@
 // Selectie en spelerspagina's.
 
 import { esc, toast } from './ui.js';
-import { savePlayer, deletePlayer } from './store.js';
+import { savePlayer, deletePlayer, savePlayersBatch } from './store.js';
 import { addMessageOnce } from './inbox.js';
 import { similarNames, siteSnapshot, compareSquad, siteBlock, ignoredKeys, ignoreKey } from './squadsite.js';
 import { clubField, clubCrest, knownTeams, matchTeam } from './clubpick.js';
@@ -216,6 +216,9 @@ async function siteFix(ctx, d, act) {
     if (d.kind === 'number') await savePlayer(d.id, { shirts: { ...(pr.shirts || shirtsOf(pr)), [y]: d.site }, shirt: null });
     else if (d.kind === 'to-o21' || d.kind === 'to-first') await savePlayer(d.id, { levels: { ...(pr.levels || levelsOf(pr)), [y]: d.kind === 'to-o21' ? 'o21' : 'first' }, squadLevel: null });
     else if (d.kind === 'line') await savePlayer(d.id, { position: d.site });
+    else if (d.kind === 'fill') await savePlayer(d.id, { ...d.fill });
+    else if (d.kind === 'dob') await savePlayer(d.id, { dob: d.site });
+    else if (d.kind === 'nat') await savePlayer(d.id, { nationality: d.site });
     toast(`${d.name}: overgenomen`); ctx.refresh();
   } catch (err) { toast(`Lukte niet: ${err.message || err}`); }
 }
@@ -279,6 +282,13 @@ function mountTransfers(root, ctx) {
   root.addEventListener('click', async (e) => {
     const addP = e.target.closest('[data-add-player]');
     if (addP) { addPlayer(ctx); return; }
+    const all = e.target.closest('[data-sq-fillall]');
+    if (all) {
+      const fills = [...SITE_DIFFS.values()].filter((d) => d.kind === 'fill');
+      all.disabled = true;
+      try { await savePlayersBatch(fills.map((d) => [d.id, { ...d.fill }])); toast(`${fills.length} profielen aangevuld`); ctx.refresh(); } catch (err) { toast(`Lukte niet: ${err.message || err}`); all.disabled = false; }
+      return;
+    }
     const fix = e.target.closest('[data-sq-fix]');
     if (fix) {
       if (fix.dataset.sqAct === 'ignore') { await ignoreKey(fix.dataset.sqFix); toast('Verborgen'); ctx.refresh(); return; }

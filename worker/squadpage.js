@@ -54,12 +54,12 @@ export function extractSquad(html, pageUrl) {
     .replace(/<(script|style|noscript|svg|template)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<(header|footer|nav)\b[\s\S]*?<\/\1>/gi, ' ');
   const found = new Map(); // key: naam (lowercase) -> speler
-  const add = (name, number, line, staff) => {
+  const add = (name, number, line, staff, url = null) => {
     const n = looksLikeName(name); if (!n || staff) return;
     const k = n.toLowerCase();
     const prev = found.get(k);
-    if (!prev) found.set(k, { name: n, number: number ?? null, line: line || null });
-    else { if (prev.number == null && number != null) prev.number = number; if (!prev.line && line) prev.line = line; }
+    if (!prev) found.set(k, { name: n, number: number ?? null, line: line || null, ...(url ? { url } : {}) });
+    else { if (prev.number == null && number != null) prev.number = number; if (!prev.line && line) prev.line = line; if (!prev.url && url) prev.url = url; }
   };
 
   // Een stroom van gebeurtenissen: kopjes, tabelrijen, links en losse tekst.
@@ -139,8 +139,63 @@ export function extractSquad(html, pageUrl) {
   }
   const numbered = keep.filter((c) => c.number != null).length;
   if (keep.length >= 5 && numbered / keep.length >= 0.7) keep = keep.filter((c) => c.number != null);
-  keep.forEach((c) => add(c.name, c.number, c.line, c.staff));
+  keep.forEach((c) => add(c.name, c.number, c.line, c.staff, c.href));
   return [...found.values()];
+}
+
+// ---------- Spelerspagina's: label → waarde ----------
+const MONTHS = { jan: 1, januari: 1, january: 1, feb: 2, februari: 2, february: 2, mrt: 3, maart: 3, mar: 3, march: 3, apr: 4, april: 4, mei: 5, may: 5, jun: 6, juni: 6, june: 6, jul: 7, juli: 7, july: 7, aug: 8, augustus: 8, august: 8, sep: 9, sept: 9, september: 9, okt: 10, oktober: 10, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12 };
+const pad = (n) => String(n).padStart(2, '0');
+/** "29 november, 2001" / "29-11-2001" / "2001-11-29" → "2001-11-29" */
+export function parseDate(v) {
+  const t = String(v || '').toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+  m = t.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/); if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+  m = t.match(/^(\d{1,2})\s+([a-z]+)\.?\s+(\d{4})/); if (m && MONTHS[m[2]]) return `${m[3]}-${pad(MONTHS[m[2]])}-${pad(m[1])}`;
+  return null;
+}
+const LABELS = [
+  [/^(geboortedatum|geboren|date of birth|born|birth ?date)$/i, 'dob'],
+  [/^(nationaliteit|nationality|land|country)$/i, 'nat'],
+  [/^(positie|position|linie)$/i, 'pos'],
+];
+export function extractProfile(html) {
+  const src = String(html || '').slice(0, MAX_BYTES).replace(/<(script|style|noscript|svg|template)[\s\S]*?<\/\1>/gi, ' ').replace(/<(header|footer|nav)\b[\s\S]*?<\/\1>/gi, ' ');
+  const texts = [...src.matchAll(/>([^<>]+)(?=<)/g)].map((x) => decode(x[1]).replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const out = {};
+  texts.forEach((t, i) => {
+    const lbl = t.replace(/:$/, '').trim();
+    const hit = LABELS.find(([re]) => re.test(lbl));
+    if (!hit || out[hit[1]]) return;
+    const v = texts[i + 1]; if (!v || v.length > 60) return;
+    if (hit[1] === 'dob') { const d = parseDate(v); if (d) out.dob = d; } else if (hit[1] === 'pos') out.pos = lineFrom(v); else out.nat = v;
+  });
+  // "Geboortedatum: 29 november 2001" op één regel
+  texts.forEach((t) => {
+    const mm = t.match(/^([^:]{3,25}):\s*(.{2,60})$/); if (!mm) return;
+    const hit = LABELS.find(([re]) => re.test(mm[1].trim())); if (!hit || out[hit[1]]) return;
+    if (hit[1] === 'dob') { const d = parseDate(mm[2]); if (d) out.dob = d; } else if (hit[1] === 'pos') out.pos = lineFrom(mm[2]); else out.nat = mm[2].trim();
+  });
+  return out;
+}
+
+const PROF = 'sq:prof'; // { [url]: { dob, nat, pos, at } }
+const PROFILE_EVERY = 7 * 864e5;
+const MAX_PROFILE_FETCHES = 40; // gratis Worker: max 50 subrequests per run
+
+async function refreshProfiles(env, pages, time, force) {
+  const store = (await env.MS_KV.get(PROF, 'json')) || {};
+  const urls = [...new Set(pages.filter((p) => p.level === 'first' && !p.error).flatMap((p) => (p.players || []).map((x) => x.url).filter(Boolean)))];
+  const due = urls.filter((u) => force || !store[u] || time - Date.parse(store[u].at) > PROFILE_EVERY).slice(0, MAX_PROFILE_FETCHES);
+  for (const u of due) {
+    try {
+      const res = await fetch(u, { headers: { 'User-Agent': 'MySeasons/1.0 (persoonlijke supporterstracker; 1x per week)', Accept: 'text/html' } });
+      if (res.ok) store[u] = { ...extractProfile(await res.text()), at: new Date(time).toISOString() };
+    } catch { /* volgende keer */ }
+  }
+  const keep = Object.fromEntries(Object.entries(store).filter(([u]) => urls.includes(u))); // vertrokken spelers opruimen
+  if (due.length || Object.keys(keep).length !== Object.keys(store).length) await env.MS_KV.put(PROF, JSON.stringify(keep));
+  return keep;
 }
 
 async function fetchPage(p) {
@@ -157,7 +212,7 @@ async function fetchPage(p) {
 
 const sigOf = (pages) => JSON.stringify(pages.map((p) => [p.url, p.error ? 'ERR' : p.players.map((x) => `${x.name}|${x.number ?? ''}|${x.line ?? ''}`).sort()]));
 
-export async function refreshSquad(env, time = Date.now()) {
+export async function refreshSquad(env, time = Date.now(), { forceProfiles = false } = {}) {
   const pages = (await env.MS_KV.get(PAGES, 'json')) || [];
   const prev = (await env.MS_KV.get(SNAP, 'json')) || null;
   const results = [];
@@ -167,7 +222,8 @@ export async function refreshSquad(env, time = Date.now()) {
   // Een mislukte ophaalronde is geen "wijziging": dan houden we de oude spelers van die pagina.
   const merged = results.map((r) => (r.error && prev ? { ...r, players: (prev.pages || []).find((x) => x.url === r.url)?.players || [] } : r));
   const changed = !prev || (prev.sig !== sig && !results.some((r) => r.error));
-  const snap = { at, sig: changed ? sig : (prev ? prev.sig : sig), changedAt: changed ? at : prev.changedAt, pages: merged };
+  const profiles = await refreshProfiles(env, merged, time, forceProfiles).catch(() => (prev && prev.profiles) || {});
+  const snap = { at, sig: changed ? sig : (prev ? prev.sig : sig), changedAt: changed ? at : prev.changedAt, pages: merged, profiles };
   await env.MS_KV.put(SNAP, JSON.stringify(snap));
   return snap;
 }

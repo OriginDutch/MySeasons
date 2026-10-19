@@ -6,6 +6,7 @@ import { squad } from './api.js';
 import { getMeta, setMeta } from './store.js';
 import { addMessageOnce } from './inbox.js';
 import { LINE_SHORT } from './players.js';
+import { NAT_TOP, NAT_ALL, nationalities } from './flags.js';
 
 // ---------- Namen vergelijken (ook gebruikt bij "Speler toevoegen") ----------
 export const normName = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -45,6 +46,15 @@ export async function checkSquadSite() {
 // ---------- Vergelijken ----------
 const LEVEL_TXT = { first: 'eerste elftal', o21: 'O21' };
 const LAG_DAYS = 14; // zo lang mag de site achterlopen na een vertrek
+
+/** "Nederlandse / Marokkaanse" → ['Nederlands', 'Marokkaans'] (alleen bekende nationaliteiten). */
+const KNOWN_NATS = [...new Set([...NAT_TOP, ...NAT_ALL])];
+export function natsFromSite(v) {
+  return String(v || '').split(/\s*(?:\/|,|&|\ben\b|\band\b)\s*/i).map((x) => x.trim()).filter(Boolean).map((x) => {
+    const tries = [x, x.replace(/e$/i, ''), x.replace(/ese$/i, 'ees'), x.replace(/sche$/i, 'sch')];
+    return KNOWN_NATS.find((n) => tries.some((t) => t.toLowerCase() === n.toLowerCase())) || null;
+  }).filter(Boolean);
+}
 
 const dmyShort = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
 function lastOut(pr) {
@@ -86,6 +96,23 @@ export function compareSquad(snap, members, profiles = {}) {
     if (page.level === 'o21' && m.status !== 'youth') out.push({ key: `to-o21:${hit.id}`, kind: 'to-o21', id: hit.id, name: m.name });
     if (page.level === 'first' && m.status === 'youth') out.push({ key: `to-first:${hit.id}`, kind: 'to-first', id: hit.id, name: m.name });
     if (sp.line && m.position && sp.line !== m.position) out.push({ key: `line:${hit.id}:${sp.line}`, kind: 'line', id: hit.id, name: m.name, site: sp.line, app: m.position });
+    // Profiel van zijn spelerspagina: lege velden aanvullen, afwijkingen tonen
+    const sprof = sp.url && snap.profiles && snap.profiles[sp.url];
+    if (sprof) {
+      const fill = {};
+      const own = pr || {};
+      if (sprof.dob) {
+        if (!own.dob) fill.dob = sprof.dob;
+        else if (own.dob !== sprof.dob) out.push({ key: `dob:${hit.id}:${sprof.dob}`, kind: 'dob', id: hit.id, name: m.name, site: sprof.dob, app: own.dob });
+      }
+      const sn = natsFromSite(sprof.nat);
+      if (sn.length) {
+        const mine = nationalities(own.nationality);
+        if (!mine.length) fill.nationality = sn.join(' / ');
+        else if (!sn.every((n) => mine.includes(n))) out.push({ key: `nat:${hit.id}:${sn.join('/')}`, kind: 'nat', id: hit.id, name: m.name, site: sn.join(' / '), app: mine.join(' / ') });
+      }
+      if (Object.keys(fill).length) out.push({ key: `fill:${hit.id}:${Object.entries(fill).map(([k, v]) => `${k}=${v}`).join(',')}`, kind: 'fill', id: hit.id, name: m.name, fill });
+    }
   }));
   // Wie staat er niet (meer) op? Alleen als die pagina goed uitgelezen is.
   const okLevels = new Set(snap.pages.filter((p) => !p.error && (p.players || []).length >= 8).map((p) => p.level));
@@ -115,6 +142,9 @@ const ACTION = {
   'to-first': () => ['Staat op de pagina van het eerste elftal', [['Naar eerste elftal', 'level'], ['Mijn keuze houden', 'ignore']]],
   line: (d) => [`Site: ${LINE_SHORT[d.site]} · app: ${LINE_SHORT[d.app] || '–'}`, [['Positie overnemen', 'line'], ['Negeren', 'ignore']]],
   gone: (d) => [`Niet (meer) op de ${LEVEL_TXT[d.app]}-pagina`, [['Vertrokken', 'out'], ['Verhuurd', 'loan'], ['Is er nog', 'ignore']]],
+  fill: (d) => [`Profiel aanvullen: ${[d.fill.dob ? `geboren ${dmyShort(d.fill.dob)}` : '', d.fill.nationality || ''].filter(Boolean).join(', ')}`, [['Aanvullen', 'fill'], ['Negeren', 'ignore']]],
+  dob: (d) => [`Geboortedatum site: ${dmyShort(d.site)} · app: ${dmyShort(d.app)}`, [['Overnemen', 'dob'], ['Mijn waarde houden', 'ignore']]],
+  nat: (d) => [`Nationaliteit site: ${d.site} · app: ${d.app}`, [['Overnemen', 'nat'], ['Mijn waarde houden', 'ignore']]],
   'left-listed': (d) => [`Volgens jou vertrokken${d.date ? ` op ${dmyShort(d.date)}` : ''}, staat nog op de site`, [['Site loopt achter', 'ignore'], ['Toch nog bij de club', 'open']]],
 };
 
@@ -126,7 +156,9 @@ export function siteBlock(diffs, snap) {
     return `<section class="section"><div class="section__label"><span>Volgens de clubsite</span><span>${esc(when)}</span></div>
       <p class="muted" style="font-size:13px;margin:0">Alles klopt met de selectiepagina's. <a href="#/clubsite">Pagina's</a></p></section>`;
   }
+  const fills = diffs.filter((d) => d.kind === 'fill').length;
   return `<section class="section"><div class="section__label"><span>Volgens de clubsite</span><span>${diffs.length} · ${esc(when)}</span></div>
+    ${fills > 1 ? `<div><button class="btn btn--sm btn--primary" type="button" data-sq-fillall>Alle lege profielvelden aanvullen (${fills} spelers)</button></div>` : ''}
     <div class="list">${diffs.map((d) => {
       const [txt, btns] = ACTION[d.kind](d);
       return `<div class="list-row site-row"><span class="list-row__main"><span class="list-row__title">${d.id ? `<a href="#/speler/${encodeURIComponent(d.id)}">${esc(d.name)}</a>` : esc(d.name)}</span><span class="list-row__sub">${esc(txt)}</span></span>
