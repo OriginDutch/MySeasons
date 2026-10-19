@@ -157,15 +157,19 @@ export function siteBlock(diffs, snap) {
       <p class="muted" style="font-size:13px;margin:0">Alles klopt met de selectiepagina's. <a href="#/clubsite">Pagina's</a></p></section>`;
   }
   const fills = diffs.filter((d) => d.kind === 'fill').length;
-  return `<section class="section"><div class="section__label"><span>Volgens de clubsite</span><span>${diffs.length} · ${esc(when)}</span></div>
+  return `<section class="section"><details class="fold site-fold" data-site-fold ${siteOpen ? 'open' : ''}><summary class="section__label"><span>Volgens de clubsite</span><span>${diffs.length} ${diffs.length === 1 ? 'verschil' : 'verschillen'} · ${esc(when)}</span></summary>
     ${fills > 1 ? `<div><button class="btn btn--sm btn--primary" type="button" data-sq-fillall>Alle lege profielvelden aanvullen (${fills} spelers)</button></div>` : ''}
     <div class="list">${diffs.map((d) => {
       const [txt, btns] = ACTION[d.kind](d);
       return `<div class="list-row site-row"><span class="list-row__main"><span class="list-row__title">${d.id ? `<a href="#/speler/${encodeURIComponent(d.id)}">${esc(d.name)}</a>` : esc(d.name)}</span><span class="list-row__sub">${esc(txt)}</span></span>
         <span class="site-row__btns">${btns.map(([l, a], i) => `<button class="btn btn--sm ${i ? 'btn--ghost' : ''}" type="button" data-sq-fix="${esc(d.key)}" data-sq-act="${a}">${esc(l)}</button>`).join('')}</span></div>`;
     }).join('')}</div>
-    <p class="muted" style="font-size:12px">De site heeft niet altijd gelijk: jij beslist. Verbergen geldt alleen voor die ene afwijking; verandert de site iets aan die speler, dan zie je het weer. <a href="#/clubsite">Pagina's</a></p></section>`;
+    <p class="muted" style="font-size:12px">De site heeft niet altijd gelijk: jij beslist. Verbergen geldt alleen voor die ene afwijking; verandert de site iets aan die speler, dan zie je het weer. <a href="#/clubsite">Pagina's</a></p></details></section>`;
 }
+
+// Standaard dicht; blijft open zolang je in deze sessie bezig bent (ook na Aanvullen/Negeren).
+let siteOpen = false;
+document.addEventListener('toggle', (e) => { if (e.target.matches && e.target.matches('[data-site-fold]')) siteOpen = e.target.open; }, true);
 
 // ---------- Meer → Clubsite ----------
 function head() {
