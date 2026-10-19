@@ -849,3 +849,4 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .btn-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 [data-dup] { font-size: 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 [data-dup][hidden] { display: none; }
+.kv-note { white-space: pre-wrap; }

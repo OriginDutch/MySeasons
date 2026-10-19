@@ -256,13 +256,13 @@ function profileBlock(pr, id) {
   const editBtn = id != null ? `<div><button class="btn btn--sm" type="button" data-edit-profile="${esc(String(id))}">Profiel bewerken</button></div>` : '';
   if (!kv.length) {
     return `<section class="section"><div class="section__label"><span>Profiel</span></div>
-      <p class="muted" style="font-size:13px">Nog geen profiel: nationaliteit, geboortedatum, voet, lengte en contract vul je zelf in.</p>${editBtn}</section>`;
+      <p class="muted" style="font-size:13px">Nog geen profiel: nationaliteit, geboortedatum, voet, lengte, contract en een notitie vul je zelf in.</p>${editBtn}</section>`;
   }
   return `
     <section class="section">
       <div class="section__label"><span>Profiel</span><span>${pr.legacyId ? 'uit je oude tracker' : ''}</span></div>
       <div class="profile">
-        <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Nationaliteit' ? v : esc(v)}</dd>`).join('')}</dl>
+        <dl class="kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd${k === 'Notitie' ? ' class="kv-note"' : ''}>${k === 'Nationaliteit' ? v : esc(v)}</dd>`).join('')}</dl>
       </div>
       ${editBtn}
     </section>`;
@@ -294,6 +294,7 @@ async function editProfile(ctx, id, profiles) {
       <label class="field"><span>Voet</span><select name="foot">${FOOT_OPTS.map((f) => `<option value="${f}" ${(pr.foot || '') === f ? 'selected' : ''}>${f || '—'}</option>`).join('')}</select></label></div>
       <div class="field-row"><label class="field"><span>Lengte (cm)</span><input name="height" type="number" inputmode="numeric" min="140" max="220" value="${pr.height ?? ''}"></label>
       <label class="field"><span>Contract tot</span><input name="contract" type="date" value="${esc(pr.contractUntil || '')}"></label></div>
+      <label class="field"><span>Notitie</span><textarea name="note" rows="3" maxlength="500" placeholder="bijv. Clubopties +1 jaar">${esc(pr.note || '')}</textarea></label>
       <p class="muted sheet__note">Het rugnummer geldt alleen voor ${esc(seasonLabel())}; leeg = het nummer uit de opstellingen. Ander seizoen? Kies dat eerst via de clubnaam op Home.</p>`,
     validate: (fd) => {
       if (fd.get('nat2') && fd.get('nat2') === fd.get('nat1')) return 'Twee keer dezelfde nationaliteit.';
@@ -313,6 +314,7 @@ async function editProfile(ctx, id, profiles) {
     foot: data.get('foot') || null,
     height: data.get('height') ? Number(data.get('height')) : null,
     contractUntil: data.get('contract') || null,
+    note: String(data.get('note') || '').trim() || null,
   };
   const before = Object.fromEntries(Object.keys(next).map((k) => [k, pr[k] ?? null]));
   before.shirts = { ...(pr.shirts || {}), [getSeason()]: (pr.shirts || {})[getSeason()] ?? null }; // merge-veilig terugzetten
