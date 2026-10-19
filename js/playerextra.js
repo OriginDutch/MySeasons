@@ -101,10 +101,8 @@ function drawValueChart(box) {
   svg.append(el('line', { x1: P.l, x2: W - P.r, y1: P.t + ih, y2: P.t + ih, class: 'vchart__axis' }));
   // Trap: waarde blijft staan tot de volgende meting, en loopt door tot vandaag.
   let path = `M${x(pts[0].t)},${y(pts[0].a)}`;
-  pts.slice(1).forEach((p) => { path += ` H${x(p.t)} V${y(p.a)}`; });
+  pts.slice(1).forEach((p) => { path += ` L${x(p.t)},${y(p.a)}`; }); // rechte lijnen tussen metingen, geen vlak eronder (as is ingezoomd)
   const lastX = x(pts[pts.length - 1].t); const nowX = x(t1);
-  svg.append(el('path', { d: `${path} H${lastX} V${P.t + ih} H${x(pts[0].t)} Z`, class: 'vchart__area' }));
-  if (nowX - lastX > 2) svg.append(el('rect', { x: lastX, y: y(pts[pts.length - 1].a), width: nowX - lastX, height: P.t + ih - y(pts[pts.length - 1].a), class: 'vchart__area vchart__area--now' }));
   svg.append(el('path', { d: path, class: 'vchart__line' }));
   if (nowX - lastX > 2) svg.append(el('path', { d: `M${lastX},${y(pts[pts.length - 1].a)} H${nowX}`, class: 'vchart__line vchart__line--now' }));
   pts.forEach((p, i) => svg.append(el('circle', { cx: x(p.t), cy: y(p.a), r: i === pts.length - 1 ? 5 : 4, class: `vchart__dot${i === pts.length - 1 ? ' is-last' : ''}` })));
@@ -130,8 +128,14 @@ function drawValueChart(box) {
     if (delta != null) { const dd = document.createElement('span'); dd.className = `vchart__tipdelta ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : ''}`; dd.textContent = delta ? `${delta > 0 ? '▲' : '▼'} ${euro(Math.abs(delta))} t.o.v. ${dmy(prev.d)}` : `gelijk aan ${dmy(prev.d)}`; tip.append(dd); }
     if (p.n) { const nn = document.createElement('span'); nn.className = 'vchart__tipnote'; nn.textContent = p.n; tip.append(nn); }
     tip.hidden = false;
-    const tw = tip.offsetWidth; const left = Math.min(Math.max(px - tw / 2, 0), W - tw);
-    tip.style.left = `${left}px`; tip.style.top = `${Math.max(0, py - tip.offsetHeight - 14)}px`;
+    const tw = tip.offsetWidth; const th = tip.offsetHeight;
+    // Boven het punt als dat past; anders ernaast, zodat de tooltip het punt nooit bedekt.
+    let left; let top;
+    if (py - th - 14 >= 0) { left = Math.min(Math.max(px - tw / 2, 0), W - tw); top = py - th - 14; } else {
+      left = px + 14 + tw <= W ? px + 14 : Math.max(0, px - tw - 14);
+      top = Math.max(0, py - th / 2);
+    }
+    tip.style.left = `${left}px`; tip.style.top = `${top}px`;
   };
   const hide = () => { cur = -1; tip.hidden = true; cross.setAttribute('visibility', 'hidden'); ring.setAttribute('visibility', 'hidden'); };
   const nearest = (clientX) => {
