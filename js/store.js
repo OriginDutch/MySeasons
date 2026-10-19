@@ -8,7 +8,7 @@
 import { db } from './firebase.js';
 import { nameMatch, nameStandings, nameTeam, rawMatch, rawStandings } from './clubnames.js';
 import {
-  collection, doc, getDoc, getDocs, setDoc, writeBatch, increment, deleteField, query, where, arrayUnion,
+  collection, doc, getDoc, getDocs, setDoc, deleteDoc, writeBatch, increment, deleteField, query, where, arrayUnion,
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
 
 // ---------- Handwerk per wedstrijd: matchNotes/{id} ----------
@@ -127,6 +127,11 @@ export async function getPlayers() {
   const out = {};
   snap.docs.forEach((d) => { out[d.id] = d.data(); });
   return out;
+}
+
+/** Profiel helemaal weg (alleen voor eigen/oude spelers zonder Highlightly-koppeling). */
+export function deletePlayer(id) {
+  return deleteDoc(doc(db, 'players', String(id)));
 }
 
 export function savePlayer(id, partial) {

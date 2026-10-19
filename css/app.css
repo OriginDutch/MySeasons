@@ -855,3 +855,6 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .photo-preview[hidden] { display: none; }
 .photo-preview img { width: 44px; height: 56px; object-fit: cover; border-radius: 4px; background: var(--surface-hover); flex: none; }
 .photo-preview img[hidden] { display: none; }
+.ptag--o21 { border-color: var(--accent); color: var(--accent); }
+.btn--danger { border-color: var(--danger); color: var(--danger); }
+.promote-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--surface-hover); }

@@ -1,7 +1,8 @@
 // Selectie en spelerspagina's.
 
 import { esc, toast } from './ui.js';
-import { savePlayer } from './store.js';
+import { savePlayer, deletePlayer } from './store.js';
+import { addMessageOnce } from './inbox.js';
 import { clubField, clubCrest, knownTeams, matchTeam } from './clubpick.js';
 import { autoShort } from './names.js';
 import { openSheet } from './editor.js';
@@ -15,7 +16,7 @@ import { correctedList, runWithButton, explain, head, crest } from './matchviews
 import { dayShort, opponentOf, isHome } from './season.js';
 import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './playerextra.js';
 import { currentSquad } from './importer.js';
-import { shirtFor, latestShirt, seasonOfDate, shirtsOf } from './shirts.js';
+import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf } from './shirts.js';
 
 const TEAM = MAIN_CLUB.id;
 const r1 = (v) => (v == null ? '–' : v.toFixed(2));
@@ -213,6 +214,24 @@ async function addPlayer(ctx) {
   } catch (err) { toast(`Opslaan lukte niet: ${err.message || err}`); }
 }
 
+async function removePlayer(ctx, id) {
+  if (!String(id).startsWith('legacy-')) return; // Highlightly-spelers komen uit de opstellingen, die verwijderen we niet
+  const { profiles } = await correctedList();
+  const pr = profiles[String(id)]; if (!pr) return;
+  const name = pr.fullName || pr.legacyName || 'deze speler';
+  const ok = await openSheet({
+    title: 'Speler verwijderen',
+    body: `<p>${esc(name)} en alles wat je bij hem invulde (profiel, transfers, waarde, blessures) verdwijnt uit je archief.</p><p class="muted sheet__note">Je krijgt een paar seconden om het ongedaan te maken. Daarna staat hij alleen nog in je back-ups.</p>`,
+    submitLabel: 'Verwijderen',
+  });
+  if (!ok) return;
+  try {
+    await deletePlayer(id);
+    location.hash = '#/archief';
+    toast(`${name} verwijderd`, { action: 'Ongedaan maken', duration: 8000, onAction: async () => { await savePlayer(id, pr); location.hash = `#/speler/${encodeURIComponent(id)}`; } });
+  } catch (err) { toast(`Verwijderen lukte niet: ${err.message || err}`); }
+}
+
 /** Handmatige of oude speler koppelen aan een Highlightly-speler: zijn gegevens gaan mee, bestaande blijven staan. */
 async function linkPlayer(ctx, id) {
   const { profiles } = await correctedList();
@@ -254,6 +273,14 @@ function mountTransfers(root, ctx) {
   root.addEventListener('click', async (e) => {
     const addP = e.target.closest('[data-add-player]');
     if (addP) { addPlayer(ctx); return; }
+    const del = e.target.closest('[data-delete-player]');
+    if (del) { removePlayer(ctx, del.dataset.deletePlayer); return; }
+    const pro = e.target.closest('[data-promote]');
+    if (pro) {
+      const { profiles } = await correctedList(); const pr = profiles[pro.dataset.promote] || {};
+      await savePlayer(pro.dataset.promote, { levels: { ...(pr.levels || levelsOf(pr)), [getSeason()]: 'first' }, squadLevel: null });
+      toast('Naar het eerste elftal'); ctx.refresh(); return;
+    }
     const lk = e.target.closest('[data-link-player]');
     if (lk) { linkPlayer(ctx, lk.dataset.linkPlayer); return; }
     const prof = e.target.closest('[data-edit-profile]');
@@ -320,6 +347,7 @@ async function editProfile(ctx, id, profiles) {
       <label class="field"><span>Voet</span><select name="foot">${FOOT_OPTS.map((f) => `<option value="${f}" ${(pr.foot || '') === f ? 'selected' : ''}>${f || '—'}</option>`).join('')}</select></label></div>
       <div class="field-row"><label class="field"><span>Lengte (cm)</span><input name="height" type="number" inputmode="numeric" min="140" max="220" value="${pr.height ?? ''}"></label>
       <label class="field"><span>Contract tot</span><input name="contract" type="date" value="${esc(pr.contractUntil || '')}"></label></div>
+      <label class="field"><span>Selectie in ${esc(seasonLabel())}</span><select name="level"><option value="first" ${levelFor(pr, getSeason()) === 'first' ? 'selected' : ''}>Eerste elftal</option><option value="o21" ${levelFor(pr, getSeason()) === 'o21' ? 'selected' : ''}>Onder 21</option></select></label>
       <label class="field"><span>Notitie</span><textarea name="note" rows="3" maxlength="500" placeholder="bijv. Clubopties +1 jaar">${esc(pr.note || '')}</textarea></label>
       <p class="muted sheet__note">Het rugnummer geldt alleen voor ${esc(seasonLabel())}; leeg = het nummer uit de opstellingen. Ander seizoen? Kies dat eerst via de clubnaam op Home.</p>`,
     validate: (fd) => {
@@ -342,8 +370,10 @@ async function editProfile(ctx, id, profiles) {
     contractUntil: data.get('contract') || null,
     note: String(data.get('note') || '').trim() || null,
   };
+  if (data.get('level') !== levelFor(pr, getSeason())) { next.levels = { ...(pr.levels || levelsOf(pr)), [getSeason()]: data.get('level') }; next.squadLevel = null; }
   const before = Object.fromEntries(Object.keys(next).map((k) => [k, pr[k] ?? null]));
   before.shirts = { ...(pr.shirts || {}), [getSeason()]: (pr.shirts || {})[getSeason()] ?? null }; // merge-veilig terugzetten
+  if (next.levels && pr.levels) before.levels = { ...pr.levels, [getSeason()]: pr.levels[getSeason()] ?? null };
   try {
     await savePlayer(id, next);
     toast('Profiel opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await savePlayer(id, before); ctx.refresh(); } });
@@ -387,6 +417,8 @@ function avatar(p) {
 }
 
 /** Twee spelers in de huidige selectie met hetzelfde rugnummer: waarschuwen (archief maakt niet uit). */
+const PROMOTE_AT = 5;
+
 function markDuplicateNumbers(players) {
   const byNr = new Map();
   players.forEach((p) => { p.dupWith = null; if (p.number != null) byNr.set(p.number, [...(byNr.get(p.number) || []), p]); });
@@ -399,7 +431,7 @@ function rowHtml(p, sort) {
   const base = p.apps
     ? `${p.apps} ${p.apps === 1 ? 'duel' : 'duels'}${p.subIns ? ` (${p.subIns} in)` : ''} · ${p.minutes}'`
     : p.squads ? `${p.squads}× op de bank` : 'nog geen officieel duel';
-  const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p);
+  const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
   const sub = `${base}${tags ? ' ' + tags : ''}`;
   const nat = p.nationality || (p.profile && p.profile.nationality);
   const flags = nat ? nationalities(nat).map((n) => flag(n, 12)).join('') : '';
@@ -429,7 +461,7 @@ function squadTable(players, profiles) {
     const age = ageOf(pr.dob);
     const val = (pr.valueHistory || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
     const nat = p.nationality || pr.nationality;
-    const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p);
+    const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
     const v = { nr: p.number ?? 99, name: p.name, pos: (LINE_ORDER[p.position] || 9) * 100 + (p.number ?? 99), age: age ?? 99, apps: p.apps || 0, min: p.minutes || 0, goals: p.goals || 0, assists: p.assists || 0, rating: p.rating ?? -1, value: val ? val.amount : -1 };
     return `<tr data-line="${esc(p.position || '')}" data-href="#/speler/${encodeURIComponent(p.id)}" ${Object.entries(v).map(([k, x]) => `data-${k}="${esc(String(x))}"`).join(' ')}>
       <td class="mono sq-nr">${p.number ?? '–'}</td>
@@ -545,7 +577,8 @@ function seasonMembers(list, squadPlayers, profiles) {
     const st = statusIn(p.profile, win, ref, { onSheet: true, lastSheet: last });
     seen.add(String(p.id));
     const inj = injuryLabel(p.profile, ref, isCurrentSeason());
-    members.push({ ...p, status: st.status || 'active', labels: [...(inj ? [inj] : []), ...(st.labels || [])], conflict: !!st.conflict, injured: !!inj });
+    const lvl = levelFor(p.profile || profiles[String(p.id)], getSeason());
+    members.push({ ...p, status: lvl === 'o21' && (st.status || 'active') === 'active' ? 'youth' : (st.status || 'active'), labels: [...(inj ? [inj] : []), ...(st.labels || [])], conflict: !!st.conflict, injured: !!inj });
   });
   Object.entries(profiles || {}).forEach(([id, pr]) => {
     if (seen.has(id) || pr.linkedTo) return; // gekoppelde oud-profielen staan al onder hun Highlightly-id
@@ -556,7 +589,7 @@ function seasonMembers(list, squadPlayers, profiles) {
       id, name: pr.fullName || pr.legacyName || '?', number: shirtFor(pr, getSeason()) ?? latestShirt(pr, getSeason()), position: pr.position || '',
       photo: pr.photoUrl || null, nationality: pr.nationality || null,
       apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
-      status: pr.squadLevel === 'jeugd' && st.status === 'active' ? 'youth' : st.status, labels: [...(injuryLabel(pr, ref, isCurrentSeason()) ? [injuryLabel(pr, ref, isCurrentSeason())] : []), ...(st.labels || [])], conflict: false, profileOnly: true,
+      status: levelFor(pr, getSeason()) === 'o21' && st.status === 'active' ? 'youth' : st.status, labels: [...(injuryLabel(pr, ref, isCurrentSeason()) ? [injuryLabel(pr, ref, isCurrentSeason())] : []), ...(st.labels || [])], conflict: false, profileOnly: true,
       injured: !!injuryLabel(pr, ref, isCurrentSeason()),
     });
   });
@@ -589,7 +622,8 @@ function profileOnlyPage(pr, id) {
     ${profileBlock(pr, id)}
     ${valueBlock(pr, id)}
     ${injuryBlock(pr, id)}
-    ${transfersBlock(pr, id)}`;
+    ${transfersBlock(pr, id)}
+    ${String(id).startsWith('legacy-') ? `<section class="section"><button class="btn btn--sm btn--danger" type="button" data-delete-player="${esc(id)}">Speler verwijderen</button></section>` : ''}`;
 }
 
 export const playerViews = {
@@ -629,6 +663,10 @@ export const playerViews = {
       const { members, groups } = seasonMembers(list, built.players, profiles);
       const players = groups.active;
       markDuplicateNumbers(players);
+      if (isCurrentSeason()) groups.youth.filter((p) => !p.profileOnly && p.apps >= PROMOTE_AT).forEach((p) => addMessageOnce({
+        id: `promote:${p.id}:${getSeason()}`, kind: 'info', title: `${p.name} speelde ${p.apps} duels in het eerste`,
+        text: 'Hij staat bij Onder 21. Doorschuiven naar het eerste elftal?', href: `#/speler/${encodeURIComponent(p.id)}`,
+      }).catch(() => {}));
       const kicker = `MySeasons / ${MAIN_CLUB.name} ${seasonLabel()}`;
       if (!members.length) {
         return `${head({ kicker, title: 'Selectie' })}
@@ -639,7 +677,7 @@ export const playerViews = {
       const used = members.filter((p) => p.apps).length;
       const extra = [
         ['left', isCurrentSeason() ? 'Vertrokken dit seizoen' : 'Vertrokken tijdens het seizoen'],
-        ['youth', 'Jeugd en beloften'],
+        ['youth', 'Onder 21'],
         ['loaned', 'Verhuurd'],
         ['future', 'Komt nog'],
       ].filter(([k]) => groups[k].length);
@@ -741,8 +779,9 @@ export const playerViews = {
       ];
       const log = p.log.slice().reverse();
       return `
-        ${head({ kicker: `Selectie · ${LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
+        ${head({ kicker: `Selectie${levelFor(p.profile, getSeason()) === 'o21' ? ' · Onder 21' : ''} · ${LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
         <section class="section">
+          ${levelFor(p.profile, getSeason()) === 'o21' && p.apps >= PROMOTE_AT ? `<div class="promote-line"><span>Staat bij Onder 21, maar speelde ${p.apps} duels in het eerste.</span><button class="btn btn--sm btn--primary" type="button" data-promote="${esc(String(p.id))}">Naar eerste elftal</button></div>` : ''}
           <div class="player-hero">${p.profile && p.profile.photoUrl ? photoImg(p.profile.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${p.number ?? '–'}</span>
             <span class="muted">${esc(LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
           <p class="muted" style="font-size:12px;margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>

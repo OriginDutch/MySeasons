@@ -32,6 +32,13 @@ async function state() {
   return { items: s.items || [], seen: s.seen || [], dismissed: s.dismissed || [] };
 }
 
+/** Alleen toevoegen als die melding (id) er nog niet is of weggedaan werd. Spaart writes. */
+export async function addMessageOnce(msg) {
+  const s = await state();
+  if (s.items.some((x) => x.id === msg.id) || s.dismissed.includes(msg.id)) return null;
+  return addMessage(msg);
+}
+
 /** Bewaarde melding toevoegen (bijv. na de nachtploeg). */
 export async function addMessage(msg) {
   const s = await state();

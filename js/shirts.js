@@ -53,3 +53,28 @@ export async function migrateShirts() {
   await setMeta('shirtsV1', { at: new Date().toISOString(), moved: writes.length });
   return { moved: writes.length };
 }
+
+// ---------- Selectie per seizoen: eerste elftal of Onder 21 ----------
+// players/{id}.levels = { 2025: 'o21', 2026: 'first' }. Een keuze geldt ook voor de seizoenen erna,
+// tot je iets anders kiest of tot een transfer "Doorgestroomd uit de jeugd" (dan eerste elftal).
+// Oud formaat: squadLevel 'jeugd' uit je oude tracker hoort bij zijn laatste seizoen.
+
+export function levelsOf(pr) {
+  if (!pr) return {};
+  const out = {};
+  if (!pr.levels && /jeugd|o\d\d|beloft/i.test(String(pr.squadLevel || ''))) out[legacyYear(pr)] = 'o21';
+  Object.entries(pr.levels || {}).forEach(([y, v]) => { if (v === 'o21' || v === 'first') out[y] = v; });
+  return out;
+}
+
+/** 'o21' of 'first' voor dat seizoen. */
+export function levelFor(pr, year) {
+  const lv = levelsOf(pr);
+  const set = Object.keys(lv).map(Number).filter((y) => y <= Number(year)).sort((a, b) => b - a)[0];
+  if (set == null) return 'first';
+  if (lv[set] === 'o21') {
+    const promoted = (pr.transfers || []).some((t) => t.type === 'promotie' && t.date && seasonOfDate(t.date) > set && seasonOfDate(t.date) <= Number(year));
+    if (promoted) return 'first';
+  }
+  return lv[set];
+}
