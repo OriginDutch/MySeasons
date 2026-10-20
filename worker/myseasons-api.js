@@ -47,6 +47,7 @@ const ALLOWED_PATHS = [
   /^\/teams\/\d+$/,
   /^\/leagues$/,
   /^\/leagues\/\d+$/,
+  /^\/players$/,
   /^\/players\/\d+$/,
 ];
 

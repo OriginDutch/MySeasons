@@ -864,3 +864,4 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .sq-page { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--hairline); }
 .sq-page select { width: auto; }
 .sq-page__res { grid-column: 1 / -1; font-size: 12px; }
+.hltest__raw { max-height: 320px; overflow: auto; font-size: 11px; white-space: pre-wrap; word-break: break-all; background: var(--surface-hover); padding: 8px; }
