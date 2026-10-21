@@ -882,3 +882,6 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .lg-none { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .lg-side__scroll { overflow-y: auto; overscroll-behavior: contain; }
 .lg-sheet .lg-row { font-size: 15px; padding: 12px 0; }
+.stand-modes { display: flex; gap: 10px; flex-wrap: wrap; }
+.stand-modes .segmented { flex: 1 1 260px; }
+[data-stand-mode] > .period-sum { margin: 12px 0 4px; }

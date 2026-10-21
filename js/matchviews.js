@@ -194,6 +194,13 @@ function periodLine(p, zones) {
   return `Begint in ronde ${a} (t/m ${b}).`;
 }
 
+function periodHl(p) {
+  const hl = new Map();
+  if (p.state === 'done') { hl.set(String(p.winner.id), 'winnaar'); if (p.holder && p.via === 'nr2') hl.set(String(p.holder.id), 'plek'); }
+  if (p.state === 'running' && p.leader) hl.set(String(p.leader.team.id), 'leider');
+  return hl;
+}
+
 function periodsBlock(zones, rules, lm, marks) {
   if (!lm.length) {
     return `<section class="section"><div class="section__label"><span>Periodes</span></div>
@@ -234,12 +241,18 @@ function pastPlayoffsBlock(rs, leagueId) {
     ['Nacompetitie promotie/degradatie', all.filter((m) => m.stage === 'nacompetitie')],
   ].filter(([, ms]) => ms.length);
   if (!groups.length) return '';
-  return groups.map(([title, ms]) => `
-    <section class="section">
-      <div class="section__label"><span>${esc(title)}</span><span>${ms.length} duels</span></div>
+  return groups.map(([title, ms]) => {
+    const fin = ms.filter((m) => /final/i.test(m.label || '') && !/semi|quarter/i.test(m.label || ''));
+    const f = fin[fin.length - 1] || ms[ms.length - 1];
+    const sum = f ? `${/final/i.test(f.label || '') ? 'Finale' : 'Laatste duel'}: ${esc(String(f.homeFull || f.home))} – ${esc(String(f.awayFull || f.away))}` : '';
+    return `
+    <section class="section"><details class="fold">
+      <summary class="section__label"><span>${esc(title)}</span><span>${ms.length} duels</span></summary>
+      ${sum ? `<p class="period-sum" style="margin-top:0">${sum}${f.hs != null ? ` <span class="mono">${f.hs}–${f.as}</span>` : ''}${f.note ? ` <span class="muted">(${esc(f.note)})</span>` : ''}</p>` : ''}
       <div class="bracket">${ms.map((m) => `<div class="bracket__row bracket__row--res"><span class="bracket__key">${esc(roundNl(m.label))}</span><span>${nmMe({ name: String(m.homeFull || m.home) })} – ${nmMe({ name: String(m.awayFull || m.away) })} <span class="mono">${m.hs ?? ''}–${m.as ?? ''}</span>${m.note ? ` <span class="muted">(${esc(m.note)})</span>` : ''}</span></div>`).join('')}</div>
       <p class="muted" style="font-size:12px">${esc(rs.credit || 'Bron: RSSSF')}</p>
-    </section>`).join('');
+    </details></section>`;
+  }).join('');
 }
 
 function bracketBlock(rules, rows, zones, rs) {
@@ -510,21 +523,28 @@ export const matchViews = {
       const idOf = (name) => { const r = g.rows.find((x) => tokens(x.team.name).join(' ') === tokens(name).join(' ')); return r ? r.team.id : `rs:${name}`; };
       const lmUse = lm.length ? lm : rsDivL ? rsssfAsMatches(rsDivL, idOf) : [];
       const zones = rules && !special ? zonesFor(rules, g.rows, { matches: lmUse, cup, final: !isCurrentSeason() }) : null;
+      const pModes = zones && rules.periods && lmUse.length ? zones.periods : [];
       return `
         ${titleBtn}
         ${flag}
         <div class="stats-grid"><div class="stats-main" data-stats-main>
         <section class="section">
           ${fromRsssf ? `<p class="muted" style="font-size:12px;margin:0">Eindstand ${esc(seasonLabel())} · ${esc(st.credit)}</p>` : ''}
-          <fieldset class="segmented segmented--3" style="margin:0;padding:0" ${fromRsssf ? 'hidden' : ''}>
+          <div class="stand-modes">
+          <fieldset class="segmented segmented--${modes.length}" style="margin:0;padding:0" ${fromRsssf && !pModes.length ? 'hidden' : ''}>
             <legend class="visually-hidden">Weergave</legend>
             ${modes.map(([v, l], i) => `<input type="radio" name="stand-mode" id="sm-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sm-${v}">${l}</label>`).join('')}
           </fieldset>
+          ${pModes.length ? `<fieldset class="segmented segmented--${pModes.length}" style="margin:0;padding:0"><legend class="visually-hidden">Periode</legend>
+            ${pModes.map((p) => `<input type="radio" name="stand-mode" id="sm-${p.key}" value="${p.key}"><label for="sm-${p.key}">${p.key}${p.state === 'done' ? ' ✓' : p.state === 'running' ? ' •' : ''}</label>`).join('')}</fieldset>` : ''}
+          </div>
           ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks, form: lmUse.length ? formMap(lmUse, v) : null, leagueId: isMine ? null : league.id })}${v === 'total' && zones ? zoneLegend(zones, rules) : v !== 'total' ? `<p class="muted" style="font-size:12px;margin-top:10px">Alleen ${v === 'home' ? 'thuis' : 'uit'}duels. Europese plekken en degradatie gaan op de totaalstand.</p>` : ''}</div>`).join('')}
+          ${pModes.map((p) => `<div data-stand-mode="${p.key}" hidden><p class="period-sum">Periode ${esc(p.key.slice(1))} · ${periodLine(p, zones)}</p>${p.state === 'open' ? '' : standTable(periodRows(p), { marks, highlight: periodHl(p), leagueId: isMine ? null : league.id })}
+            <p class="muted" style="font-size:12px;margin-top:10px">Bij gelijke stand in een periode telt geen onderling resultaat; daarna beslissen strafpunten (kaarten), die rekent de app niet mee.</p></div>`).join('')}
           ${tiers}
         </section>
         </div><aside class="stats-side" data-stats-side>
-        ${zones && rules.periods ? periodsBlock(zones, rules, lmUse, marks) : ''}
+        ${zones && rules.periods && !lmUse.length ? periodsBlock(zones, rules, lmUse, marks) : ''}
         ${zones && rules.playoff ? bracketBlock(rules, rowsFor(g, 'total'), zones, rs) : ''}
         ${pastPlayoffsBlock(rs, league.id)}
         ${isMine ? crowdBlock(list, league) : ''}
