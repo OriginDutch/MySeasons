@@ -64,7 +64,10 @@ async function load(teamKey, leagueId = null) {
   const standings = (await bestStandings(league.id, season)) || rsssfStandings(rs, league.id);
   const rows = standings && standings.groups && standings.groups[0] ? standings.groups[0].rows : [];
   const me = rows.find((r) => String(r.team.id) === teamKey) || null;
-  const lm = regularOnly(await getLeagueMatches(league.id, season).catch(() => []));
+  const lmAll = await getLeagueMatches(league.id, season).catch(() => []);
+  const lm = regularOnly(lmAll);
+  const regIds = new Set(lm.map((m) => m.id));
+  const poMatches = lmAll.filter((m) => !regIds.has(m.id) && [m.homeTeam, m.awayTeam].some((t) => t && String(t.id) === teamKey)).map(fromHighlightly).sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const meta = await getMeta(`league_${league.id}_${season}`).catch(() => null);
 
   let team = me ? me.team : null;
@@ -93,7 +96,7 @@ async function load(teamKey, leagueId = null) {
   [...list, ...lm].forEach((m) => [m.homeTeam, m.awayTeam].forEach((t) => { if (t && t.logo) logos.set(String(t.id), t.logo); }));
   matches.forEach((m) => [m.home, m.away].forEach((t) => { if (!t.logo && logos.has(String(t.id))) t.logo = logos.get(String(t.id)); }));
   if (team && !team.logo && logos.has(teamKey)) team = { ...team, logo: logos.get(teamKey) };
-  return { league, standings, me, team, matches: sortByDate(matches.filter((m) => m.date)), source, meta, ownIds, rs };
+  return { league, standings, me, team, matches: sortByDate(matches.filter((m) => m.date)), poMatches, source, meta, ownIds, rs };
 }
 
 function matchRow(m, teamKey, ownIds) {
@@ -151,6 +154,9 @@ export const clubViews = {
         <section class="section"><div class="section__label"><span>Gespeeld</span><span>${played.length}</span></div>
           ${played.length ? `<div class="list">${played.slice().reverse().map((m) => matchRow(m, teamKey, d.ownIds)).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Nog geen uitslagen.</p>'}
         </section>
+        ${(d.poMatches || []).length ? `<section class="section"><div class="section__label"><span>Na de competitie</span><span>${d.poMatches.length}</span></div>
+          <div class="list">${d.poMatches.map((m) => matchRow(m, teamKey, d.ownIds)).join('')}</div>
+          <p style="font-size:var(--fs-sm);margin:0"><a class="muted" href="#/stats/nacompetitie">Hele nacompetitie</a> · <a class="muted" href="#/stats/europa">Play-offs Europa</a></p></section>` : ''}
         <section class="section">
           <p class="muted" style="font-size:var(--fs-sm)">${d.source === 'highlightly' ? `Alle competitieduels via Highlightly${d.meta ? ` · bijgewerkt ${esc(dayShort(d.meta.fetchedAt))} ${esc(timeOf(d.meta.fetchedAt))}` : ''}.`
             : d.source === 'rsssf' ? esc(d.rs.credit) + '.'

@@ -889,3 +889,12 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 /* Mono iets kleiner zodat het optisch even groot is als de sans ernaast (niet stapelen). */
 :where(.mono) { font-size: calc(1em * var(--mono-scale)); }
 :where(.mono .mono) { font-size: 1em; }
+/* Na de competitie */
+.po-tie { padding: 8px 0; border-bottom: 1px solid var(--hairline); }
+.po-tie.is-me { border-left: 3px solid var(--accent); padding-left: 10px; }
+.po-leg { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 4px 0; color: var(--ink); text-decoration: none; font-size: var(--fs-md); }
+a.po-leg:hover { background: var(--surface-hover); }
+.po-leg__k { color: var(--muted); font-size: var(--fs-xs); }
+.po-leg__s { text-align: right; white-space: nowrap; }
+.po-leg .is-me { font-weight: 700; }
+.po-sum { font-size: var(--fs-sm); padding: 2px 0 2px 54px; }

@@ -20,7 +20,7 @@ export function neighbours(id) {
 /**
  * Lijstregels. avail: Map(id → { clubs, has }) voor dit seizoen; mine: id van de competitie van je club; current: id die je nu bekijkt.
  */
-export function leagueListHtml({ current, mine, avail, clubName }) {
+export function leagueListHtml({ current, mine, avail, clubName, post = [] }) {
   const countries = [...new Set(LEAGUES.map((l) => l.country))];
   return `<div class="lg-list">${countries.map((c) => `<div class="lg-country">${esc(c)}</div>${LEAGUES.filter((l) => l.country === c).sort((a, b) => a.tier - b.tier).map((l) => {
     const a = (avail && avail.get(l.id)) || {};
@@ -29,7 +29,11 @@ export function leagueListHtml({ current, mine, avail, clubName }) {
       <span class="lg-row__main"><span class="lg-row__name">${esc(l.name)}</span>${a.clubs ? `<small>${a.clubs} clubs</small>` : ''}</span>
       ${l.id === Number(mine) ? `<span class="lg-me mono">● ${esc(clubName)}</span>` : a.has === false ? '<span class="lg-none">nog niet opgehaald</span>' : '<span></span>'}
     </a>`;
-  }).join('')}`).join('')}</div>`;
+  }).join('')}`).join('')}${post.length ? `<div class="lg-country">Na de competitie</div>${post.map((p) => `<a class="lg-row ${p.key === current ? 'is-on' : ''}" href="#/stats/${p.key}" ${p.key === current ? 'aria-current="page"' : ''}>
+      <span class="lg-row__tier mono"></span>
+      <span class="lg-row__main"><span class="lg-row__name">${esc(p.name)}</span><small>${esc(p.sub)}</small></span>
+      ${p.mine ? `<span class="lg-me mono">● ${esc(clubName)}</span>` : `<span class="lg-none">${esc(p.label)}</span>`}
+    </a>`).join('')}` : ''}</div>`;
 }
 
 /** Mobiel: lijst als sheet onder in beeld. Kiezen = navigeren (een hashchange sluit de sheet). */

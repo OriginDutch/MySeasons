@@ -16,6 +16,7 @@ import { editEvent, editScore, editNotes } from './editor.js';
 import { syncSeason, fetchMatch, syncStandings, syncLeague, COST } from './sync.js';
 import { rowsFor, standTable, zoneLegend, miniStand, periodRows, formMap } from './standview.js';
 import { LEAGUES, leagueInfo, neighbours, leagueListHtml, openLeagueSheet } from './leagues.js';
+import { PLAYOFFS, playoffInfo, playoffMatches, playoffsHtml } from './playoffs.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
   dayShort, dayLong, timeOf, monthOf, relativeDay, shortRound, crowdSummary, penOutcome,
@@ -271,6 +272,29 @@ function bracketBlock(rules, rows, zones, rs) {
     </section>`;
 }
 
+// ---------- Na de competitie: eigen pagina ----------
+async function playoffsPage(info, matches, { listHtml, kicker, rs }) {
+  let projected = null;
+  if (!matches.length && isCurrentSeason() && info.key === 'nacompetitie') {
+    const rules = rulesFor(76523, getSeason());
+    const both = await standingsAndMatches(76523, getSeason()).catch(() => null);
+    const g = both && both.standings && both.standings.groups && both.standings.groups[0];
+    if (rules && g) {
+      const zones = zonesFor(rules, g.rows, { matches: both.matches || [] });
+      projected = bracketBlock(rules, rowsFor(g, 'total'), zones, rs);
+    }
+  }
+  const source = matches.length && matches.every((m) => m.home.id == null) ? (rs && rs.credit) || 'Bron: RSSSF' : matches.length ? 'Highlightly' : '';
+  return `<header class="page-head"><div class="page-head__titles"><span class="page-head__kicker">${esc(kicker)}</span>
+      <button class="lg-pick" type="button" data-league-pick aria-label="Andere competitie kiezen"><h1 class="page-head__title">${esc(info.name)}</h1><span class="lg-chev" aria-hidden="true">▾</span></button></div></header>
+    <div class="stats-grid"><div class="stats-main" data-stats-main>
+      <p class="muted" style="font-size:var(--fs-sm);margin:0 0 4px">${esc(info.sub[0].toUpperCase() + info.sub.slice(1))}${source ? ` · ${esc(source)}` : ''}. Cambuur-duels openen de wedstrijdpagina.</p>
+      ${playoffsHtml(info, matches, { projected })}
+    </div><aside class="stats-side" data-stats-side>
+      <section class="section lg-side desk-only-block" data-lg-side><div class="section__label"><span>Competities</span><span>${esc(seasonLabel())}</span></div><div class="lg-side__scroll">${listHtml}</div></section>
+    </aside></div>`;
+}
+
 // ---------- Competitiekiezer ----------
 let LEAGUE_SHEET = '';
 
@@ -485,7 +509,20 @@ export const matchViews = {
       const rsDiv = league && rs && rs.divisions ? rs.divisions.find((d) => d.leagueId === league.id) || null : null;
       const kicker = `MySeasons / Stand · ${seasonLabel()}`;
       const avail = await leagueAvail(rs);
-      const listHtml = leagueListHtml({ current: league && league.id, mine: mine && mine.id, avail, clubName: MAIN_CLUB.name });
+      const po = await playoffMatches(getSeason(), { rs, own: list }).catch(() => ({ nacompetitie: [], europa: [] }));
+      const kkdRules = rulesFor(76523, getSeason());
+      const post = PLAYOFFS.map((p) => {
+        const ms = po[p.key] || [];
+        const played = ms.filter((m) => m.hs != null).length;
+        const expected = !ms.length && isCurrentSeason() && p.key === 'nacompetitie' && kkdRules && kkdRules.playoff;
+        return { ...p, count: ms.length, mine: ms.some((m) => [m.home, m.away].some((t) => t && (t.id === TEAM || /cambuur/i.test(t.name || '')))), label: ms.length ? `${played} ${played === 1 ? 'duel' : 'duels'}` : expected ? 'verwacht' : '' , show: ms.length > 0 || expected };
+      }).filter((p) => p.show);
+      const poChosen = args[0] && playoffInfo(args[0]);
+      const listHtml = leagueListHtml({ current: poChosen ? poChosen.key : league && league.id, mine: mine && mine.id, avail, clubName: MAIN_CLUB.name, post });
+      if (poChosen) {
+        LEAGUE_SHEET = listHtml;
+        return playoffsPage(poChosen, po[poChosen.key] || [], { listHtml, kicker, rs });
+      }
       LEAGUE_SHEET = listHtml;
       const info = league ? leagueInfo(league.id) : null;
       const titleBtn = `<header class="page-head"><div class="page-head__titles"><span class="page-head__kicker">${esc(kicker)}</span>
@@ -545,8 +582,7 @@ export const matchViews = {
         </section>
         </div><aside class="stats-side" data-stats-side>
         ${zones && rules.periods && !lmUse.length ? periodsBlock(zones, rules, lmUse, marks) : ''}
-        ${zones && rules.playoff ? bracketBlock(rules, rowsFor(g, 'total'), zones, rs) : ''}
-        ${pastPlayoffsBlock(rs, league.id)}
+        ${post.length ? `<section class="section"><div class="section__label"><span>Na de competitie</span></div><div class="list">${post.map((p) => `<a class="list-row" href="#/stats/${p.key}"><span class="list-row__main"><span class="list-row__title">${esc(p.name)}</span><span class="list-row__sub">${esc(p.label === 'verwacht' ? 'als het nu eindigt' : p.label)}</span></span>${icons.chevron}</a>`).join('')}</div></section>` : ''}
         ${isMine ? crowdBlock(list, league) : ''}
         ${sideList}
         </aside></div>
