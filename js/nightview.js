@@ -34,16 +34,16 @@ export const nightViews = {
       const log = st.state.log || [];
       return `${head}
         <section class="section">
-          <p class="muted" style="font-size:13px">De Worker haalt met je overgebleven quotum details en schutters op en legt ze in een brievenbus. Open je de app, dan zet hij ze in je database.</p>
+          <p class="muted" style="font-size:var(--fs-md)">De Worker haalt met je overgebleven quotum details en schutters op en legt ze in een brievenbus. Open je de app, dan zet hij ze in je database.</p>
           <fieldset class="segmented segmented--3" style="margin:0;padding:0"><legend class="visually-hidden">Stand</legend>
             ${Object.entries(MODE_LABEL).map(([v, [l]]) => `<input type="radio" name="ns-mode" id="ns-${v}" value="${v}" ${mode === v ? 'checked' : ''}><label for="ns-${v}">${l}</label>`).join('')}
           </fieldset>
-          <p class="muted" style="font-size:12px" data-mode-help>${esc(MODE_LABEL[mode][1])}</p>
+          <p class="muted" style="font-size:var(--fs-sm)" data-mode-help>${esc(MODE_LABEL[mode][1])}</p>
         </section>
         <section class="section">
           <div class="section__label"><span>Wachtrij</span><span>${st.queue}</span></div>
-          ${st.queue ? `<div class="list">${Object.entries(st.byType || {}).map(([t, n]) => `<div class="kv-line"><span>${esc(TYPE_LABEL[t] || t)}</span><span class="mono">${n}</span></div>`).join('')}</div>` : '<p class="muted" style="font-size:13px">Leeg. Alles wat we kennen is binnen.</p>'}
-          <p class="muted" style="font-size:12px">Opgebouwd ${esc(when(q && q.at))}. Highlightly-calls over volgens de laatste ronde: <span class="mono">${st.state.remaining ?? '?'}</span>.</p>
+          ${st.queue ? `<div class="list">${Object.entries(st.byType || {}).map(([t, n]) => `<div class="kv-line"><span>${esc(TYPE_LABEL[t] || t)}</span><span class="mono">${n}</span></div>`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Leeg. Alles wat we kennen is binnen.</p>'}
+          <p class="muted" style="font-size:var(--fs-sm)">Opgebouwd ${esc(when(q && q.at))}. Highlightly-calls over volgens de laatste ronde: <span class="mono">${st.state.remaining ?? '?'}</span>.</p>
           <label class="field field--check"><input type="checkbox" data-backfill ${prefs.backfill ? 'checked' : ''}> <span>Ook oude seizoenen ophalen (vanaf ${FIRST_BACKFILL}–${String(FIRST_BACKFILL + 1).slice(2)})</span></label>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn" type="button" data-ns="queue">${icons.refresh}<span>Wachtrij opbouwen</span></button>
@@ -52,12 +52,12 @@ export const nightViews = {
         </section>
         <section class="section">
           <div class="section__label"><span>Brievenbus</span><span>${(st.inbox || []).length}</span></div>
-          <p class="muted" style="font-size:13px">${(st.inbox || []).length ? `${st.inbox.length} ${st.inbox.length === 1 ? 'pakketje wacht' : 'pakketjes wachten'} op verwerking.` : 'Leeg.'}${last ? ` Laatst verwerkt ${esc(when(last.at))}: ${last.items} items.` : ''}</p>
+          <p class="muted" style="font-size:var(--fs-md)">${(st.inbox || []).length ? `${st.inbox.length} ${st.inbox.length === 1 ? 'pakketje wacht' : 'pakketjes wachten'} op verwerking.` : 'Leeg.'}${last ? ` Laatst verwerkt ${esc(when(last.at))}: ${last.items} items.` : ''}</p>
           <div><button class="btn btn--primary" type="button" data-ns="empty" ${(st.inbox || []).length ? '' : 'disabled'}>Brievenbus legen</button></div>
         </section>
         <section class="section">
           <div class="section__label"><span>Logboek</span><span>laatste rondes</span></div>
-          ${log.length ? `<div class="list">${log.slice(0, 12).map((l) => `<div class="kv-line"><span>${esc(when(l.at))} <span class="muted">· ${esc(l.why)}</span></span><span class="mono">${l.calls} calls · ${l.items} items${l.stop === 'reserve' ? ' · reserve' : l.stop === 'quota' ? ' · quotum op' : ''}</span></div>`).join('')}</div>` : '<p class="muted" style="font-size:13px">Nog geen rondes gedraaid.</p>'}
+          ${log.length ? `<div class="list">${log.slice(0, 12).map((l) => `<div class="kv-line"><span>${esc(when(l.at))} <span class="muted">· ${esc(l.why)}</span></span><span class="mono">${l.calls} calls · ${l.items} items${l.stop === 'reserve' ? ' · reserve' : l.stop === 'quota' ? ' · quotum op' : ''}</span></div>`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Nog geen rondes gedraaid.</p>'}
         </section>`;
     },
     mount(root, ctx) {

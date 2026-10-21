@@ -142,17 +142,17 @@ export const clubViews = {
             ${line ? `<div class="mono">${line.w}–${line.d}–${line.l}<br><span class="muted">${line.gf}:${line.ga}</span></div>` : ''}
             ${form.length ? `<div class="form">${form.map((r) => `<span class="form__tile form__tile--${r}">${r}</span>`).join('')}</div>` : ''}
           </div>
-          ${mark && (mark.mark || mark.note) ? `<p class="muted" style="font-size:13px;margin:0">${mark.mark === 'rivaal' ? '<strong class="accent-text">Rivaal</strong>' : mark.mark === 'interessant' ? '★ Interessant' : ''}${mark.note ? `${mark.mark ? ' · ' : ''}${esc(mark.note)}` : ''}</p>` : ''}
+          ${mark && (mark.mark || mark.note) ? `<p class="muted" style="font-size:var(--fs-md);margin:0">${mark.mark === 'rivaal' ? '<strong class="accent-text">Rivaal</strong>' : mark.mark === 'interessant' ? '★ Interessant' : ''}${mark.note ? `${mark.mark ? ' · ' : ''}${esc(mark.note)}` : ''}</p>` : ''}
           ${d.me && d.me.deduction ? `<p class="warn-line">${d.me.deduction} punten in mindering gebracht</p>` : ''}
-          <p style="font-size:12px;margin:0"><a class="muted" href="#/clubnamen/${encodeURIComponent(String(t.id))}">Naam aanpassen${t.apiName && t.apiName !== t.name ? ` · Highlightly: ${esc(t.apiName)}` : ''}</a></p>
+          <p style="font-size:var(--fs-sm);margin:0"><a class="muted" href="#/clubnamen/${encodeURIComponent(String(t.id))}">Naam aanpassen${t.apiName && t.apiName !== t.name ? ` · Highlightly: ${esc(t.apiName)}` : ''}</a></p>
         </section>
         ${upcoming.length ? `<section class="section"><div class="section__label"><span>Programma</span><span>${upcoming.length}</span></div>
           <div class="list">${upcoming.map((m) => matchRow(m, teamKey, d.ownIds)).join('')}</div></section>` : ''}
         <section class="section"><div class="section__label"><span>Gespeeld</span><span>${played.length}</span></div>
-          ${played.length ? `<div class="list">${played.slice().reverse().map((m) => matchRow(m, teamKey, d.ownIds)).join('')}</div>` : '<p class="muted" style="font-size:13px">Nog geen uitslagen.</p>'}
+          ${played.length ? `<div class="list">${played.slice().reverse().map((m) => matchRow(m, teamKey, d.ownIds)).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Nog geen uitslagen.</p>'}
         </section>
         <section class="section">
-          <p class="muted" style="font-size:12px">${d.source === 'highlightly' ? `Alle competitieduels via Highlightly${d.meta ? ` · bijgewerkt ${esc(dayShort(d.meta.fetchedAt))} ${esc(timeOf(d.meta.fetchedAt))}` : ''}.`
+          <p class="muted" style="font-size:var(--fs-sm)">${d.source === 'highlightly' ? `Alle competitieduels via Highlightly${d.meta ? ` · bijgewerkt ${esc(dayShort(d.meta.fetchedAt))} ${esc(timeOf(d.meta.fetchedAt))}` : ''}.`
             : d.source === 'rsssf' ? esc(d.rs.credit) + '.'
             : `Je ziet nu alleen de duels tegen ${esc(MAIN_CLUB.name)}. Haal alle ${esc(d.league.name)}-wedstrijden op om het hele seizoen van deze club te zien.`}</p>
           ${fetchBtn ? `<div>${fetchBtn}</div>` : ''}

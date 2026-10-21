@@ -107,7 +107,7 @@ export const seasonViews = {
           <a class="back-btn" href="#/meer" aria-label="Terug">${icons.back}</a>
           <span class="page-head__kicker">Meer / Seizoenen</span><h1 class="page-head__title">Seizoenen</h1></div></header>
         <section class="section">
-          <p class="muted" style="font-size:13px">Per seizoen volg je ${esc(MAIN_CLUB.name)} en standaard de ${DEFAULT_FOLLOWS.map((id) => esc(LEAGUES[id])).join(' en ')}. API vandaag: ${calls} calls.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Per seizoen volg je ${esc(MAIN_CLUB.name)} en standaard de ${DEFAULT_FOLLOWS.map((id) => esc(LEAGUES[id])).join(' en ')}. API vandaag: ${calls} calls.</p>
           <div class="list">${rows.map((r) => `
             <div class="season-row">
               <span class="season-row__year mono">${esc(seasonLabel(r.year))}</span>
@@ -129,7 +129,7 @@ export const seasonViews = {
             <button class="btn" type="button" data-add="rsssf">RSSSF-basis · 0 calls</button>
             <button class="btn" type="button" data-add="manual">Leeg aanmaken</button>
           </div>
-          <p class="muted" style="font-size:12px">Ophalen haalt het programma en de uitslagen van ${esc(MAIN_CLUB.name)} plus de stand. Details per wedstrijd haal je later op, of laat je 's nachts ophalen. Heeft Highlightly het seizoen niet, dan maak je het leeg aan.</p>
+          <p class="muted" style="font-size:var(--fs-sm)">Ophalen haalt het programma en de uitslagen van ${esc(MAIN_CLUB.name)} plus de stand. Details per wedstrijd haal je later op, of laat je 's nachts ophalen. Heeft Highlightly het seizoen niet, dan maak je het leeg aan.</p>
         </section>` : ''}`;
     },
     mount(root, ctx) {

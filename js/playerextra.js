@@ -176,7 +176,7 @@ export function valueBlock(pr, id) {
       <div class="section__label"><span>Marktwaarde</span><span>${vals.length ? `${vals.length} ${vals.length === 1 ? 'meting' : 'metingen'}` : ''}</span></div>
       ${cur ? `<div class="value-now"><span class="big-num">${esc(euro(cur.amount))}</span>
           ${prev ? `<span class="value-delta ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : ''}">${delta > 0 ? '▲' : delta < 0 ? '▼' : '='} ${delta ? esc(euro(Math.abs(delta))) : 'gelijk'}</span>` : ''}
-          <span class="muted" style="font-size:12px">${esc(dmy(cur.date))}</span></div>
+          <span class="muted" style="font-size:var(--fs-sm)">${esc(dmy(cur.date))}</span></div>
         ${chart(vals)}
         <details class="fold"><summary><span>Alle metingen</span></summary><div class="list">${desc.map((v) => {
           const i = (pr.valueHistory || []).indexOf(v);
@@ -184,7 +184,7 @@ export function valueBlock(pr, id) {
             <span class="list-row__main"><span class="list-row__title mono">${esc(euro(v.amount))}</span><span class="list-row__sub">${esc(dmy(v.date))}${v.note ? ` · ${esc(v.note)}` : ''}</span></span>
             <span class="muted" aria-hidden="true">✎</span></button>`;
         }).join('')}</div></details>`
-        : '<p class="muted" style="font-size:13px">Nog geen marktwaarde. Neem hem over van Transfermarkt wanneer die een nieuwe waarde publiceert.</p>'}
+        : '<p class="muted" style="font-size:var(--fs-md)">Nog geen marktwaarde. Neem hem over van Transfermarkt wanneer die een nieuwe waarde publiceert.</p>'}
       <div><button class="btn btn--sm" type="button" data-add-value data-pid="${pid}">+ Waarde toevoegen</button></div>
     </section>`;
 }
@@ -236,7 +236,7 @@ export function injuryBlock(pr, id) {
           <span class="list-row__main"><span class="list-row__title">${x.state === 'out' ? '<span class="inj-dot" aria-hidden="true"></span>' : ''}${esc(x.type || 'Blessure')}</span>
           <span class="list-row__sub">${esc(dmy(x.startDate))} → ${x.state === 'healed' ? esc(dmy(x.actualReturn)) + ` · ${weeks(x.out)} out` : x.state === 'out' ? `nog geblesseerd · ${x.out ? `${weeks(x.out)} tot nu toe` : 'sinds vandaag'}${x.expected ? ` · verwacht terug ${esc(dmy(x.expected))}${daysUntil(x.expected) > 0 ? ` (nog ${weeks(daysUntil(x.expected))})` : ' (over tijd)'}` : ''}` : x.state === 'planned' ? 'gepland' : '?'}${x.note ? ` · ${esc(x.note)}` : ''}</span></span>
           <span class="muted" aria-hidden="true">✎</span></button>`).join('')}</div>`
-        : '<p class="muted" style="font-size:13px">Geen blessures bekend.</p>'}
+        : '<p class="muted" style="font-size:var(--fs-md)">Geen blessures bekend.</p>'}
       <div><button class="btn btn--sm" type="button" data-add-injury data-pid="${pid}">+ Blessure toevoegen</button></div>
     </section>`;
 }

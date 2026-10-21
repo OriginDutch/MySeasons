@@ -291,7 +291,7 @@ export const editorViews = {
       }).join('')}</div>`;
       return `${head}
         <section class="section">
-          <p class="muted" style="font-size:13px">${all.length} ${all.length === 1 ? 'veld wijkt' : 'velden wijken'} af van Highlightly${conflicts ? `, waarvan <strong class="accent-text">${conflicts} met een conflict</strong>: Highlightly heeft die waarde sinds jouw aanpassing veranderd` : ''}. Tot je kiest, geldt jouw waarde.</p>
+          <p class="muted" style="font-size:var(--fs-md)">${all.length} ${all.length === 1 ? 'veld wijkt' : 'velden wijken'} af van Highlightly${conflicts ? `, waarvan <strong class="accent-text">${conflicts} met een conflict</strong>: Highlightly heeft die waarde sinds jouw aanpassing veranderd` : ''}. Tot je kiest, geldt jouw waarde.</p>
           ${chips('type', TYPE_FILTERS)}
           ${chips('status', STATUS_FILTERS)}
         </section>

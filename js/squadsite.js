@@ -154,7 +154,7 @@ export function siteBlock(diffs, snap) {
   const when = snap.at ? new Date(snap.at).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
   if (!diffs.length) {
     return `<section class="section"><div class="section__label"><span>Volgens de clubsite · ${esc(when)}</span></div>
-      <p class="muted" style="font-size:13px;margin:0">Alles klopt met de selectiepagina's. <a href="#/clubsite">Pagina's</a></p></section>`;
+      <p class="muted" style="font-size:var(--fs-md);margin:0">Alles klopt met de selectiepagina's. <a href="#/clubsite">Pagina's</a></p></section>`;
   }
   const fills = diffs.filter((d) => d.kind === 'fill').length;
   return `<section class="section"><details class="fold site-fold" data-site-fold ${siteOpen ? 'open' : ''}><summary class="section__label"><span>Volgens de clubsite · ${esc(when)}</span><span>${diffs.length} ${diffs.length === 1 ? 'verschil' : 'verschillen'}</span></summary>
@@ -164,7 +164,7 @@ export function siteBlock(diffs, snap) {
       return `<div class="list-row site-row"><span class="list-row__main"><span class="list-row__title">${d.id ? `<a href="#/speler/${encodeURIComponent(d.id)}">${esc(d.name)}</a>` : esc(d.name)}</span><span class="list-row__sub">${esc(txt)}</span></span>
         <span class="site-row__btns">${btns.map(([l, a], i) => `<button class="btn btn--sm ${i ? 'btn--ghost' : ''}" type="button" data-sq-fix="${esc(d.key)}" data-sq-act="${a}">${esc(l)}</button>`).join('')}</span></div>`;
     }).join('')}</div>
-    <p class="muted" style="font-size:12px">De site heeft niet altijd gelijk: jij beslist. Verbergen geldt alleen voor die ene afwijking; verandert de site iets aan die speler, dan zie je het weer. <a href="#/clubsite">Pagina's</a></p></details></section>`;
+    <p class="muted" style="font-size:var(--fs-sm)">De site heeft niet altijd gelijk: jij beslist. Verbergen geldt alleen voor die ene afwijking; verandert de site iets aan die speler, dan zie je het weer. <a href="#/clubsite">Pagina's</a></p></details></section>`;
 }
 
 // Standaard dicht; blijft open zolang je in deze sessie bezig bent (ook na Aanvullen/Negeren).
@@ -188,14 +188,14 @@ export const squadSiteViews = {
       const res = (url) => ((s.snap && s.snap.pages) || []).find((p) => p.url === url);
       return `${head()}
         <section class="section">
-          <p class="muted" style="font-size:13px">De Worker leest deze pagina's elke ochtend om 07:00. Geen Highlightly-calls. Verschillen met je selectie zie je op Selectie; jij beslist wat je overneemt.</p>
+          <p class="muted" style="font-size:var(--fs-md)">De Worker leest deze pagina's elke ochtend om 07:00. Geen Highlightly-calls. Verschillen met je selectie zie je op Selectie; jij beslist wat je overneemt.</p>
           <div class="list" data-sq-pages>${pages.map((p, i) => pageRow(p, i, res(p.url))).join('')}</div>
           <div class="btn-row"><button class="btn btn--sm" type="button" data-sq-add>+ Pagina</button>
           <button class="btn btn--sm btn--primary" type="button" data-sq-save>Opslaan en nu ophalen</button></div>
         </section>
         ${s.snap ? `<section class="section"><div class="section__label"><span>Laatst opgehaald · ${esc(new Date(s.snap.at).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</span></div>
           ${(s.snap.pages || []).map((p) => `<details class="fold"><summary><span>${esc(LEVEL_TXT[p.level])} · ${p.error ? esc(p.error) : `${p.players.length} ${p.players.length === 1 ? 'speler' : 'spelers'}`}</span></summary>
-            <p class="muted" style="font-size:12px;word-break:break-all">${esc(p.url)}</p>
+            <p class="muted" style="font-size:var(--fs-sm);word-break:break-all">${esc(p.url)}</p>
             <div class="list">${(p.players || []).map((x) => `<div class="kv-line"><span>${esc(x.name)}</span><span class="mono muted">${x.number ?? '–'}${x.line ? ` · ${esc(LINE_SHORT[x.line])}` : ''}</span></div>`).join('')}</div></details>`).join('')}
         </section>` : ''}`;
     },

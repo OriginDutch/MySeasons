@@ -116,3 +116,23 @@
 /* Dunne outline die de vorm van een clubschild volgt (alleen op Home). */
 :root { --crest-outline: drop-shadow(1px 0 0 rgb(0 0 0 / .18)) drop-shadow(-1px 0 0 rgb(0 0 0 / .18)) drop-shadow(0 1px 0 rgb(0 0 0 / .18)) drop-shadow(0 -1px 0 rgb(0 0 0 / .18)); }
 :root[data-theme="dim"], :root[data-theme="dark"] { --crest-outline: drop-shadow(1px 0 0 rgb(255 255 255 / .35)) drop-shadow(-1px 0 0 rgb(255 255 255 / .35)) drop-shadow(0 1px 0 rgb(255 255 255 / .35)) drop-shadow(0 -1px 0 rgb(255 255 255 / .35)); }
+
+/* ==========================================================================
+   Typografie — één schaal. Nieuwe schermen gebruiken alleen deze waarden.
+   micro: labels in kaders (tags, badges, vormblokjes). Grafische glyphs in
+   kleine cirkels (wapen-initialen) vallen erbuiten.
+   ========================================================================== */
+:root {
+  --fs-micro: 10px;
+  --fs-xs: 11px;    /* mono-kopjes, kolomnamen */
+  --fs-sm: 12px;    /* grijze uitleg, subregels */
+  --fs-md: 13px;    /* tabellen, lijsten */
+  --fs-base: 14px;  /* lopende tekst */
+  --fs-lg: 16px;    /* nadruk in een blok, tooltips */
+  --fs-title: 20px; /* bloktitels, sheets */
+  --fs-xl: 26px;    /* grote koppen in kaarten */
+  --mono-scale: 0.92; /* mono oogt groter dan sans bij dezelfde maat */
+}
+@media (min-width: 1100px) {
+  :root { --fs-md: 14px; --fs-base: 15px; }
+}

@@ -154,7 +154,7 @@ export const importViews = {
       if (!loaded) {
         return `${head()}
           <section class="section">
-            <p class="muted" style="font-size:13px">Kies de JSON-export van je oude Cambuur Tracker. Het bestand wordt alleen hier in je browser gelezen; er gaat niets naar een server behalve wat je straks zelf importeert naar je eigen Firestore.</p>
+            <p class="muted" style="font-size:var(--fs-md)">Kies de JSON-export van je oude Cambuur Tracker. Het bestand wordt alleen hier in je browser gelezen; er gaat niets naar een server behalve wat je straks zelf importeert naar je eigen Firestore.</p>
             <label class="btn btn--primary" style="align-self:flex-start;cursor:pointer">Export kiezen<input type="file" accept=".json,application/json" data-file hidden></label>
           </section>`;
       }
@@ -174,7 +174,7 @@ export const importViews = {
         </section>
         <section class="section">
           <div class="section__label"><span>Spelers koppelen</span><span>${squad.length} Highlightly-spelers bekend</span></div>
-          <p class="muted" style="font-size:12px">De app stelt per speler een koppeling voor op naam en rugnummer. Klopt iets niet, kies dan zelf. "Oud-speler" bewaart alles zonder koppeling; dat kan later alsnog, als hij in een opgehaald seizoen voorkomt.${squad.length ? '' : ' Er zijn nog geen wedstrijddetails opgehaald, dus koppelen kan nog niet: alles wordt eerst oud-speler.'}</p>
+          <p class="muted" style="font-size:var(--fs-sm)">De app stelt per speler een koppeling voor op naam en rugnummer. Klopt iets niet, kies dan zelf. "Oud-speler" bewaart alles zonder koppeling; dat kan later alsnog, als hij in een opgehaald seizoen voorkomt.${squad.length ? '' : ' Er zijn nog geen wedstrijddetails opgehaald, dus koppelen kan nog niet: alles wordt eerst oud-speler.'}</p>
           <div class="link-list">${players.map((p) => {
             const pre = linkedLegacy.get(p.id) || suggest(p, squad) || '';
             const out = (p.transfers || []).find((t) => /uit/.test(t.type || ''));

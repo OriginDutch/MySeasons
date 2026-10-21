@@ -70,7 +70,7 @@ function transfersBlock(pr, id) {
           <span class="list-row__main"><span class="list-row__title">${esc(T_LABEL[t.type] || t.type)}${t.club ? ` · <span class="transfer-club">${t.clubId ? clubCrest({ logo: t.clubLogo, name: t.club }, 18) : ''}${esc(t.club)}</span>` : ''}</span>
           <span class="list-row__sub">${esc(dmy(t.date))}${t.dateTo ? ` t/m ${esc(dmy(t.dateTo))}` : ''}${t.amount ? ` · ${euro(t.amount)}` : ''}${t.note ? ` · ${esc(t.note)}` : ''}${/vrij/i.test(t.note || '') && t.amount > 0 ? ' <span class="ptag ptag--warn">vrije transfer met bedrag?</span>' : ''}</span></span>
           <span class="muted" aria-hidden="true">✎</span></button>`).join('')}</div>`
-        : '<p class="muted" style="font-size:13px">Nog geen transfers. Zonder transfers telt alleen het wedstrijdformulier.</p>'}
+        : '<p class="muted" style="font-size:var(--fs-md)">Nog geen transfers. Zonder transfers telt alleen het wedstrijdformulier.</p>'}
       <div><button class="btn btn--sm" type="button" data-add-transfer data-pid="${esc(String(id))}">+ Transfer toevoegen</button></div>
     </section>`;
 }
@@ -330,7 +330,7 @@ function profileBlock(pr, id) {
   const editBtn = id != null ? `<div><button class="btn btn--sm" type="button" data-edit-profile="${esc(String(id))}">Profiel bewerken</button></div>` : '';
   if (!kv.length) {
     return `<section class="section"><div class="section__label"><span>Profiel</span></div>
-      <p class="muted" style="font-size:13px">Nog geen profiel: nationaliteit, geboortedatum, voet, lengte, contract en een notitie vul je zelf in.</p>${editBtn}</section>`;
+      <p class="muted" style="font-size:var(--fs-md)">Nog geen profiel: nationaliteit, geboortedatum, voet, lengte, contract en een notitie vul je zelf in.</p>${editBtn}</section>`;
   }
   return `
     <section class="section">
@@ -561,7 +561,7 @@ function sorted(players, sort) {
 function squadList(players, sort) {
   if (sort !== 'line') {
     return `<section class="section">${statHead}<div class="list">${sorted(players, sort).map((p) => rowHtml(p, sort)).join('')}</div>
-      ${sort === 'rating' ? '<p class="muted" style="font-size:12px">Spelers met minder dan 3 beoordeelde duels staan onderaan.</p>' : ''}</section>`;
+      ${sort === 'rating' ? '<p class="muted" style="font-size:var(--fs-sm)">Spelers met minder dan 3 beoordeelde duels staan onderaan.</p>' : ''}</section>`;
   }
   return LINES.map(([key, label]) => {
     const group = players.filter((p) => (p.position || '') === key)
@@ -636,7 +636,7 @@ function profileOnlyPage(pr, id) {
     <section class="section">
       <div class="player-hero">${pr.photoUrl ? photoImg(pr.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${shirtFor(pr, getSeason()) ?? latestShirt(pr) ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
       <div><button class="btn btn--sm" type="button" data-action="edit-name" data-id="${esc(id)}" data-api="" data-full="${esc(pr.fullName || '')}" data-short="${esc(pr.shortName || '')}" data-photo="${esc(pr.photoUrl || '')}">Naam en foto</button></div>
-      <p class="muted" style="font-size:13px;margin:0">${pr.linkedTo === null || String(id).startsWith('legacy-')
+      <p class="muted" style="font-size:var(--fs-md);margin:0">${pr.linkedTo === null || String(id).startsWith('legacy-')
         ? 'Nog niet gekoppeld aan Highlightly. Stats verschijnen zodra hij in een opgehaald seizoen voorkomt en je hem hieronder koppelt.'
         : 'Geen officiële duels in dit seizoen. Kies een ander seizoen via de clubnaam op Home.'}</p>
       ${pr.linkedTo == null ? `<div><button class="btn btn--sm" type="button" data-link-player="${esc(id)}">Koppelen aan Highlightly-speler</button></div>` : ''}
@@ -675,7 +675,7 @@ export const playerViews = {
             <span></span></a>`;
       return `${head({ kicker: 'Selectie / Archief', title: 'Archief', back: 'selectie' })}
         <section class="section">
-          <p class="muted" style="font-size:13px">${rows.length} spelers: wie nu bij de club is, daarna per seizoen waarin ze vertrokken. Binnen een groep op linie.</p>
+          <p class="muted" style="font-size:var(--fs-md)">${rows.length} spelers: wie nu bij de club is, daarna per seizoen waarin ze vertrokken. Binnen een groep op linie.</p>
           <div><button class="btn btn--sm" type="button" data-add-player>+ Speler toevoegen</button></div>
         </section>
         ${keys.map((k) => { const g = rows.filter((r) => r.group === k).sort(sortIn); return `<section class="section">
@@ -725,7 +725,7 @@ export const playerViews = {
       return `
         ${head({ kicker, title: 'Selectie' })}
         <section class="section">
-          <p class="muted" style="font-size:13px">${players.length} ${isCurrentSeason() ? 'spelers nu bij de club' : 'spelers aan het eind van het seizoen'} · ${used} kwamen in actie in ${matches} officiële ${matches === 1 ? 'duel' : 'duels'}${natFact(players, profiles)}</p>
+          <p class="muted" style="font-size:var(--fs-md)">${players.length} ${isCurrentSeason() ? 'spelers nu bij de club' : 'spelers aan het eind van het seizoen'} · ${used} kwamen in actie in ${matches} officiële ${matches === 1 ? 'duel' : 'duels'}${natFact(players, profiles)}</p>
           <fieldset class="segmented segmented--4" style="margin:0;padding:0">
             <legend class="visually-hidden">Sorteren</legend>
             ${SORTS.map(([v, l], i) => `<input type="radio" name="sq-sort" id="sq-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sq-${v}">${l}</label>`).join('')}
@@ -738,7 +738,7 @@ export const playerViews = {
           <div class="sq-tools"><fieldset class="segmented segmented--2 sq-group-toggle" style="margin:0;padding:0"><legend class="visually-hidden">Indeling</legend>
             <input type="radio" name="sq-group" id="sqg-lines" value="lines" ${groupPref() === 'lines' ? 'checked' : ''}><label for="sqg-lines">Per linie</label>
             <input type="radio" name="sq-group" id="sqg-flat" value="flat" ${groupPref() === 'flat' ? 'checked' : ''}><label for="sqg-flat">Eén lijst</label></fieldset></div>
-          ${squadTable(players, profiles)}<p class="muted" style="font-size:12px">Klik op een kolom om te sorteren, nog een keer draait de volgorde om. Duels: tussen haakjes de invalbeurten.</p></section>
+          ${squadTable(players, profiles)}<p class="muted" style="font-size:var(--fs-sm)">Klik op een kolom om te sorteren, nog een keer draait de volgorde om. Duels: tussen haakjes de invalbeurten.</p></section>
         ${extra.map(([k, label]) => `<section class="section"><details class="fold" ${isCurrentSeason() ? '' : 'open'}>
           <summary class="section__label"><span>${esc(label)}</span><span>${groups[k].length}</span></summary>
           <div class="mob-only">${statHead}<div class="list">${groups[k].map((p) => rowHtml(p, 'all')).join('')}</div></div>
@@ -826,7 +826,7 @@ export const playerViews = {
           ${levelFor(p.profile, getSeason()) === 'o21' && p.apps >= PROMOTE_AT ? `<div class="promote-line"><span>Staat bij O21, maar speelde ${p.apps} duels in het eerste.</span><button class="btn btn--sm btn--primary" type="button" data-promote="${esc(String(p.id))}">Naar eerste elftal</button></div>` : ''}
           <div class="player-hero">${p.profile && p.profile.photoUrl ? photoImg(p.profile.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${p.number ?? '–'}</span>
             <span class="muted">${esc(LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
-          <p class="muted" style="font-size:12px;margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>
+          <p class="muted" style="font-size:var(--fs-sm);margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>
           <div><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}" data-photo="${esc((p.profile && p.profile.photoUrl) || '')}">Naam en foto</button></div>
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>

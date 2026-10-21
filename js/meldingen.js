@@ -97,22 +97,22 @@ export const meldingenViews = {
       const on = !!sub && perm === 'granted';
       return `${head}
         <section class="section">
-          <p class="muted" style="font-size:13px">Op wedstrijddag om 09:00: <strong>“Veel plezier bij…”</strong> bij een thuiswedstrijd, <strong>“Succes met…”</strong> bij een uitwedstrijd. Met de aftrap erbij; tik erop en je staat op de wedstrijdpagina.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Op wedstrijddag om 09:00: <strong>“Veel plezier bij…”</strong> bij een thuiswedstrijd, <strong>“Succes met…”</strong> bij een uitwedstrijd. Met de aftrap erbij; tik erop en je staat op de wedstrijdpagina.</p>
           ${err ? `<p class="warn-line">${esc(err.status === 404 ? 'De Worker kent meldingen nog niet: de nieuwe versie is nog niet gedeployd.' : explain(err))}</p>` : ''}
           <div class="kv-line"><span>Op dit apparaat</span><span class="mono">${on ? 'aan' : perm === 'denied' ? 'geblokkeerd' : 'uit'}</span></div>
           ${info ? `<div class="kv-line"><span>Aangemelde apparaten</span><span class="mono">${info.devices}</span></div>
           <div class="kv-line"><span>Wedstrijden klaargezet</span><span class="mono">${info.scheduled}</span></div>` : ''}
-          ${perm === 'denied' ? '<p class="muted" style="font-size:12px">Je hebt meldingen voor deze app geblokkeerd. Zet ze aan via de site-instellingen van je browser (slotje naast het adres) of de app-instellingen van je telefoon, en kom dan terug.</p>' : ''}
+          ${perm === 'denied' ? '<p class="muted" style="font-size:var(--fs-sm)">Je hebt meldingen voor deze app geblokkeerd. Zet ze aan via de site-instellingen van je browser (slotje naast het adres) of de app-instellingen van je telefoon, en kom dan terug.</p>' : ''}
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${on
               ? `<button class="btn" type="button" data-push="test">Testmelding sturen</button><button class="btn" type="button" data-push="off">Uitzetten op dit apparaat</button>`
               : `<button class="btn btn--primary" type="button" data-push="on" ${err || perm === 'denied' ? 'disabled' : ''}>Aanzetten op dit apparaat</button>`}
           </div>
-          <p class="muted" style="font-size:12px">Het programma wordt bijgewerkt telkens als je het seizoen synchroniseert. Een verplaatste wedstrijd komt dus vanzelf goed na de volgende synchronisatie.</p>
+          <p class="muted" style="font-size:var(--fs-sm)">Het programma wordt bijgewerkt telkens als je het seizoen synchroniseert. Een verplaatste wedstrijd komt dus vanzelf goed na de volgende synchronisatie.</p>
         </section>
         ${info ? `<section class="section">
           <div class="section__label"><span>Uitslag automatisch ophalen</span></div>
-          <p class="muted" style="font-size:13px">Zo'n 2,5 uur na de aftrap haalt de Worker uitslag, opstelling, tijdlijn en spelersstats op (3 calls, plus 1 voor de stand). Nog niet afgelopen? Elk half uur opnieuw, tot 6 uur na de aftrap. De volgende ochtend om 08:00 nog één controle (3 calls). Open je de app, dan staat alles erin.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Zo'n 2,5 uur na de aftrap haalt de Worker uitslag, opstelling, tijdlijn en spelersstats op (3 calls, plus 1 voor de stand). Nog niet afgelopen? Elk half uur opnieuw, tot 6 uur na de aftrap. De volgende ochtend om 08:00 nog één controle (3 calls). Open je de app, dan staat alles erin.</p>
           <label class="field field--check"><input type="checkbox" data-pref="results" ${info.prefs && info.prefs.results === false ? '' : 'checked'}> <span>Uitslag automatisch ophalen</span></label>
           <label class="field field--check"><input type="checkbox" data-pref="resultPush" ${info.prefs && info.prefs.resultPush === false ? '' : 'checked'} ${info.prefs && info.prefs.results === false ? 'disabled' : ''}> <span>Melding als de uitslag binnen is</span></label>
         </section>` : ''}`;

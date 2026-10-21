@@ -204,7 +204,7 @@ function periodHl(p) {
 function periodsBlock(zones, rules, lm, marks) {
   if (!lm.length) {
     return `<section class="section"><div class="section__label"><span>Periodes</span></div>
-      <p class="muted" style="font-size:13px">Voor de periodestanden zijn alle competitiewedstrijden nodig. Haal ze op met “Alle wedstrijden” hieronder.</p></section>`;
+      <p class="muted" style="font-size:var(--fs-md)">Voor de periodestanden zijn alle competitiewedstrijden nodig. Haal ze op met “Alle wedstrijden” hieronder.</p></section>`;
   }
   const ps = zones.periods;
   const cur = ps.find((p) => p.state === 'running') || [...ps].reverse().find((p) => p.state === 'done') || ps[0];
@@ -224,7 +224,7 @@ function periodsBlock(zones, rules, lm, marks) {
           ${p.state === 'open' ? '' : standTable(periodRows(p), { marks, highlight: hl })}
         </div>`;
       }).join('')}
-      <p class="muted" style="font-size:12px">Bij gelijke stand in een periode telt geen onderling resultaat; daarna beslissen strafpunten (kaarten), die rekent de app niet mee.</p>
+      <p class="muted" style="font-size:var(--fs-sm)">Bij gelijke stand in een periode telt geen onderling resultaat; daarna beslissen strafpunten (kaarten), die rekent de app niet mee.</p>
     </section>`;
 }
 
@@ -250,7 +250,7 @@ function pastPlayoffsBlock(rs, leagueId) {
       <summary class="section__label"><span>${esc(title)}</span><span>${ms.length} duels</span></summary>
       ${sum ? `<p class="period-sum" style="margin-top:0">${sum}${f.hs != null ? ` <span class="mono">${f.hs}–${f.as}</span>` : ''}${f.note ? ` <span class="muted">(${esc(f.note)})</span>` : ''}</p>` : ''}
       <div class="bracket">${ms.map((m) => `<div class="bracket__row bracket__row--res"><span class="bracket__key">${esc(roundNl(m.label))}</span><span>${nmMe({ name: String(m.homeFull || m.home) })} – ${nmMe({ name: String(m.awayFull || m.away) })} <span class="mono">${m.hs ?? ''}–${m.as ?? ''}</span>${m.note ? ` <span class="muted">(${esc(m.note)})</span>` : ''}</span></div>`).join('')}</div>
-      <p class="muted" style="font-size:12px">${esc(rs.credit || 'Bron: RSSSF')}</p>
+      <p class="muted" style="font-size:var(--fs-sm)">${esc(rs.credit || 'Bron: RSSSF')}</p>
     </details></section>`;
   }).join('');
 }
@@ -267,7 +267,7 @@ function bracketBlock(rules, rows, zones, rs) {
         ${b.first.map((m) => `<div class="bracket__row"><span class="bracket__key">${m.key}</span><span>${nm(m.home)} – ${nm(m.away)}</span></div>`).join('')}
         ${b.later.map(([k, t]) => `<div class="bracket__row"><span class="bracket__key">${k}</span><span class="muted">${esc(t)}</span></div>`).join('')}
       </div>
-      <p class="muted" style="font-size:12px">Alles over twee duels. De hoogst geplaatste club speelt de return thuis, de Eredivisie-club altijd. Plaatsing op de reguliere stand, beloftenteams tellen niet mee.</p>
+      <p class="muted" style="font-size:var(--fs-sm)">Alles over twee duels. De hoogst geplaatste club speelt de return thuis, de Eredivisie-club altijd. Plaatsing op de reguliere stand, beloftenteams tellen niet mee.</p>
     </section>`;
 }
 
@@ -317,8 +317,8 @@ function crowdBlock(list, league) {
     <section class="section">
       <div class="section__label"><span>Publiek</span><span>${esc(league.name)}</span></div>
       ${rows.length ? `<div class="crowd">${rows.map(([l, v, sub]) => `<div class="crowd__row"><span>${l}<br><span class="muted">${sub}</span></span><span class="mono crowd__num">${v}</span></div>`).join('')}</div>
-      <p class="muted" style="font-size:12px">Alleen competitieduels met een ingevuld aantal. Leeg telt niet mee als 0.</p>`
-      : '<p class="muted" style="font-size:13px">Nog geen toeschouwers ingevuld. Dat doe je per wedstrijd onder “Aanvullen”.</p>'}
+      <p class="muted" style="font-size:var(--fs-sm)">Alleen competitieduels met een ingevuld aantal. Leeg telt niet mee als 0.</p>`
+      : '<p class="muted" style="font-size:var(--fs-md)">Nog geen toeschouwers ingevuld. Dat doe je per wedstrijd onder “Aanvullen”.</p>'}
     </section>`;
 }
 
@@ -420,7 +420,7 @@ export function syncFooter(meta, calls) {
   return `
     <section class="section">
       <div class="section__label"><span>Programma</span><span>API vandaag: ${calls} calls</span></div>
-      <p class="${stale ? '' : 'muted'}" style="font-size: 13px">${last ? `Laatst gesynchroniseerd ${esc(dayShort(last))} ${esc(timeOf(last))}${stale ? ' · tijd voor een update' : ''}` : 'Nog niet gesynchroniseerd'}</p>
+      <p class="${stale ? '' : 'muted'}" style="font-size:var(--fs-md)">${last ? `Laatst gesynchroniseerd ${esc(dayShort(last))} ${esc(timeOf(last))}${stale ? ' · tijd voor een update' : ''}` : 'Nog niet gesynchroniseerd'}</p>
       <div>${syncButton(`Seizoen synchroniseren · ${COST.season} calls`)}</div>
     </section>`;
 }
@@ -529,7 +529,7 @@ export const matchViews = {
         ${flag}
         <div class="stats-grid"><div class="stats-main" data-stats-main>
         <section class="section">
-          ${fromRsssf ? `<p class="muted" style="font-size:12px;margin:0">Eindstand ${esc(seasonLabel())} · ${esc(st.credit)}</p>` : ''}
+          ${fromRsssf ? `<p class="muted" style="font-size:var(--fs-sm);margin:0">Eindstand ${esc(seasonLabel())} · ${esc(st.credit)}</p>` : ''}
           <div class="stand-modes">
           <fieldset class="segmented segmented--${modes.length}" style="margin:0;padding:0" ${fromRsssf && !pModes.length ? 'hidden' : ''}>
             <legend class="visually-hidden">Weergave</legend>
@@ -538,9 +538,9 @@ export const matchViews = {
           ${pModes.length ? `<fieldset class="segmented segmented--${pModes.length}" style="margin:0;padding:0"><legend class="visually-hidden">Periode</legend>
             ${pModes.map((p) => `<input type="radio" name="stand-mode" id="sm-${p.key}" value="${p.key}"><label for="sm-${p.key}">${p.key}${p.state === 'done' ? ' ✓' : p.state === 'running' ? ' •' : ''}</label>`).join('')}</fieldset>` : ''}
           </div>
-          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks, form: lmUse.length ? formMap(lmUse, v) : null, leagueId: isMine ? null : league.id })}${v === 'total' && zones ? zoneLegend(zones, rules) : v !== 'total' ? `<p class="muted" style="font-size:12px;margin-top:10px">Alleen ${v === 'home' ? 'thuis' : 'uit'}duels. Europese plekken en degradatie gaan op de totaalstand.</p>` : ''}</div>`).join('')}
+          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks, form: lmUse.length ? formMap(lmUse, v) : null, leagueId: isMine ? null : league.id })}${v === 'total' && zones ? zoneLegend(zones, rules) : v !== 'total' ? `<p class="muted" style="font-size:var(--fs-sm);margin-top:10px">Alleen ${v === 'home' ? 'thuis' : 'uit'}duels. Europese plekken en degradatie gaan op de totaalstand.</p>` : ''}</div>`).join('')}
           ${pModes.map((p) => `<div data-stand-mode="${p.key}" hidden><p class="period-sum">Periode ${esc(p.key.slice(1))} · ${periodLine(p, zones)}</p>${p.state === 'open' ? '' : standTable(periodRows(p), { marks, highlight: periodHl(p), leagueId: isMine ? null : league.id })}
-            <p class="muted" style="font-size:12px;margin-top:10px">Bij gelijke stand in een periode telt geen onderling resultaat; daarna beslissen strafpunten (kaarten), die rekent de app niet mee.</p></div>`).join('')}
+            <p class="muted" style="font-size:var(--fs-sm);margin-top:10px">Bij gelijke stand in een periode telt geen onderling resultaat; daarna beslissen strafpunten (kaarten), die rekent de app niet mee.</p></div>`).join('')}
           ${tiers}
         </section>
         </div><aside class="stats-side" data-stats-side>
@@ -552,10 +552,10 @@ export const matchViews = {
         </aside></div>
         <section class="section">
           <div class="section__label"><span>Bijgewerkt · ${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
-          ${st.source === 'live' ? '<p class="muted" style="font-size:12px">Zelf berekend uit alle uitslagen: de stand van Highlightly loopt achter tot een speelronde klaar is. Puntenaftrek is meegenomen.</p>' : ''}
-          ${fromRsssf ? '<p class="muted" style="font-size:12px">Van RSSSF. De Highlightly-stand van dat seizoen kun je ook ophalen.</p>' : '<p class="muted" style="font-size:12px">De stand wordt ook bijgewerkt als je het seizoen synchroniseert.</p>'}
+          ${st.source === 'live' ? '<p class="muted" style="font-size:var(--fs-sm)">Zelf berekend uit alle uitslagen: de stand van Highlightly loopt achter tot een speelronde klaar is. Puntenaftrek is meegenomen.</p>' : ''}
+          ${fromRsssf ? '<p class="muted" style="font-size:var(--fs-sm)">Van RSSSF. De Highlightly-stand van dat seizoen kun je ook ophalen.</p>' : '<p class="muted" style="font-size:var(--fs-sm)">De stand wordt ook bijgewerkt als je het seizoen synchroniseert.</p>'}
           <div style="display:flex;gap:8px;flex-wrap:wrap">${refresh}${isCurrentSeason() || !fromRsssf ? `<button class="btn" type="button" data-action="sync-league" data-league="${league.id}">${icons.refresh}<span>Alle wedstrijden · ~${COST.league} calls</span></button>` : ''}</div>
-          <p class="muted" style="font-size:12px">Tik op een club voor al zijn wedstrijden dit seizoen.</p>
+          <p class="muted" style="font-size:var(--fs-sm)">Tik op een club voor al zijn wedstrijden dit seizoen.</p>
         </section>`;
     },
     mount(root, ctx) {
@@ -673,7 +673,7 @@ export const matchViews = {
           </dl>` : `<p class="muted">${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</p>`}
           ${m.status === 'finished'
             ? `<div><button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${d ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button></div>`
-            : '<p class="muted" style="font-size:12px">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
+            : '<p class="muted" style="font-size:var(--fs-sm)">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
         </section>
         ${m.status === 'finished' || (Date.parse(m.date) - Date.now() < 12 * 3600e3 && m.status !== 'postponed') ? notesBlock(n, m.status !== 'finished') : ''}
         ${d ? timeline(m) + statsBlock(m) + lineupsBlock(m) + playersBlock(m) : ''}`;
@@ -722,8 +722,8 @@ function notesBlock(n, early = false) {
     <section class="section">
       <div class="section__label"><span>Jouw aanvulling</span><span>${has ? '' : 'nog leeg'}</span></div>
       ${n.note ? `<p class="note-text">${esc(n.note)}</p>` : ''}
-      ${has && n.attendance != null ? `<p class="muted" style="font-size:13px">${nl(n.attendance)} toeschouwers${n.awayFans != null ? ` · ${nl(n.awayFans)} in het uitvak` : ''}</p>` : ''}
-      ${!has ? `<p class="muted" style="font-size:13px">${early ? 'Weet je het aantal toeschouwers al (bijvoorbeeld van het scorebord)? Zet het nu klaar; de uitslag die straks automatisch binnenkomt laat je aanvulling staan.' : 'Toeschouwers en een notitie komen niet uit de API. Die vul je zelf in.'}</p>` : ''}
+      ${has && n.attendance != null ? `<p class="muted" style="font-size:var(--fs-md)">${nl(n.attendance)} toeschouwers${n.awayFans != null ? ` · ${nl(n.awayFans)} in het uitvak` : ''}</p>` : ''}
+      ${!has ? `<p class="muted" style="font-size:var(--fs-md)">${early ? 'Weet je het aantal toeschouwers al (bijvoorbeeld van het scorebord)? Zet het nu klaar; de uitslag die straks automatisch binnenkomt laat je aanvulling staan.' : 'Toeschouwers en een notitie komen niet uit de API. Die vul je zelf in.'}</p>` : ''}
       <div><button class="btn ${has ? '' : 'btn--primary'}" type="button" data-action="edit-notes">${has ? 'Aanvulling bewerken' : 'Aanvullen'}</button></div>
     </section>`;
 }

@@ -88,9 +88,9 @@ export function zoneLegend(zones, rules, { provisional = zones ? zones.provision
   const hasJong = [...zones.map.values()].some((z) => z.kind === 'jong');
   const hasTag = [...zones.map.values()].some((z) => z.tag) || (zones.periodTags && zones.periodTags.size > 0);
   return `<div class="zone-legend">${zones.legend.map((x) => `<span><i class="zone-key zone-key--${x.kind}"></i>${esc(x.label)}</span>`).join('')}${hasJong ? '<span><i class="zone-key zone-key--jong"></i>Beloftenteam, telt niet mee</span>' : ''}${hasTag ? '<span><i class="st-tag mono">P1</i> periodekampioen</span>' : ''}${[...zones.map.values()].some((z) => z.tag && z.via && z.via !== 'winst') ? '<span><i class="st-tag st-tag--via mono">via P2</i> ticket doorgeschoven</span>' : ''}</div>
-    ${provisional ? '<p class="muted" style="font-size:12px;margin:0">Voorlopig: zo zou het zijn als de competitie nu eindigt.</p>' : ''}
-    ${rules && rules.cup ? `<p class="muted" style="font-size:12px;margin:0">${zones.cup ? `Bekerwinnaar: <strong>${esc(zones.cup.team.name)}</strong>. De tickets zijn daarop aangepast.` : provisional ? 'Bekerwinnaar nog niet bekend: de tickets schuiven door zodra de bekerfinale gespeeld is.' : 'Bekerwinnaar onbekend in je data: tickets zonder bekerverschuiving.'}</p>` : ''}
-    ${rules && rules.note ? `<p class="muted" style="font-size:12px">${esc(rules.note)}</p>` : ''}`;
+    ${provisional ? '<p class="muted" style="font-size:var(--fs-sm);margin:0">Voorlopig: zo zou het zijn als de competitie nu eindigt.</p>' : ''}
+    ${rules && rules.cup ? `<p class="muted" style="font-size:var(--fs-sm);margin:0">${zones.cup ? `Bekerwinnaar: <strong>${esc(zones.cup.team.name)}</strong>. De tickets zijn daarop aangepast.` : provisional ? 'Bekerwinnaar nog niet bekend: de tickets schuiven door zodra de bekerfinale gespeeld is.' : 'Bekerwinnaar onbekend in je data: tickets zonder bekerverschuiving.'}</p>` : ''}
+    ${rules && rules.note ? `<p class="muted" style="font-size:var(--fs-sm)">${esc(rules.note)}</p>` : ''}`;
 }
 
 /** Twee plekken boven en onder de eigen club. */

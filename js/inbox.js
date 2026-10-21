@@ -150,7 +150,7 @@ export const inboxViews = {
               </a>
               <button class="inbox__x" type="button" data-dismiss="${esc(m.id)}" aria-label="Wegdoen">×</button>
             </div>`).join('')}</div>
-          <p class="muted" style="font-size:12px">Wegdoen verbergt een melding. Meldingen over je data verdwijnen ook vanzelf zodra het geregeld is.</p>
+          <p class="muted" style="font-size:var(--fs-sm)">Wegdoen verbergt een melding. Meldingen over je data verdwijnen ook vanzelf zodra het geregeld is.</p>
         </section>`;
     },
     mount(root, ctx) {

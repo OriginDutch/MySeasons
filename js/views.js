@@ -141,13 +141,13 @@ export const views = {
               <input type="radio" name="theme" id="theme-${value}" value="${value}" ${pref === value ? 'checked' : ''}>
               <label for="theme-${value}">${label}</label>`).join('')}
           </fieldset>
-          <p class="muted" style="font-size: 12px">Systeem volgt de licht/donker-instelling van je telefoon.</p>
+          <p class="muted" style="font-size:var(--fs-sm)">Systeem volgt de licht/donker-instelling van je telefoon.</p>
           <fieldset class="segmented" style="border-color: var(--rule); margin: 8px 0 0; padding: 0; grid-template-columns: repeat(2, minmax(0, 1fr));">
             <legend class="visually-hidden">Clubkleuren</legend>
             <input type="radio" name="club" id="club-on" value="on" ${getClubColors() ? 'checked' : ''}><label for="club-on">Clubkleuren</label>
             <input type="radio" name="club" id="club-off" value="off" ${getClubColors() ? '' : 'checked'}><label for="club-off">Neutraal</label>
           </fieldset>
-          <p class="muted" style="font-size: 12px">Clubkleuren kleuren de app in de kleuren van de club die je bekijkt.</p>
+          <p class="muted" style="font-size:var(--fs-sm)">Clubkleuren kleuren de app in de kleuren van de club die je bekijkt.</p>
         </section>
 
         <section class="section" aria-labelledby="sec-account">
@@ -155,7 +155,7 @@ export const views = {
           <dl class="kv">
             <dt>Naam</dt><dd>${esc(user.displayName || '—')}</dd>
             <dt>E-mail</dt><dd>${esc(user.email || '—')}</dd>
-            <dt>UID</dt><dd class="mono selectable" style="font-size: 12px">${esc(user.uid)}</dd>
+            <dt>UID</dt><dd class="mono selectable" style="font-size:var(--fs-sm)">${esc(user.uid)}</dd>
           </dl>
           <div style="display: flex; gap: 8px; flex-wrap: wrap">
             <button class="btn" type="button" data-action="copy-uid">UID kopiëren</button>
@@ -166,19 +166,19 @@ export const views = {
         <section class="section" aria-labelledby="sec-conn">
           <div class="section__label"><span id="sec-conn">03 — Verbinding</span></div>
           <div class="status-line" id="conn-status"><span class="dot"></span><span>Nog niet getest</span></div>
-          <p class="muted" id="conn-help" style="font-size: 12px"></p>
+          <p class="muted" id="conn-help" style="font-size:var(--fs-sm)"></p>
           <div><button class="btn" type="button" data-action="test-conn">Verbinding testen</button></div>
           <div class="status-line" id="api-status" style="margin-top: 8px"><span class="dot"></span><span>Highlightly-Worker: nog niet getest</span></div>
-          <p class="muted" id="api-help" style="font-size: 12px"></p>
+          <p class="muted" id="api-help" style="font-size:var(--fs-sm)"></p>
           <div><button class="btn" type="button" data-action="test-api">API testen</button></div>
-          <p class="muted" style="font-size: 12px">API-calls vandaag (eigen telling): ${calls} van 100.</p>
+          <p class="muted" style="font-size:var(--fs-sm)">API-calls vandaag (eigen telling): ${calls} van 100.</p>
         </section>
 
         <section class="section" aria-labelledby="sec-app">
           <div class="section__label"><span id="sec-app">04 — App</span><span>v${esc(APP_VERSION)}</span></div>
           <div id="install-slot">${ctx.canInstall()
             ? '<button class="btn btn--primary" type="button" data-action="install">App installeren</button>'
-            : `<p class="muted" style="font-size: 12px">${ctx.isStandalone() ? 'Je gebruikt de geïnstalleerde app.' : 'Installeren kan via het browsermenu: “App installeren” of “Toevoegen aan startscherm”.'}</p>`}</div>
+            : `<p class="muted" style="font-size:var(--fs-sm)">${ctx.isStandalone() ? 'Je gebruikt de geïnstalleerde app.' : 'Installeren kan via het browsermenu: “App installeren” of “Toevoegen aan startscherm”.'}</p>`}</div>
         </section>`;
     },
     mount(root, ctx) {

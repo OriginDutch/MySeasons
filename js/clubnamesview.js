@@ -73,7 +73,7 @@ export const clubNamesViews = {
       return `
         ${head('Clubnamen')}
         <section class="section">
-          <p class="muted" style="font-size:13px">${teams.length} clubs uit je wedstrijden${own ? ` · ${own} met een eigen naam` : ''}. Je naam staat overal in de app, ook in meldingen. Highlightly-data blijft ongewijzigd.</p>
+          <p class="muted" style="font-size:var(--fs-md)">${teams.length} clubs uit je wedstrijden${own ? ` · ${own} met een eigen naam` : ''}. Je naam staat overal in de app, ook in meldingen. Highlightly-data blijft ongewijzigd.</p>
           <label class="field"><span class="visually-hidden">Zoeken</span><input type="search" data-cn-search placeholder="Zoek een club" autocomplete="off"></label>
           <div class="list" data-cn-list>${teams.map(row).join('') || '<p class="muted">Nog geen clubs. Synchroniseer eerst een seizoen.</p>'}</div>
         </section>`;

@@ -61,7 +61,7 @@ function todoCard(m) {
   return `
     <section class="todo">
       <div class="todo__line"><span class="todo__dot"></span><strong>${matchTitle(m)} ${esc(scoreText(m).replace(/<[^>]+>/g, ''))} aanvullen</strong></div>
-      <span class="muted" style="font-size:12px">Toeschouwers en je notitie ontbreken nog</span>
+      <span class="muted" style="font-size:var(--fs-sm)">Toeschouwers en je notitie ontbreken nog</span>
       <div><a class="btn btn--primary btn--pill" href="#/wedstrijd/${m.id}">Aanvullen</a></div>
     </section>`;
 }
@@ -210,7 +210,7 @@ function newsBlock(items, teams) {
     return `
       <section class="mag-section" data-news>
         <div class="mag-section__head"><h2>Nieuws</h2><span class="mono muted">via VI</span></div>
-        <p class="muted" style="font-size:13px">${newsUnavailable
+        <p class="muted" style="font-size:var(--fs-md)">${newsUnavailable
           ? 'Nieuws komt zodra de Worker is bijgewerkt met de nieuwe code.'
           : `Nog geen VI-nieuws over ${esc(MAIN_CLUB.name)} of de volgende tegenstander gezien. De app kijkt elk kwartier.`}</p>
         <div><a class="link-btn" href="#/nieuws">Al het nieuws</a></div>
@@ -245,7 +245,7 @@ function seasonStrip(list, league, standings) {
           <span class="strip__opp mono" aria-hidden="true">${home ? '' : '@'}${esc(short)}</span>${score ? `<span class="strip__score mono" aria-hidden="true">${score}</span>` : ''}
           <span class="visually-hidden">${esc(opp ? opp.name : '')}</span></a>`;
       }).join('')}</div>
-      <div class="strip__links"><span class="muted" style="font-size:12px">Tik op een ronde voor de wedstrijd.</span><a class="link-btn" href="#/stats">Stand</a></div>
+      <div class="strip__links"><span class="muted" style="font-size:var(--fs-sm)">Tik op een ronde voor de wedstrijd.</span><a class="link-btn" href="#/stats">Stand</a></div>
     </section>`;
 }
 
@@ -261,8 +261,8 @@ export const magazineViews = {
         const lg0 = d0 && d0.leagueId ? { id: d0.leagueId, name: d0.name } : null;
         if (lg0) {
           return `<div class="mag">${masthead(team, lg0)}${seasonCover(list, lg0, rsssfStandings(rs0, lg0.id), team)}
-            <section class="mag-section"><p class="muted" style="font-size:13px;margin:0">Dit seizoen heeft alleen de RSSSF-basis: eindstand en uitslagen. Schutters, opstellingen en spelersstats komen van Highlightly (Meer → Seizoenen → Ophalen) of 's nachts.</p>
-            <div><a class="link-btn" href="#/stats">Eindstand</a></div><p class="muted" style="font-size:11px">${esc(rs0.credit)}</p></section></div>`;
+            <section class="mag-section"><p class="muted" style="font-size:var(--fs-md);margin:0">Dit seizoen heeft alleen de RSSSF-basis: eindstand en uitslagen. Schutters, opstellingen en spelersstats komen van Highlightly (Meer → Seizoenen → Ophalen) of 's nachts.</p>
+            <div><a class="link-btn" href="#/stats">Eindstand</a></div><p class="muted" style="font-size:var(--fs-xs)">${esc(rs0.credit)}</p></section></div>`;
         }
       }
       if (!list.length) {
@@ -299,7 +299,7 @@ export const magazineViews = {
           <div class="mag-main">
           ${todoCard(last)}
           ${isCurrentSeason() ? cover(next, preview(next, list, league, standings)) : seasonCover(list, league, standings, team)}
-          ${isCurrentSeason() && next && countdown(next.date).state === 'done' ? `<div class="mag-pad"><p class="muted" style="font-size:13px;margin:0 0 8px">${matchTitle(next)} is afgelopen. Haal de uitslag op:</p><button class="btn btn--primary" type="button" data-action="sync-season">${icons.refresh}<span>Uitslag ophalen · ${COST.season} calls</span></button></div>` : ''}
+          ${isCurrentSeason() && next && countdown(next.date).state === 'done' ? `<div class="mag-pad"><p class="muted" style="font-size:var(--fs-md);margin:0 0 8px">${matchTitle(next)} is afgelopen. Haal de uitslag op:</p><button class="btn btn--primary" type="button" data-action="sync-season">${icons.refresh}<span>Uitslag ophalen · ${COST.season} calls</span></button></div>` : ''}
           ${storiesRow(stories)}
           ${lastWeek(last, matchReport(last))}
           </div>
@@ -358,7 +358,7 @@ magazineViews.nieuws = {
     return `${head}
       <section class="section">
         <div class="chips" role="radiogroup">${NEWS_FILTERS.map(([v, l], i) => `<label class="chip"><input type="radio" name="news-f" value="${v}" ${i === 0 ? 'checked' : ''}><span>${esc(l)} <span class="mono">${v === 'club' ? mine.length : all.length}</span></span></label>`).join('')}</div>
-        <p class="muted" style="font-size:12px">Alleen kop en teaser; het artikel lees je op vi.nl. Bewaard wordt alleen nieuws over clubs uit je programma.</p>
+        <p class="muted" style="font-size:var(--fs-sm)">Alleen kop en teaser; het artikel lees je op vi.nl. Bewaard wordt alleen nieuws over clubs uit je programma.</p>
       </section>
       <section class="section">
         <div class="news-list" data-news-list="club">${mine.length ? mine.map((n) => newsItem(n, teams)).join('') : '<p class="muted">Nog niets bewaard.</p>'}</div>

@@ -112,10 +112,10 @@ export const backupViews = {
         return `${head}
           <section class="section">
             <div class="section__label"><span>Terugzetten</span><span>${esc(dayShort(pending.exportedAt))} ${esc(timeOf(pending.exportedAt))}</span></div>
-            <p class="muted" style="font-size:13px">Back-up van MySeasons ${esc(pending.version || '?')}. Terugzetten <strong>voegt samen</strong>: documenten uit de back-up overschrijven die met hetzelfde id, niets wordt verwijderd.</p>
+            <p class="muted" style="font-size:var(--fs-md)">Back-up van MySeasons ${esc(pending.version || '?')}. Terugzetten <strong>voegt samen</strong>: documenten uit de back-up overschrijven die met hetzelfde id, niets wordt verwijderd.</p>
             <div class="list">${cols.map(([k, docs]) => `<label class="dev"><input type="checkbox" name="rc" value="${esc(k)}" ${docsFor(pending, k).length ? 'checked' : ''}>
               <span class="dev__main"><span class="dev__what">${esc(LABEL[k] || k)}</span><span class="dev__vals muted">${docWord(docsFor(pending, k).length)}</span></span></label>`).join('')}</div>
-            <p class="muted" style="font-size:12px" data-rc-total></p>
+            <p class="muted" style="font-size:var(--fs-sm)" data-rc-total></p>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn" type="button" data-bk="cancel">Annuleren</button>
               <button class="btn btn--primary" type="button" data-bk="restore">Terugzetten</button>
@@ -129,7 +129,7 @@ export const backupViews = {
       return `${head}
         <section class="section">
           <div class="section__label"><span>Automatisch</span><span>${cloud ? `${cloud.items.length} van ${cloud.keep}` : ''}</span></div>
-          <p class="muted" style="font-size:13px">Eens per week maakt de app bij het openen zelf een back-up en bewaart die (gecomprimeerd) bij je Worker. De laatste 4 blijven staan. Zonder de ruwe Highlightly-data.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Eens per week maakt de app bij het openen zelf een back-up en bewaart die (gecomprimeerd) bij je Worker. De laatste 4 blijven staan. Zonder de ruwe Highlightly-data.</p>
           <label class="field field--check"><input type="checkbox" data-auto ${auto ? 'checked' : ''}> <span>Wekelijks automatisch</span></label>
           ${cloudErr ? `<p class="warn-line">${esc(cloudErr.status === 404 ? 'De Worker kent back-ups nog niet: de nieuwe versie is nog niet gedeployd.' : (cloudErr.message || 'Worker niet bereikbaar'))}</p>` : ''}
           ${cloud && cloud.items.length ? `<div class="list">${cloud.items.map((it) => `
@@ -137,22 +137,22 @@ export const backupViews = {
               <span class="list-row__main"><span class="list-row__title">${esc(dayShort(it.at))} ${esc(timeOf(it.at))}${it.why === 'manual' ? ' <span class="muted">· handmatig</span>' : ''}</span>
                 <span class="list-row__sub">${it.docs ? `${it.docs} documenten · ` : ''}${esc(kb(it.size || 0))}${it.version ? ` · v${esc(it.version)}` : ''}</span></span>
               <span class="bk-row__btns"><button class="btn btn--sm" type="button" data-cloud-get="${esc(it.key)}">Downloaden</button><button class="btn btn--sm" type="button" data-cloud-restore="${esc(it.key)}">Terugzetten</button></span>
-            </div>`).join('')}</div>` : cloud ? '<p class="muted" style="font-size:13px">Nog geen automatische back-ups.</p>' : ''}
+            </div>`).join('')}</div>` : cloud ? '<p class="muted" style="font-size:var(--fs-md)">Nog geen automatische back-ups.</p>' : ''}
           <div><button class="btn" type="button" data-bk="cloud" ${cloudErr ? 'disabled' : ''}>Nu een back-up opslaan</button></div>
         </section>
         <section class="section">
           <div class="section__label"><span>Exporteren</span><span>${last ? `laatst ${esc(dayShort(last.at))}` : 'nog nooit'}</span></div>
-          <p class="muted" style="font-size:13px">Alles uit je database als één bestand: wedstrijden, je aanvullingen en correcties, spelers, transfers, trainers, seizoenen en standen. Bewaar het op je telefoon, PC of cloud.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Alles uit je database als één bestand: wedstrijden, je aanvullingen en correcties, spelers, transfers, trainers, seizoenen en standen. Bewaar het op je telefoon, PC of cloud.</p>
           <label class="field field--check"><input type="checkbox" data-raw> <span>Ook de ruwe Highlightly-data (groter bestand; alleen nodig om later alles opnieuw te verwerken)</span></label>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn--primary" type="button" data-bk="export">Back-up downloaden</button>
             ${navigator.canShare ? '<button class="btn" type="button" data-bk="share">Delen…</button>' : ''}
           </div>
-          ${last ? `<p class="muted" style="font-size:12px">Vorige: ${esc(dayShort(last.at))} ${esc(timeOf(last.at))} · ${last.docs} documenten · ${esc(last.size)}</p>` : ''}
+          ${last ? `<p class="muted" style="font-size:var(--fs-sm)">Vorige: ${esc(dayShort(last.at))} ${esc(timeOf(last.at))} · ${last.docs} documenten · ${esc(last.size)}</p>` : ''}
         </section>
         <section class="section">
           <div class="section__label"><span>Terugzetten</span></div>
-          <p class="muted" style="font-size:13px">Kies een eerder gemaakte back-up. Je ziet eerst wat erin zit voordat er iets wordt geschreven.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Kies een eerder gemaakte back-up. Je ziet eerst wat erin zit voordat er iets wordt geschreven.</p>
           <label class="btn" style="align-self:flex-start;cursor:pointer">Back-up kiezen<input type="file" accept=".json,application/json" data-restore-file hidden></label>
         </section>`;
     },
