@@ -654,24 +654,33 @@ export const playerViews = {
     navKey: 'selectie',
     async render() {
       const { profiles } = await correctedList();
+      const today = new Date().toISOString().slice(0, 10);
+      const LO = { Goalkeeper: 1, Defender: 2, Midfielder: 3, Forward: 4 };
       const rows = Object.entries(profiles || {})
         .filter(([, pr]) => (pr.legacyId || pr.transfers) && !(pr.linkedTo && profiles[String(pr.linkedTo)]))
         .map(([id, pr]) => {
           const { spells: sp } = spells(pr);
-          const last = sp.length ? (sp[sp.length - 1].to || '9999') : '';
-          return { id, pr, last, name: pr.fullName || pr.legacyName || '?' };
-        })
-        .sort((a, b) => b.last.localeCompare(a.last) || a.name.localeCompare(b.name));
-      return `${head({ kicker: 'Selectie / Archief', title: 'Archief', back: 'selectie' })}
-        <section class="section">
-          <p class="muted" style="font-size:13px">Iedereen uit je archief, huidige spelers bovenaan, daarna wie het laatst vertrok.</p>
-          <div><button class="btn btn--sm" type="button" data-add-player>+ Speler toevoegen</button></div>
-          <div class="list">${rows.map((r) => `<a class="list-row player-row" href="#/speler/${encodeURIComponent(r.id)}">
+          const to = sp.length ? sp[sp.length - 1].to : null;
+          const group = !sp.length ? 'unknown' : !to || to >= today ? 'now' : String(seasonOfDate(to));
+          return { id, pr, group, name: pr.fullName || pr.legacyName || '?' };
+        });
+      // Groepen: nu bij de club, dan per seizoen van vertrek (nieuwste eerst), onbekend als laatste.
+      const keys = [...new Set(rows.map((r) => r.group))].sort((a, b) => (a === 'now' ? -1 : b === 'now' ? 1 : a === 'unknown' ? 1 : b === 'unknown' ? -1 : Number(b) - Number(a)));
+      const label = (k) => (k === 'now' ? 'Nu bij de club' : k === 'unknown' ? 'Geen periode bekend' : `Vertrokken in ${k}–${String(Number(k) + 1).slice(2)}`);
+      const sortIn = (a, b) => (LO[a.pr.position] || 9) - (LO[b.pr.position] || 9) || a.name.localeCompare(b.name, 'nl');
+      const row = (r) => `<a class="list-row player-row" href="#/speler/${encodeURIComponent(r.id)}">
             ${avatar({ name: r.name, photo: r.pr.photoUrl, number: latestShirt(r.pr) })}
             <span class="list-row__main"><span class="list-row__title">${esc(r.name)}${r.pr.nationality ? `<span class="row-flags">${nationalities(r.pr.nationality).map((n) => flag(n, 12)).join('')}</span>` : ''}</span>
               <span class="list-row__sub">${esc(LINE_SHORT[r.pr.position] || '—')}${periodText(r.pr) ? ' · ' + esc(periodText(r.pr)) : ''}${String(r.id).startsWith('legacy-') ? ' · niet gekoppeld' : ''}</span></span>
-            <span></span></a>`).join('')}</div>
-        </section>`;
+            <span></span></a>`;
+      return `${head({ kicker: 'Selectie / Archief', title: 'Archief', back: 'selectie' })}
+        <section class="section">
+          <p class="muted" style="font-size:13px">${rows.length} spelers: wie nu bij de club is, daarna per seizoen waarin ze vertrokken. Binnen een groep op linie.</p>
+          <div><button class="btn btn--sm" type="button" data-add-player>+ Speler toevoegen</button></div>
+        </section>
+        ${keys.map((k) => { const g = rows.filter((r) => r.group === k).sort(sortIn); return `<section class="section">
+          <div class="section__label"><span>${esc(label(k))}</span><span>${g.length}</span></div>
+          <div class="list">${g.map(row).join('')}</div></section>`; }).join('')}`;
     },
     mount(root, ctx) { mountTransfers(root, ctx); },
   },
