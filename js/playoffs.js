@@ -20,7 +20,7 @@ export const playoffInfo = (key) => PLAYOFFS.find((p) => p.key === key) || null;
 const ED = 75672; const KKD = 76523;
 const TEAM = MAIN_CLUB.id;
 
-const roundNl = (l) => String(l || '').replace(/^.*? - /, '')
+const roundNl = (l) => String(l || '').replace(/^.*? - /, '').replace(/^(Relegation|Promotion|Play-?offs?)( Round)?$/i, 'Ronde')
   .replace(/Round (\d+)|(\d+)(st|nd|rd|th) Round/i, (_, a, b) => `Ronde ${a || b}`)
   .replace(/Semi-?finals?/i, 'Halve finale').replace(/Quarter-?finals?/i, 'Kwartfinale').replace(/\bFinals?\b/i, 'Finale')
   .replace(/\s*·\s*(First|Second) Legs?/i, '').trim();
@@ -102,9 +102,18 @@ export function rounds(matches) {
   // Namen: een vervolgdeel vlak voor de finale met één duel is de halve finale.
   out.forEach((r, i) => {
     const next = out[i + 1];
-    if (r.part > 1) r.title = r.pairs.size === 1 && next && /Finale/.test(next.round) ? 'Halve finale' : `${r.round} · deel ${r.part}`;
+    if (r.round === 'Ronde') {
+      // Highlightly geeft soms alle rondes dezelfde naam ("Relegation Round"): nummeren, de laatste met één duel is de finale.
+      const isFinal = (x, nx) => x && !nx && x.pairs.size === 1 && x.part > 1;
+      r.title = isFinal(r, next) ? 'Finale' : next && isFinal(next, out[i + 2]) && r.pairs.size === 1 && r.part > 1 ? 'Halve finale' : `Ronde ${r.part}`;
+    } else if (r.part > 1) r.title = r.pairs.size === 1 && next && /Finale/.test(next.round) ? 'Halve finale' : `${r.round} · deel ${r.part}`;
     else r.title = r.round;
     r.ties = [...r.pairs.values()].map(tieOf);
+    // Volgorde binnen de ronde: alle heenduels, dan alle terugduels (elk op datum).
+    const legIdx = (m) => { const t = [...r.pairs.values()].find((ls) => ls.includes(m)); return t && t.length > 1 ? (m.leg === 'terug' ? 1 : m.leg === 'heen' ? 0 : t.indexOf(m)) : 0; };
+    r.matches.forEach((m) => { m._leg = legIdx(m); });
+    r.matches.sort((a, b) => a._leg - b._leg || String(a.date).localeCompare(String(b.date)));
+    r.twoLegs = r.matches.some((m) => m._leg === 1);
   });
   return out;
 }
@@ -164,15 +173,16 @@ export function playoffsHtml(info, matches, { projected = null, seed = () => nul
     const final = last && /Finale/.test(r.title);
     return `<section class="po-rd">
       <h2 class="po-rd__t">${esc(r.title)}</h2>${sub ? `<p class="po-rd__sub">${esc(sub)}</p>` : ''}
-      ${r.matches.map((m) => {
+      ${r.matches.map((m, mi) => {
         const t = r.ties.find((x) => x.legs.includes(m));
+        const split = r.twoLegs && (mi === 0 ? '<div class="po-legs mono">Heen</div>' : m._leg === 1 && r.matches[mi - 1]._leg === 0 ? '<div class="po-legs po-legs--back mono">Terug</div>' : '');
         const leg = t && t.legs.length > 1 ? (m.leg || (t.legs[0] === m ? 'heen' : 'terug')) : '';
         const mine = isMe(m.home) || isMe(m.away);
         const score = m.hs != null ? `${m.hs}–${m.as}${m.pen ? ` <span class="muted">(${m.pen.home}–${m.pen.away} pen)</span>` : m.note && !/pen/.test(m.note) ? ` <span class="muted">(${esc(m.note)})</span>` : ''}` : `<span class="muted">${esc(m.date ? timeOf(m.date) : '')}</span>`;
         const cells = `<span class="po-m__d mono">${esc(m.date ? dayShort(m.date) : '')}</span>
           <span class="po-m__teams">${team(m.home, { link: !m.matchId })}<span class="po-m__dash">–</span>${team(m.away, { link: !m.matchId })}</span>
           <span class="po-m__s mono">${score}</span><span class="po-m__l mono">${esc(leg)}</span>`;
-        return m.matchId ? `<a class="po-m ${mine ? 'is-me' : ''}" href="#/wedstrijd/${encodeURIComponent(m.matchId)}">${cells}</a>` : `<div class="po-m ${mine ? 'is-me' : ''}">${cells}</div>`;
+        return split + (m.matchId ? `<a class="po-m ${mine ? 'is-me' : ''}" href="#/wedstrijd/${encodeURIComponent(m.matchId)}">${cells}</a>` : `<div class="po-m ${mine ? 'is-me' : ''}">${cells}</div>`);
       }).join('')}
       ${r.ties.some((t) => t.winner) ? `<div class="po-door"><span class="po-door__k mono">${final ? 'Winnaar' : 'Door'}</span>${r.ties.filter((t) => t.winner).map((t) => {
         const extra = [t.agg, t.pen ? `${t.pen} pen` : null].filter(Boolean).join(', ');

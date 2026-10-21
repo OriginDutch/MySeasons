@@ -924,3 +924,5 @@ a.po-team:hover span { text-decoration: underline; }
   .po-m__teams { flex-direction: column; align-items: flex-start; }
   .po-m__dash { display: none; }
 }
+.po-legs { font-size: var(--fs-xs); color: var(--muted); padding: 8px 0 2px; }
+.po-legs--back { margin-top: 6px; border-top: 2px solid color-mix(in srgb, var(--ink) 45%, transparent); padding-top: 10px; }
