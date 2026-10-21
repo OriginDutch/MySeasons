@@ -11,8 +11,17 @@ function add(line, gf, ga) {
   if (gf > ga) line.w++; else if (gf < ga) line.l++; else line.d++;
 }
 
+// Play-offs en nacompetitie staan bij Highlightly onder dezelfde competitie. Die tellen niet mee in de stand
+// (anders "speelt" een club 44 KKD-duels: 38 + 6 play-offduels).
+const PLAYOFF = /play-?off|promotion|relegation|nacompetitie|knock|semi|quarter|final|degradatie|promotie/i;
+export function regularOnly(list) {
+  const all = list || [];
+  if (all.some((m) => /regular season/i.test(m.round || ''))) return all.filter((m) => /regular season/i.test(m.round || ''));
+  return all.filter((m) => !PLAYOFF.test(m.round || ''));
+}
+
 export function liveStandings(hl, matches) {
-  const finished = matches.filter((m) => m.status === 'finished' && m.score && m.score.home != null);
+  const finished = regularOnly(matches).filter((m) => m.status === 'finished' && m.score && m.score.home != null);
   if (!finished.length) return null;
   const base = hl && hl.groups && hl.groups[0] ? hl.groups[0].rows : [];
   const rows = new Map();
@@ -43,7 +52,8 @@ export function liveStandings(hl, matches) {
 
 /** De meest actuele stand plus alle competitiewedstrijden (voor periodes en onderling resultaat). */
 export async function standingsAndMatches(leagueId, season) {
-  const [hl, lm] = await Promise.all([getStandings(leagueId, season), getLeagueMatches(leagueId, season).catch(() => [])]);
+  const [hl, all] = await Promise.all([getStandings(leagueId, season), getLeagueMatches(leagueId, season).catch(() => [])]);
+  const lm = regularOnly(all);
   if (!lm.length) return { standings: hl, matches: lm };
   const live = liveStandings(hl, lm);
   if (!live) return { standings: hl, matches: lm };
