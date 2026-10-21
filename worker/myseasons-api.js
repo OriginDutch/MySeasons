@@ -218,6 +218,12 @@ const NS_STATE = 'ns:state';
 const NS_INBOX = 'ns:inbox:';
 const MAX_CALLS = 40;
 const RESERVE = 15; // in de gratis stand blijven er altijd zoveel calls over voor de app zelf
+const RESERVE_LATE = 3; // laatste half uur voor de reset (00:00 UTC): de 15 zouden anders ongebruikt verlopen
+/** Reserve op dit moment: 15, behalve 23:30–00:00 UTC (dan 3). */
+export function reserveAt(time = Date.now()) {
+  const d = new Date(time);
+  return d.getUTCHours() === 23 && d.getUTCMinutes() >= 30 ? RESERVE_LATE : RESERVE;
+}
 const MODES = ['off', 'free', 'turbo'];
 
 const isId = (v) => Number.isInteger(Number(v)) && Number(v) > 0;
@@ -254,13 +260,14 @@ async function nsRun(env, why) {
   const [queue, state] = await Promise.all([nsGet(env, NS_QUEUE, []), nsGet(env, NS_STATE, {})]);
   const mode = state.mode || 'free';
   const results = [];
+  const reserve = reserveAt();
   let calls = 0; let stop = null; let remaining = state.remaining ?? null;
   while (queue.length && !stop) {
     const item = queue[0];
     const paths = pathsFor(item);
     if (!paths) { queue.shift(); continue; }
     if (calls + paths.length > MAX_CALLS) break;
-    if (mode !== 'turbo' && remaining != null && remaining - paths.length < RESERVE) { stop = 'reserve'; break; }
+    if (mode !== 'turbo' && remaining != null && remaining - paths.length < reserve) { stop = 'reserve'; break; }
     const bodies = []; let status = 200;
     for (const p of paths) {
       const res = await fetch(`${HIGHLIGHTLY_BASE}${p}`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });
@@ -283,7 +290,7 @@ async function nsRun(env, why) {
   }
   const at = new Date().toISOString();
   if (results.length) await env.MS_KV.put(`${NS_INBOX}${Date.now()}`, JSON.stringify({ at, results }));
-  const log = [{ at, why, calls, items: results.length, stop, remaining }, ...(state.log || [])].slice(0, 30);
+  const log = [{ at, why, calls, items: results.length, stop, remaining, reserve }, ...(state.log || [])].slice(0, 30);
   await Promise.all([
     env.MS_KV.put(NS_QUEUE, JSON.stringify(queue)),
     env.MS_KV.put(NS_STATE, JSON.stringify({ ...state, mode, lastRun: at, remaining, exhaustedAt: stop === 'quota' ? at : state.exhaustedAt || null, log })),

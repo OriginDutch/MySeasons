@@ -9,7 +9,7 @@ import { dayShort, timeOf } from './season.js';
 
 const MODE_LABEL = {
   off: ['Uit', 'De wekker doet niets.'],
-  free: ['Gratis', "Elke avond vanaf 23:00 (in de winter 22:00) elke 10 minuten een ronde van max. 40 calls, tot er nog 15 over zijn."],
+  free: ['Gratis', "Elke avond vanaf 23:00 (in de winter 22:00) elke 10 minuten een ronde van max. 40 calls, tot er nog 15 over zijn. In het laatste half uur voor de reset (01:30, in de winter 00:30) gaat hij door tot er 3 over zijn: die zouden anders ongebruikt verlopen."],
   turbo: ['Turbo', 'Elke minuut een ronde van 40 calls, zonder reserve. Alleen voor een betaald Highlightly-abonnement.'],
 };
 const TYPE_LABEL = { full: 'Cambuur-details', events: 'schutters andere duels', league: 'competitielijsten', program: 'programma', standings: 'standen' };
@@ -57,7 +57,7 @@ export const nightViews = {
         </section>
         <section class="section">
           <div class="section__label"><span>Logboek</span><span>laatste rondes</span></div>
-          ${log.length ? `<div class="list">${log.slice(0, 12).map((l) => `<div class="kv-line"><span>${esc(when(l.at))} <span class="muted">· ${esc(l.why)}</span></span><span class="mono">${l.calls} calls · ${l.items} items${l.stop === 'reserve' ? ' · reserve' : l.stop === 'quota' ? ' · quotum op' : ''}</span></div>`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Nog geen rondes gedraaid.</p>'}
+          ${log.length ? `<div class="list">${log.slice(0, 12).map((l) => `<div class="kv-line"><span>${esc(when(l.at))} <span class="muted">· ${esc(l.why)}</span></span><span class="mono">${l.calls} calls · ${l.items} items${l.stop === 'reserve' ? ` · reserve${l.reserve ? ` ${l.reserve}` : ''}` : l.stop === 'quota' ? ' · quotum op' : ''}</span></div>`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Nog geen rondes gedraaid.</p>'}
         </section>`;
     },
     mount(root, ctx) {
