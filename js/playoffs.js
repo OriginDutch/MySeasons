@@ -7,7 +7,9 @@ import { getLeagueMatches } from './store.js';
 import { MAIN_CLUB } from './config.js';
 import { tokens } from './rsssf.js';
 import { regularOnly } from './livetable.js';
-import { dayShort } from './season.js';
+import { dayShort, timeOf } from './season.js';
+import { knownTeams, matchTeam, clubCrest } from './clubpick.js';
+import { clubName } from './clubnames.js';
 
 export const PLAYOFFS = [
   { key: 'nacompetitie', name: 'Nacompetitie', sub: 'promotie/degradatie' },
@@ -55,10 +57,12 @@ export async function playoffMatches(season, { rs = null, own = [] } = {}) {
   // 2. RSSSF (oude seizoenen), alleen als Highlightly die soort niet heeft
   if (rs && rs.divisions) {
     const all = rs.divisions.flatMap((d) => d.matches || []);
+    const teams = await knownTeams().catch(() => []);
+    const resolve = (name) => { const clean = String(name).replace(/\s*\(.*?\)\s*/g, ' ').trim(); const t = matchTeam(teams, clean); return t ? { id: t.id, name: t.name, logo: t.logo || null } : { id: null, name: clean, logo: null }; };
     [['nacompetitie', 'nacompetitie'], ['europa', 'europe-playoff']].forEach(([k, stage]) => {
       if (out[k].length) return;
       out[k] = all.filter((m) => m.stage === stage).map((m) => {
-        const home = { id: null, name: String(m.homeFull || m.home) }; const away = { id: null, name: String(m.awayFull || m.away) };
+        const home = resolve(m.homeFull || m.home); const away = resolve(m.awayFull || m.away);
         const mine = own.find((o) => o.date && m.date && Math.abs(Date.parse(o.date) - Date.parse(m.date)) < 2 * 864e5
           && [o.homeTeam, o.awayTeam].some((t) => t && t.id !== TEAM && tokens(t.name).some((w) => w.length > 3 && tokens(home.name + ' ' + away.name).includes(w))));
         return { round: roundNl(m.label) || 'Play-offs', leg: legOf(m.label), date: m.date, home, away, hs: m.hs, as: m.as, pen: m.penalties || null, note: m.note || null, status: m.status === 'played' ? 'finished' : m.status, matchId: mine ? mine.id : null };
@@ -73,55 +77,109 @@ export const dropPlayoffCache = () => cache.clear();
 const isMe = (t) => t && (t.id === TEAM || /cambuur/i.test(t.name || ''));
 const key = (t) => (t.id != null ? `id:${t.id}` : `n:${tokens(t.name).join(' ')}`);
 
-/** Duels per ronde: heen/terug samen, met totaal en winnaar. */
-export function ties(matches) {
+/**
+ * Rondes in gespeelde volgorde. Een ronde wordt gesplitst zodra een club binnen dezelfde ronde
+ * een tweede tegenstander krijgt (RSSSF noemt de halve finale soms ook "Ronde 2").
+ * Per ronde: wedstrijden op datum, duels (heen/terug) met totaal en winnaar.
+ */
+export function rounds(matches) {
   const byRound = new Map();
   matches.forEach((m) => { if (!byRound.has(m.round)) byRound.set(m.round, []); byRound.get(m.round).push(m); });
-  return [...byRound.entries()].sort((a, b) => ROUND_ORDER(a[0]) - ROUND_ORDER(b[0])).map(([round, ms]) => {
-    const pairs = new Map();
-    ms.slice().sort((a, b) => String(a.date).localeCompare(String(b.date))).forEach((m) => {
-      const k = [key(m.home), key(m.away)].sort().join('|');
-      if (!pairs.has(k)) pairs.set(k, []); pairs.get(k).push(m);
+  const out = [];
+  [...byRound.entries()].sort((a, b) => ROUND_ORDER(a[0]) - ROUND_ORDER(b[0]) || String(a[1][0].date).localeCompare(String(b[1][0].date))).forEach(([round, ms]) => {
+    const sorted = ms.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    let cur = null;
+    sorted.forEach((m) => {
+      const pk = [key(m.home), key(m.away)].sort().join('|');
+      const clash = cur && !cur.pairs.has(pk) && (cur.teams.has(key(m.home)) || cur.teams.has(key(m.away)));
+      if (!cur || clash) { cur = { round, matches: [], pairs: new Map(), teams: new Set(), part: cur ? cur.part + 1 : 1 }; out.push(cur); }
+      cur.matches.push(m);
+      if (!cur.pairs.has(pk)) cur.pairs.set(pk, []);
+      cur.pairs.get(pk).push(m);
+      cur.teams.add(key(m.home)); cur.teams.add(key(m.away));
     });
-    return { round, ties: [...pairs.values()].map((legs) => {
-      const a = legs[0].home; const b = legs[0].away;
-      let ga = 0; let gb = 0; let played = true;
-      legs.forEach((m) => {
-        if (m.hs == null) { played = false; return; }
-        const aHome = key(m.home) === key(a);
-        ga += aHome ? m.hs : m.as; gb += aHome ? m.as : m.hs;
-      });
-      let winner = null;
-      if (played) {
-        if (ga !== gb) winner = ga > gb ? a : b;
-        else {
-          const last = legs[legs.length - 1];
-          if (last.pen) { const aHome = key(last.home) === key(a); const pa = aHome ? last.pen.home : last.pen.away; const pb = aHome ? last.pen.away : last.pen.home; winner = pa > pb ? a : pb > pa ? b : null; }
-        }
-      }
-      return { a, b, legs, ga, gb, played, winner };
-    }) };
   });
+  // Namen: een vervolgdeel vlak voor de finale met één duel is de halve finale.
+  out.forEach((r, i) => {
+    const next = out[i + 1];
+    if (r.part > 1) r.title = r.pairs.size === 1 && next && /Finale/.test(next.round) ? 'Halve finale' : `${r.round} · deel ${r.part}`;
+    else r.title = r.round;
+    r.ties = [...r.pairs.values()].map(tieOf);
+  });
+  return out;
 }
 
-const nm = (t) => `<span class="${isMe(t) ? 'is-me' : ''}">${esc(t.name)}</span>`;
+function tieOf(legs) {
+  const a = legs[0].home; const b = legs[0].away;
+  let ga = 0; let gb = 0; let played = true;
+  legs.forEach((m) => {
+    if (m.hs == null) { played = false; return; }
+    const aHome = key(m.home) === key(a);
+    ga += aHome ? m.hs : m.as; gb += aHome ? m.as : m.hs;
+  });
+  let winner = null; let pen = null;
+  if (played) {
+    if (ga !== gb) winner = ga > gb ? a : b;
+    else {
+      const last = legs[legs.length - 1];
+      if (last.pen) {
+        const aHome = key(last.home) === key(a); const pa = aHome ? last.pen.home : last.pen.away; const pb = aHome ? last.pen.away : last.pen.home;
+        winner = pa > pb ? a : pb > pa ? b : null; pen = winner === a ? `${pa}–${pb}` : `${pb}–${pa}`;
+      }
+    }
+  }
+  const wg = winner === a ? `${ga}–${gb}` : `${gb}–${ga}`;
+  return { a, b, legs, played, winner, agg: legs.length > 1 ? wg : null, pen };
+}
 
-/** De pagina-inhoud. projected: verwachte bracket (huidig seizoen, nog niets gespeeld). */
-export function playoffsHtml(info, matches, { projected = null } = {}) {
+/** Oude naam, nog gebruikt in tests/elders. */
+export const ties = (matches) => rounds(matches).map((r) => ({ round: r.title, ties: r.ties }));
+
+/**
+ * De pagina-inhoud.
+ * ctx.seed(team) → { pos, short, leagueId } of null (eindpositie in de competitie)
+ * ctx.kind: 'nacompetitie' | 'europa'
+ */
+export function playoffsHtml(info, matches, { projected = null, seed = () => null } = {}) {
   if (!matches.length) {
     return projected || `<section class="section"><p class="muted">Geen ${esc(info.name.toLowerCase())} gevonden voor dit seizoen.</p></section>`;
   }
-  return ties(matches).map((r) => `
-    <section class="section po-round">
-      <div class="section__label"><span>${esc(r.round)}</span><span>${r.ties.length} ${r.ties.length === 1 ? 'duel' : 'duels'}</span></div>
-      <div class="list">${r.ties.map((t) => `<div class="po-tie ${isMe(t.a) || isMe(t.b) ? 'is-me' : ''}">
-        ${t.legs.map((m, i) => {
-          const body = `<span class="po-leg__k mono">${esc(m.leg || (t.legs.length > 1 ? (i === 0 ? 'heen' : 'terug') : ''))}</span>
-            <span class="po-leg__m">${nm(m.home)} – ${nm(m.away)}</span>
-            <span class="po-leg__s mono">${m.hs != null ? `${m.hs}–${m.as}` : esc(m.date ? dayShort(m.date) : '')}${m.pen ? ` <span class="muted">(${m.pen.home}–${m.pen.away} pen)</span>` : m.note ? ` <span class="muted">(${esc(m.note)})</span>` : ''}</span>`;
-          return m.matchId ? `<a class="po-leg" href="#/wedstrijd/${encodeURIComponent(m.matchId)}">${body}</a>` : `<div class="po-leg">${body}</div>`;
-        }).join('')}
-        ${t.played && t.legs.length > 1 ? `<div class="po-sum muted">Totaal ${t.ga}–${t.gb}${t.winner ? ` · <strong>${esc(t.winner.name)}</strong> door` : ''}</div>` : t.played && t.winner ? `<div class="po-sum muted"><strong>${esc(t.winner.name)}</strong> wint</div>` : ''}
-      </div>`).join('')}</div>
-    </section>`).join('');
+  const rs = rounds(matches);
+  const seen = new Set();
+  const team = (t, { link = true } = {}) => {
+    const s = seed(t);
+    const nameHtml = `<span class="${isMe(t) ? 'po-me' : ''}">${esc(clubName(t))}</span>`;
+    const inner = `${clubCrest(t, 18)}${nameHtml}${s ? `<small class="po-seed mono">${s.pos}e ${esc(s.short)}</small>` : ''}`;
+    return link && t.id != null && s ? `<a class="po-team" href="#/club/${encodeURIComponent(t.id)}/${s.leagueId}">${inner}</a>` : `<span class="po-team">${inner}</span>`;
+  };
+  return rs.map((r, ri) => {
+    // Wie stroomt deze ronde in?
+    const entrants = [];
+    r.ties.forEach((t) => [t.a, t.b].forEach((x) => { if (!seen.has(key(x))) entrants.push(x); }));
+    r.ties.forEach((t) => [t.a, t.b].forEach((x) => seen.add(key(x))));
+    const ent = entrants.map(seed).filter(Boolean);
+    const byLeague = new Map(); ent.forEach((e) => { if (!byLeague.has(e.short)) byLeague.set(e.short, []); byLeague.get(e.short).push(e.pos); });
+    const sub = ri === 0 || ent.length ? (ent.length ? `${ri === 0 ? '' : 'Nieuw: '}${[...byLeague.entries()].map(([lg, ps]) => `nr. ${ps.sort((x, y) => x - y).join(', ').replace(/, (\d+)$/, ' en $1')} van de ${lg}`).join(' · ')}` : '') : 'Winnaars van de vorige ronde';
+    const last = ri === rs.length - 1;
+    const final = last && /Finale/.test(r.title);
+    return `<section class="po-rd">
+      <h2 class="po-rd__t">${esc(r.title)}</h2>${sub ? `<p class="po-rd__sub">${esc(sub)}</p>` : ''}
+      ${r.matches.map((m) => {
+        const t = r.ties.find((x) => x.legs.includes(m));
+        const leg = t && t.legs.length > 1 ? (m.leg || (t.legs[0] === m ? 'heen' : 'terug')) : '';
+        const mine = isMe(m.home) || isMe(m.away);
+        const score = m.hs != null ? `${m.hs}–${m.as}${m.pen ? ` <span class="muted">(${m.pen.home}–${m.pen.away} pen)</span>` : m.note && !/pen/.test(m.note) ? ` <span class="muted">(${esc(m.note)})</span>` : ''}` : `<span class="muted">${esc(m.date ? timeOf(m.date) : '')}</span>`;
+        const cells = `<span class="po-m__d mono">${esc(m.date ? dayShort(m.date) : '')}</span>
+          <span class="po-m__teams">${team(m.home, { link: !m.matchId })}<span class="po-m__dash">–</span>${team(m.away, { link: !m.matchId })}</span>
+          <span class="po-m__s mono">${score}</span><span class="po-m__l mono">${esc(leg)}</span>`;
+        return m.matchId ? `<a class="po-m ${mine ? 'is-me' : ''}" href="#/wedstrijd/${encodeURIComponent(m.matchId)}">${cells}</a>` : `<div class="po-m ${mine ? 'is-me' : ''}">${cells}</div>`;
+      }).join('')}
+      ${r.ties.some((t) => t.winner) ? `<div class="po-door"><span class="po-door__k mono">${final ? 'Winnaar' : 'Door'}</span>${r.ties.filter((t) => t.winner).map((t) => {
+        const extra = [t.agg, t.pen ? `${t.pen} pen` : null].filter(Boolean).join(', ');
+        let fate = '';
+        if (final && info.key === 'nacompetitie') { const s = seed(t.winner); fate = s ? (s.leagueId === 75672 ? 'blijft in de Eredivisie' : 'promoveert') : ''; }
+        return `<span class="po-door__w">${clubCrest(t.winner, 16)}<b class="${isMe(t.winner) ? 'po-me' : ''}">${esc(clubName(t.winner))}</b>${extra || fate ? ` <span class="muted">(${esc([extra, fate].filter(Boolean).join(' · '))})</span>` : ''}</span>`;
+      }).join('')}</div>` : ''}
+    </section>`;
+  }).join('');
 }

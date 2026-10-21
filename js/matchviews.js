@@ -274,6 +274,14 @@ function bracketBlock(rules, rows, zones, rs) {
 
 // ---------- Na de competitie: eigen pagina ----------
 async function playoffsPage(info, matches, { listHtml, kicker, rs }) {
+  // Eindposities van Eredivisie en KKD, voor "5e KKD" naast de clubnaam.
+  const seeds = [];
+  for (const l of LEAGUES) {
+    const st = (await bestStandings(l.id, getSeason()).catch(() => null)) || rsssfStandings(rs, l.id);
+    const g = st && st.groups && st.groups[0];
+    if (g) rowsFor(g, 'total').forEach((r) => seeds.push({ id: r.team.id, name: r.team.name, pos: r.pos, short: l.short, leagueId: l.id }));
+  }
+  const seed = (t) => seeds.find((s) => (t.id != null && s.id === t.id)) || seeds.find((s) => tokens(s.name).join(' ') === tokens(t.name).join(' ')) || null;
   let projected = null;
   if (!matches.length && isCurrentSeason() && info.key === 'nacompetitie') {
     const rules = rulesFor(76523, getSeason());
@@ -289,7 +297,7 @@ async function playoffsPage(info, matches, { listHtml, kicker, rs }) {
       <button class="lg-pick" type="button" data-league-pick aria-label="Andere competitie kiezen"><h1 class="page-head__title">${esc(info.name)}</h1><span class="lg-chev" aria-hidden="true">▾</span></button></div></header>
     <div class="stats-grid"><div class="stats-main" data-stats-main>
       <p class="muted" style="font-size:var(--fs-sm);margin:0 0 4px">${esc(info.sub[0].toUpperCase() + info.sub.slice(1))}${source ? ` · ${esc(source)}` : ''}. Cambuur-duels openen de wedstrijdpagina.</p>
-      ${playoffsHtml(info, matches, { projected })}
+      ${playoffsHtml(info, matches, { projected, seed })}
     </div><aside class="stats-side" data-stats-side>
       <section class="section lg-side desk-only-block" data-lg-side><div class="section__label"><span>Competities</span><span>${esc(seasonLabel())}</span></div><div class="lg-side__scroll">${listHtml}</div></section>
     </aside></div>`;
