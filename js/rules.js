@@ -291,7 +291,7 @@ export function zonesFor(rules, rows, { matches = [], final = false, cup = null 
         const id = String(p.holder.id);
         if (upIds.has(id)) return; // art. 9: plek naar de stand
         if (rules.playoff.excludeLast && last && String(last.team.id) === id) return; // art. 7
-        seats.push({ id, tag: p.key });
+        seats.push({ id, tag: p.key, via: p.via });
       });
       const taken = new Set(seats.map((s) => s.id));
       for (const r of firstTeams) {
@@ -300,12 +300,15 @@ export function zonesFor(rules, rows, { matches = [], final = false, cup = null 
         if (upIds.has(id) || taken.has(id)) continue;
         seats.push({ id, tag: null }); taken.add(id);
       }
-      seats.forEach((s) => { if (!map.has(s.id)) map.set(s.id, { kind: rules.playoff.kind, label: rules.playoff.label, tag: s.tag }); });
+      seats.forEach((s) => { if (!map.has(s.id)) map.set(s.id, { kind: rules.playoff.kind, label: rules.playoff.label, tag: s.tag, via: s.via }); });
       legend.push({ kind: rules.playoff.kind, label: rules.playoff.label });
     }
   }
   rows.forEach((r) => { if (rules.eligible === 'firstTeams' && isJong(r.team) && !map.has(String(r.team.id))) map.set(String(r.team.id), { kind: 'jong', label: 'Beloftenteam', tag: null }); });
-  return { map, legend, periods, provisional: !final, cup };
+  // Elke echte periodekampioen een label, ook als hij al rechtstreeks promoveert of meerdere periodes won.
+  const periodTags = new Map();
+  periods.forEach((p) => { if (p.state === 'done' && p.winner) { const k = String(p.winner.id); periodTags.set(k, [...(periodTags.get(k) || []), p.key]); } });
+  return { map, legend, periods, periodTags, provisional: !final, cup };
 }
 
 /**

@@ -37,13 +37,21 @@ const gd = (l) => {
 };
 
 const MARK = { rivaal: 'rivaal', interessant: '★' };
+/** Labels: P1, P3 voor elke echte periodekampioen; "via P2" voor een club die het ticket van een ander kreeg. */
+function periodTagsHtml(zones, teamId, z) {
+  const won = (zones && zones.periodTags && zones.periodTags.get(String(teamId))) || [];
+  let out = won.map((k) => `<i class="st-tag mono" title="Periodekampioen ${esc(k)}">${esc(k)}</i>`).join('');
+  if (z && z.tag && !won.includes(z.tag)) out += `<i class="st-tag st-tag--via mono" title="Kreeg het nacompetitieticket van ${esc(z.tag)}: de winnaar was al geplaatst">via ${esc(z.tag)}</i>`;
+  return out;
+}
+
 function rowHtml(r, zones, marks, highlight, form) {
   const z = zones ? zones.map.get(String(r.team.id)) : null;
   const me = r.team.id === TEAM;
   const hl = highlight && highlight.get(String(r.team.id));
   return `<tr class="${me ? 'is-me' : ''} ${z ? 'zone--' + z.kind : ''} ${hl ? 'is-hl' : ''}">
     <td class="mono st-pos">${r.pos}</td>
-    <td class="st-club"><a class="st-link" href="#/club/${encodeURIComponent(String(r.team.id))}">${crest(r.team)}<span>${nameHtml(r.team, esc)}</span>${z && z.tag ? `<i class="st-tag mono" title="Periodekampioen ${esc(z.tag)}">${esc(z.tag)}</i>` : ''}${hl ? `<i class="st-tag st-tag--hl mono">${esc(hl)}</i>` : ''}${marks && marks[r.team.id] && MARK[marks[r.team.id].mark] ? `<i class="st-mark st-mark--${esc(marks[r.team.id].mark)}" title="${esc(marks[r.team.id].note || marks[r.team.id].mark)}">${MARK[marks[r.team.id].mark]}</i>` : ''}</a></td>
+    <td class="st-club"><a class="st-link" href="#/club/${encodeURIComponent(String(r.team.id))}">${crest(r.team)}<span>${nameHtml(r.team, esc)}</span>${periodTagsHtml(zones, r.team.id, z)}${hl ? `<i class="st-tag st-tag--hl mono">${esc(hl)}</i>` : ''}${marks && marks[r.team.id] && MARK[marks[r.team.id].mark] ? `<i class="st-mark st-mark--${esc(marks[r.team.id].mark)}" title="${esc(marks[r.team.id].note || marks[r.team.id].mark)}">${MARK[marks[r.team.id].mark]}</i>` : ''}</a></td>
     <td class="mono">${r.line.played}</td>
     <td class="mono st-wide">${r.line.w}</td><td class="mono st-wide">${r.line.d}</td><td class="mono st-wide">${r.line.l}</td>
     <td class="mono st-wide">${r.line.gf}:${r.line.ga}</td>
@@ -78,8 +86,8 @@ export function standTable(rows, { zones = null, marks = null, highlight = null,
 export function zoneLegend(zones, rules, { provisional = zones ? zones.provisional !== false : true } = {}) {
   if (!zones || !zones.legend.length) return '';
   const hasJong = [...zones.map.values()].some((z) => z.kind === 'jong');
-  const hasTag = [...zones.map.values()].some((z) => z.tag);
-  return `<div class="zone-legend">${zones.legend.map((x) => `<span><i class="zone-key zone-key--${x.kind}"></i>${esc(x.label)}</span>`).join('')}${hasJong ? '<span><i class="zone-key zone-key--jong"></i>Beloftenteam, telt niet mee</span>' : ''}${hasTag ? '<span><i class="st-tag mono">P1</i> periodekampioen</span>' : ''}</div>
+  const hasTag = [...zones.map.values()].some((z) => z.tag) || (zones.periodTags && zones.periodTags.size > 0);
+  return `<div class="zone-legend">${zones.legend.map((x) => `<span><i class="zone-key zone-key--${x.kind}"></i>${esc(x.label)}</span>`).join('')}${hasJong ? '<span><i class="zone-key zone-key--jong"></i>Beloftenteam, telt niet mee</span>' : ''}${hasTag ? '<span><i class="st-tag mono">P1</i> periodekampioen</span>' : ''}${[...zones.map.values()].some((z) => z.tag && z.via && z.via !== 'winst') ? '<span><i class="st-tag st-tag--via mono">via P2</i> ticket doorgeschoven</span>' : ''}</div>
     ${provisional ? '<p class="muted" style="font-size:12px;margin:0">Voorlopig: zo zou het zijn als de competitie nu eindigt.</p>' : ''}
     ${rules && rules.cup ? `<p class="muted" style="font-size:12px;margin:0">${zones.cup ? `Bekerwinnaar: <strong>${esc(zones.cup.team.name)}</strong>. De tickets zijn daarop aangepast.` : provisional ? 'Bekerwinnaar nog niet bekend: de tickets schuiven door zodra de bekerfinale gespeeld is.' : 'Bekerwinnaar onbekend in je data: tickets zonder bekerverschuiving.'}</p>` : ''}
     ${rules && rules.note ? `<p class="muted" style="font-size:12px">${esc(rules.note)}</p>` : ''}`;

@@ -864,3 +864,4 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .sq-page { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--hairline); }
 .sq-page select { width: auto; }
 .sq-page__res { grid-column: 1 / -1; font-size: 12px; }
+.st-tag--via { border-style: dashed; color: var(--muted); }
