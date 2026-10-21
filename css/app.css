@@ -786,6 +786,7 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 @media (min-width: 1100px) {
   .view[data-view="selectie"] .mob-only, .view[data-view="selectie"] fieldset.segmented:not(.sq-group-toggle) { display: none; }
   .view[data-view="selectie"] .desk-only-block { display: block; }
+  .view[data-view="stats"] .desk-only-block { display: block; }
   .sq-table { width: 100%; border-collapse: collapse; font-size: 15px; }
   .sq-table th { text-align: right; font-weight: 500; font-size: 12px; color: var(--muted); border-bottom: 2px solid var(--rule); padding: 0; }
   .sq-table th button { width: 100%; text-align: inherit; padding: 8px 10px; font-family: var(--font-mono); letter-spacing: .02em; }
@@ -865,3 +866,19 @@ input, textarea, select, [contenteditable], .note-text, .selectable { -webkit-us
 .sq-page select { width: auto; }
 .sq-page__res { grid-column: 1 / -1; font-size: 12px; }
 .st-tag--via { border-style: dashed; color: var(--muted); }
+/* Competitiekiezer */
+.lg-pick { display: inline-flex; align-items: baseline; gap: 8px; background: none; border: 0; color: inherit; font: inherit; padding: 0; cursor: pointer; text-align: left; }
+.lg-chev { font-size: 18px; opacity: .7; }
+.tiers { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-top: 14px; }
+.tiers a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.lg-list { display: grid; }
+.lg-country { font-family: var(--font-mono); font-size: 11px; color: var(--muted); padding: 12px 0 6px; border-bottom: 1px solid var(--rule); }
+.lg-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--hairline); color: var(--ink); text-decoration: none; font-size: 14px; }
+.lg-row:hover { background: var(--surface-hover); }
+.lg-row__tier { color: var(--muted); font-size: 12px; }
+.lg-row small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.lg-row.is-on .lg-row__name { font-weight: 700; }
+.lg-me { font-size: 11px; color: var(--accent-text, var(--accent)); border: 1px solid var(--accent); padding: 1px 5px; border-radius: 2px; white-space: nowrap; }
+.lg-none { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.lg-side__scroll { overflow-y: auto; overscroll-behavior: contain; }
+.lg-sheet .lg-row { font-size: 15px; padding: 12px 0; }

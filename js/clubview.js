@@ -13,6 +13,7 @@ import { mainLeague, sortByDate, dayShort, timeOf, shortRound } from './season.j
 import { tokens } from './rsssf.js';
 import { bestStandings, regularOnly } from './livetable.js';
 import { clubCode } from './clubnames.js';
+import { leagueInfo } from './leagues.js';
 
 const TEAM = MAIN_CLUB.id;
 const clean = (n) => String(n || '').replace(/\s*\(.*?\)\s*/g, ' ').trim();
@@ -52,12 +53,13 @@ function resultOf(row, teamId) {
   return gf > ga ? 'W' : gf < ga ? 'V' : 'G';
 }
 
-async function load(teamKey) {
+async function load(teamKey, leagueId = null) {
   const season = getSeason();
   const { list } = await correctedList();
   const rs = isCurrentSeason() ? null : await getRsssf(season).catch(() => null);
-  const rsDiv = mainDivision(rs);
-  const league = mainLeague(list) || (rsDiv && rsDiv.leagueId ? { id: rsDiv.leagueId, name: rsDiv.name } : null);
+  const chosen = leagueId ? leagueInfo(leagueId) : null;
+  const rsDiv = chosen ? (rs && rs.divisions ? rs.divisions.find((d) => d.leagueId === chosen.id) || null : null) : mainDivision(rs);
+  const league = chosen ? { id: chosen.id, name: chosen.name } : (mainLeague(list) || (rsDiv && rsDiv.leagueId ? { id: rsDiv.leagueId, name: rsDiv.name } : null));
   if (!league) return { league: null };
   const standings = (await bestStandings(league.id, season)) || rsssfStandings(rs, league.id);
   const rows = standings && standings.groups && standings.groups[0] ? standings.groups[0].rows : [];
@@ -116,8 +118,8 @@ export const clubViews = {
     navKey: 'stats',
     async render(ctx, args) {
       const teamKey = decodeURIComponent(args[0] || '');
-      const d = await load(teamKey);
-      const back = `<a class="back-btn" href="#/stats" aria-label="Terug">${icons.back}</a>`;
+      const d = await load(teamKey, args[1] || null);
+      const back = `<a class="back-btn" href="#/stats${args[1] ? `/${encodeURIComponent(args[1])}` : ''}" aria-label="Terug">${icons.back}</a>`;
       if (!d.league || !d.team) {
         return `<header class="page-head"><div class="page-head__titles">${back}<span class="page-head__kicker">Stand</span><h1 class="page-head__title">Club</h1></div></header>
           <section class="section"><p class="muted">Deze club staat niet in de stand van ${esc(seasonLabel())}.</p></section>`;

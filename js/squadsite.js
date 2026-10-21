@@ -153,11 +153,11 @@ export function siteBlock(diffs, snap) {
   if (!snap) return '';
   const when = snap.at ? new Date(snap.at).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
   if (!diffs.length) {
-    return `<section class="section"><div class="section__label"><span>Volgens de clubsite</span><span>${esc(when)}</span></div>
+    return `<section class="section"><div class="section__label"><span>Volgens de clubsite · ${esc(when)}</span></div>
       <p class="muted" style="font-size:13px;margin:0">Alles klopt met de selectiepagina's. <a href="#/clubsite">Pagina's</a></p></section>`;
   }
   const fills = diffs.filter((d) => d.kind === 'fill').length;
-  return `<section class="section"><details class="fold site-fold" data-site-fold ${siteOpen ? 'open' : ''}><summary class="section__label"><span>Volgens de clubsite</span><span>${diffs.length} ${diffs.length === 1 ? 'verschil' : 'verschillen'} · ${esc(when)}</span></summary>
+  return `<section class="section"><details class="fold site-fold" data-site-fold ${siteOpen ? 'open' : ''}><summary class="section__label"><span>Volgens de clubsite · ${esc(when)}</span><span>${diffs.length} ${diffs.length === 1 ? 'verschil' : 'verschillen'}</span></summary>
     ${fills > 1 ? `<div><button class="btn btn--sm btn--primary" type="button" data-sq-fillall>Alle lege profielvelden aanvullen (${fills} spelers)</button></div>` : ''}
     <div class="list">${diffs.map((d) => {
       const [txt, btns] = ACTION[d.kind](d);
@@ -193,7 +193,7 @@ export const squadSiteViews = {
           <div class="btn-row"><button class="btn btn--sm" type="button" data-sq-add>+ Pagina</button>
           <button class="btn btn--sm btn--primary" type="button" data-sq-save>Opslaan en nu ophalen</button></div>
         </section>
-        ${s.snap ? `<section class="section"><div class="section__label"><span>Laatst opgehaald</span><span>${esc(new Date(s.snap.at).toLocaleString('nl-NL'))}</span></div>
+        ${s.snap ? `<section class="section"><div class="section__label"><span>Laatst opgehaald · ${esc(new Date(s.snap.at).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</span></div>
           ${(s.snap.pages || []).map((p) => `<details class="fold"><summary><span>${esc(LEVEL_TXT[p.level])} · ${p.error ? esc(p.error) : `${p.players.length} ${p.players.length === 1 ? 'speler' : 'spelers'}`}</span></summary>
             <p class="muted" style="font-size:12px;word-break:break-all">${esc(p.url)}</p>
             <div class="list">${(p.players || []).map((x) => `<div class="kv-line"><span>${esc(x.name)}</span><span class="mono muted">${x.number ?? '–'}${x.line ? ` · ${esc(LINE_SHORT[x.line])}` : ''}</span></div>`).join('')}</div></details>`).join('')}

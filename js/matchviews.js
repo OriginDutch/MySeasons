@@ -3,7 +3,7 @@
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
 import { getSeason, seasonLabel, inSeason, isCurrentSeason } from './seasonstate.js';
-import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers, getLeagueMatches } from './store.js';
+import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers, getLeagueMatches, getLeagueIndexes } from './store.js';
 import { applyNames } from './names.js';
 import { bestStandings, standingsAndMatches } from './livetable.js';
 import { rulesFor, zonesFor, playoffBracket, SPECIAL_SEASONS, cupWinner, cupWinnerRsssf, rsssfAsMatches } from './rules.js';
@@ -15,6 +15,7 @@ import { applyCorrections, correctionSummary, goalCheck, kindOf } from './correc
 import { editEvent, editScore, editNotes } from './editor.js';
 import { syncSeason, fetchMatch, syncStandings, syncLeague, COST } from './sync.js';
 import { rowsFor, standTable, zoneLegend, miniStand, periodRows, formMap } from './standview.js';
+import { LEAGUES, leagueInfo, neighbours, leagueListHtml, openLeagueSheet } from './leagues.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
   dayShort, dayLong, timeOf, monthOf, relativeDay, shortRound, crowdSummary, penOutcome,
@@ -257,6 +258,39 @@ function bracketBlock(rules, rows, zones, rs) {
     </section>`;
 }
 
+// ---------- Competitiekiezer ----------
+let LEAGUE_SHEET = '';
+
+/** Per gevolgde competitie: aantal clubs en of er data is voor dit seizoen (stand, Highlightly-lijst of RSSSF). */
+async function leagueAvail(rs) {
+  const out = new Map();
+  const idx = await getLeagueIndexes().catch(() => []);
+  await Promise.all(LEAGUES.map(async (l) => {
+    const st = await getStandings(l.id, getSeason()).catch(() => null);
+    const div = rs && rs.divisions ? rs.divisions.find((d) => d.leagueId === l.id) : null;
+    const ix = idx.find((i) => Number(i.leagueId) === l.id && Number(i.season) === getSeason());
+    const clubs = (st && st.groups && st.groups[0] && st.groups[0].rows.length) || (div && div.table && div.table.length) || null;
+    out.set(l.id, { clubs, has: !!(clubs || (ix && (ix.ids || []).length)) });
+  }));
+  return out;
+}
+
+/** Desktop: de competitielijst mag nooit langer zijn dan de stand links; anders scrollen in de lijst. */
+function fitLeagueSide(root) {
+  const main = root.querySelector('[data-stats-main]'); const side = root.querySelector('[data-stats-side]'); const box = root.querySelector('[data-lg-side]');
+  if (!main || !side || !box) return;
+  const scroll = box.querySelector('.lg-side__scroll');
+  const fit = () => {
+    if (getComputedStyle(box).display === 'none') return;
+    scroll.style.maxHeight = 'none';
+    const others = side.scrollHeight - box.offsetHeight;
+    const label = box.offsetHeight - scroll.offsetHeight;
+    scroll.style.maxHeight = `${Math.max(150, main.offsetHeight - others - label)}px`;
+  };
+  fit();
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(main);
+}
+
 function crowdBlock(list, league) {
   const c = crowdSummary(list, TEAM, league.id);
   const vs = (m) => esc((opponentOf(m, TEAM) || {}).name || '?');
@@ -427,12 +461,24 @@ export const matchViews = {
 
   stats: {
     title: 'Stand',
-    async render() {
+    async render(ctx, args = []) {
       const { list } = await correctedList();
       const rs = await getRsssf(getSeason()).catch(() => null);
-      const rsDiv = mainDivision(rs);
-      const league = mainLeague(list) || (rsDiv && rsDiv.leagueId ? { id: rsDiv.leagueId, name: rsDiv.name } : null);
-      const kicker = `MySeasons / ${league ? league.name + ' ' : ''}${seasonLabel()}`;
+      const rsMain = mainDivision(rs);
+      const mine = mainLeague(list) || (rsMain && rsMain.leagueId ? { id: rsMain.leagueId, name: rsMain.name } : null);
+      const chosen = args[0] && leagueInfo(args[0]);
+      const league = chosen ? { id: chosen.id, name: chosen.name } : mine;
+      const rsDiv = league && rs && rs.divisions ? rs.divisions.find((d) => d.leagueId === league.id) || null : null;
+      const kicker = `MySeasons / Stand · ${seasonLabel()}`;
+      const avail = await leagueAvail(rs);
+      const listHtml = leagueListHtml({ current: league && league.id, mine: mine && mine.id, avail, clubName: MAIN_CLUB.name });
+      LEAGUE_SHEET = listHtml;
+      const info = league ? leagueInfo(league.id) : null;
+      const titleBtn = `<header class="page-head"><div class="page-head__titles"><span class="page-head__kicker">${esc(kicker)}</span>
+        <button class="lg-pick" type="button" data-league-pick aria-label="Andere competitie kiezen"><h1 class="page-head__title"><span class="nm-full">${esc((info && info.name) || (league && league.name) || 'Stand')}</span><span class="nm-short">${esc((info && info.short) || (league && league.name) || 'Stand')}</span></h1><span class="lg-chev" aria-hidden="true">▾</span></button></div></header>`;
+      const nb = league ? neighbours(league.id) : { up: null, down: null };
+      const tiers = nb.up || nb.down ? `<div class="tiers">${nb.up ? `<a href="#/stats/${nb.up.id}">↑ ${esc(nb.up.short)}</a>` : '<span></span>'}${nb.down ? `<a href="#/stats/${nb.down.id}">↓ ${esc(nb.down.short)}</a>` : '<span></span>'}</div>` : '';
+      const sideList = `<section class="section lg-side desk-only-block" data-lg-side><div class="section__label"><span>Competities</span><span>${esc(seasonLabel())}</span></div><div class="lg-side__scroll">${listHtml}</div></section>`;
       if (!league) {
         return `${head({ kicker, title: 'Stand' })}
           <section class="section"><div class="empty"><span class="empty__title">Nog geen competitie</span>
@@ -440,6 +486,7 @@ export const matchViews = {
       }
       const both = await standingsAndMatches(league.id, getSeason());
       const st = both.standings || rsssfStandings(rs, league.id);
+      const isMine = mine && league.id === mine.id;
       const lm = both.matches;
       const special = SPECIAL_SEASONS[getSeason()];
       const flag = special ? `<section class="section"><p class="season-flag"><strong>${esc(special.status[0].toUpperCase() + special.status.slice(1))}.</strong> ${esc(special.note)}</p></section>` : '';
@@ -448,9 +495,10 @@ export const matchViews = {
       const marks = await getClubMarks().catch(() => ({}));
       const refresh = `<button class="btn" type="button" data-action="sync-standings" data-league="${league.id}">${icons.refresh}<span>Stand bijwerken · ${COST.standings} call</span></button>`;
       if (!g) {
-        return `${head({ kicker, title: 'Stand' })}
+        return `${titleBtn}
           <section class="section"><div class="empty"><span class="empty__title">Stand nog niet opgehaald</span>
-          <p class="muted">Haal de actuele ${esc(league.name)}-stand op.</p><div>${refresh}</div></div></section>`;
+          <p class="muted">Haal de ${esc(league.name)}-stand van ${esc(seasonLabel())} op.</p><div style="display:flex;gap:8px;flex-wrap:wrap">${refresh}<button class="btn" type="button" data-action="sync-league" data-league="${league.id}">${icons.refresh}<span>Alle wedstrijden · ~${COST.league} calls</span></button></div></div></section>
+          ${tiers ? `<section class="section">${tiers}</section>` : ''}`;
       }
       const modes = fromRsssf ? [['total', 'Totaal']] : [['total', 'Totaal'], ['home', 'Thuis'], ['away', 'Uit']];
       const rules = rulesFor(league.id, getSeason());
@@ -462,25 +510,27 @@ export const matchViews = {
       const lmUse = lm.length ? lm : rsDivL ? rsssfAsMatches(rsDivL, idOf) : [];
       const zones = rules && !special ? zonesFor(rules, g.rows, { matches: lmUse, cup, final: !isCurrentSeason() }) : null;
       return `
-        ${head({ kicker, title: 'Stand' })}
+        ${titleBtn}
         ${flag}
-        <div class="stats-grid"><div class="stats-main">
+        <div class="stats-grid"><div class="stats-main" data-stats-main>
         <section class="section">
           ${fromRsssf ? `<p class="muted" style="font-size:12px;margin:0">Eindstand ${esc(seasonLabel())} · ${esc(st.credit)}</p>` : ''}
           <fieldset class="segmented segmented--3" style="margin:0;padding:0" ${fromRsssf ? 'hidden' : ''}>
             <legend class="visually-hidden">Weergave</legend>
             ${modes.map(([v, l], i) => `<input type="radio" name="stand-mode" id="sm-${v}" value="${v}" ${i === 0 ? 'checked' : ''}><label for="sm-${v}">${l}</label>`).join('')}
           </fieldset>
-          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks, form: lmUse.length ? formMap(lmUse, v) : null })}${v === 'total' && zones ? zoneLegend(zones, rules) : v !== 'total' ? `<p class="muted" style="font-size:12px;margin-top:10px">Alleen ${v === 'home' ? 'thuis' : 'uit'}duels. Europese plekken en degradatie gaan op de totaalstand.</p>` : ''}</div>`).join('')}
+          ${modes.map(([v], i) => `<div data-stand-mode="${v}" ${i === 0 ? '' : 'hidden'}>${standTable(rowsFor(g, v), { zones: v === 'total' ? zones : null, marks, form: lmUse.length ? formMap(lmUse, v) : null, leagueId: isMine ? null : league.id })}${v === 'total' && zones ? zoneLegend(zones, rules) : v !== 'total' ? `<p class="muted" style="font-size:12px;margin-top:10px">Alleen ${v === 'home' ? 'thuis' : 'uit'}duels. Europese plekken en degradatie gaan op de totaalstand.</p>` : ''}</div>`).join('')}
+          ${tiers}
         </section>
-        </div><aside class="stats-side">
+        </div><aside class="stats-side" data-stats-side>
         ${zones && rules.periods ? periodsBlock(zones, rules, lmUse, marks) : ''}
         ${zones && rules.playoff ? bracketBlock(rules, rowsFor(g, 'total'), zones, rs) : ''}
         ${pastPlayoffsBlock(rs, league.id)}
-        ${crowdBlock(list, league)}
+        ${isMine ? crowdBlock(list, league) : ''}
+        ${sideList}
         </aside></div>
         <section class="section">
-          <div class="section__label"><span>Bijgewerkt</span><span>${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
+          <div class="section__label"><span>Bijgewerkt · ${esc(dayShort(st.fetchedAt))} ${esc(timeOf(st.fetchedAt))}</span></div>
           ${st.source === 'live' ? '<p class="muted" style="font-size:12px">Zelf berekend uit alle uitslagen: de stand van Highlightly loopt achter tot een speelronde klaar is. Puntenaftrek is meegenomen.</p>' : ''}
           ${fromRsssf ? '<p class="muted" style="font-size:12px">Van RSSSF. De Highlightly-stand van dat seizoen kun je ook ophalen.</p>' : '<p class="muted" style="font-size:12px">De stand wordt ook bijgewerkt als je het seizoen synchroniseert.</p>'}
           <div style="display:flex;gap:8px;flex-wrap:wrap">${refresh}${isCurrentSeason() || !fromRsssf ? `<button class="btn" type="button" data-action="sync-league" data-league="${league.id}">${icons.refresh}<span>Alle wedstrijden · ~${COST.league} calls</span></button>` : ''}</div>
@@ -488,6 +538,8 @@ export const matchViews = {
         </section>`;
     },
     mount(root, ctx) {
+      root.querySelector('[data-league-pick]')?.addEventListener('click', () => openLeagueSheet(LEAGUE_SHEET, seasonLabel()));
+      fitLeagueSide(root);
       root.addEventListener('click', async (e) => {
         const b = e.target.closest('[data-action="sync-league"]');
         if (!b) return;
