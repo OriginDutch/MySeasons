@@ -152,9 +152,17 @@ const blank = () => ({ played: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 });
 function add(line, gf, ga) { line.played++; line.gf += gf; line.ga += ga; if (gf > ga) line.w++; else if (gf < ga) line.l++; else line.d++; }
 
 /** Stand over een reeks speelronden. Uitgestelde duels tellen mee in hun oorspronkelijke ronde (art. 2). */
-export function periodTable(matches, period, teams, tiebreak, prefer) {
+export function periodTable(matches, period, teams, tiebreak, prefer, { final = false } = {}) {
   const [from, to] = period.rounds;
-  const inP = matches.filter((m) => { const n = roundNumber(m.round); return n != null && n >= from && n <= to && /regular/i.test(m.round || 'regular'); });
+  const raw = matches.filter((m) => { const n = roundNumber(m.round); return n != null && n >= from && n <= to && /regular/i.test(m.round || 'regular'); });
+  // Dubbele duels (een uitgestelde kopie naast de echt gespeelde) maar één keer: de gespeelde wint.
+  const byPair = new Map();
+  raw.forEach((m) => {
+    const k = `${m.homeTeam && m.homeTeam.id}-${m.awayTeam && m.awayTeam.id}-${roundNumber(m.round)}`;
+    const prev = byPair.get(k);
+    if (!prev || (prev.status !== 'finished' && m.status === 'finished')) byPair.set(k, m);
+  });
+  const inP = [...byPair.values()];
   const rows = new Map(teams.map((t) => [String(t.id), { team: t, total: blank(), points: 0 }]));
   const row = (t) => { const k = String(t.id); if (!rows.has(k)) rows.set(k, { team: t, total: blank(), points: 0 }); return rows.get(k); };
   let finished = 0;
@@ -168,7 +176,8 @@ export function periodTable(matches, period, teams, tiebreak, prefer) {
   const ranked = rankRows([...rows.values()], { tiebreak, prefer });
   const expected = Math.floor(rows.size / 2) * (to - from + 1);
   const started = finished > 0;
-  const complete = inP.length > 0 && finished === inP.length && finished >= expected;
+  // Afgelopen seizoen: compleet zodra alle verwachte duels gespeeld zijn (losse spookduels in de data tellen niet).
+  const complete = inP.length > 0 && finished >= expected && (final || finished === inP.length);
   return { ...period, rows: ranked, finished, total: Math.max(inP.length, expected), started, complete };
 }
 
@@ -176,11 +185,11 @@ export function periodTable(matches, period, teams, tiebreak, prefer) {
  * Alle periodes met winnaar (titel) en wie de nacompetitieplek krijgt (art. 6 en 8).
  * holder.via: 'winst' | 'nr2' | 'ranglijst' (plek gaat naar de stand, pas bij het einde bekend).
  */
-export function resolvePeriods(rules, matches, teams) {
+export function resolvePeriods(rules, matches, teams, { final = false } = {}) {
   if (!rules || !rules.periods) return [];
   const qualified = new Set();
   return rules.periods.map((p) => {
-    const t = periodTable(matches, p, teams, rules.periodTiebreak || ['points', 'gd', 'gf'], (r) => !qualified.has(String(r.team.id)));
+    const t = periodTable(matches, p, teams, rules.periodTiebreak || ['points', 'gd', 'gf'], (r) => !qualified.has(String(r.team.id)), { final });
     if (!t.complete) {
       const leader = t.started ? t.rows[0] : null;
       return { ...t, state: t.started ? 'running' : 'open', leader };
@@ -282,7 +291,7 @@ export function zonesFor(rules, rows, { matches = [], final = false, cup = null 
     up.forEach((r) => set(r, { kind: rules.direct.kind, label: rules.direct.label }));
     legend.push({ kind: rules.direct.kind, label: rules.direct.label });
     if (rules.playoff) {
-      periods = resolvePeriods(rules, matches, rows.map((r) => r.team));
+      periods = resolvePeriods(rules, matches, rows.map((r) => r.team), { final });
       const upIds = new Set(up.map((r) => String(r.team.id)));
       const last = rows[rows.length - 1];
       const seats = [];

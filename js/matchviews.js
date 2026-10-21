@@ -467,7 +467,8 @@ export const matchViews = {
       const rsMain = mainDivision(rs);
       const mine = mainLeague(list) || (rsMain && rsMain.leagueId ? { id: rsMain.leagueId, name: rsMain.name } : null);
       const chosen = args[0] && leagueInfo(args[0]);
-      const league = chosen ? { id: chosen.id, name: chosen.name } : mine;
+      const mineInfo = mine && leagueInfo(mine.id);
+      const league = chosen ? { id: chosen.id, name: chosen.name } : mineInfo ? { id: mine.id, name: mineInfo.name } : mine;
       const rsDiv = league && rs && rs.divisions ? rs.divisions.find((d) => d.leagueId === league.id) || null : null;
       const kicker = `MySeasons / Stand · ${seasonLabel()}`;
       const avail = await leagueAvail(rs);
