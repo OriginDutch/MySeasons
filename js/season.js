@@ -103,6 +103,15 @@ export const dayLong = (iso) => fLong.format(new Date(iso));
 export const timeOf = (iso) => fTime.format(new Date(iso));
 export const monthOf = (iso) => fMonth.format(new Date(iso));
 
+/** Hele kalenderdagen (Nederlandse tijd) tussen iso en nu. 0 = vandaag. */
+export function daysAgo(iso, now = new Date()) {
+  const key = (d) => { const [dd, mm, yy] = fDayKey.format(d).split(/\D+/).map(Number); return Date.UTC(yy, mm - 1, dd); };
+  return Math.round((key(now) - key(new Date(iso))) / 864e5);
+}
+
+const fWeekday = fmt({ weekday: 'long' });
+export const weekdayName = (iso) => fWeekday.format(new Date(iso));
+
 export function relativeDay(iso, now = new Date()) {
   const a = fDayKey.format(new Date(iso));
   const b = fDayKey.format(now);

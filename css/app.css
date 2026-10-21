@@ -533,6 +533,12 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .report__title { font-weight: 800; font-size: var(--fs-title); letter-spacing: -0.02em; line-height: 1.1; }
 .report__sub { font-size: var(--fs-md); line-height: 1.4; }
 .report__score { font-size: var(--fs-md); }
+.recap { display: grid; gap: 14px; }
+.recap--two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.recap__item { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.recap__day { font-size: var(--fs-xs); color: var(--muted); }
+.recap--two .recap__item + .recap__item { border-top: 1px solid color-mix(in srgb, var(--ink) 15%, transparent); padding-top: 14px; }
+@media (min-width: 700px) { .recap--two .recap__item + .recap__item { border-top: 0; padding-top: 0; } }
 
 .strip { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; }
 .strip__tile { height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 1px solid var(--hairline); color: var(--ink); text-decoration: none; }

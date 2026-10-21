@@ -18,7 +18,7 @@ import { bellButton, unreadCount } from './inbox.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import {
   sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
-  dayShort, timeOf, relativeDay, shortRound, crowdSummary,
+  dayShort, timeOf, relativeDay, daysAgo, weekdayName, shortRound, crowdSummary,
 } from './season.js';
 import { clubCode } from './clubnames.js';
 
@@ -157,11 +157,31 @@ function storiesRow(stories) {
     </section>`;
 }
 
-function lastWeek(m, rep) {
-  if (!m || !rep) return '';
-  return `
-    <section class="mag-section">
-      <div class="mag-section__head"><h2>Vorige week</h2><span class="mono muted">${esc(dayShort(m.date))}</span></div>
+// Terugblik: kop past zich aan de timing aan; twee duels in één week = twee kaartjes.
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+const weeksAgo = (d) => `${Math.round(d / 7)} weken geleden`;
+
+function whenLabel(d, iso) {
+  if (d <= 0) return 'Vandaag';
+  if (d === 1) return 'Gisteren';
+  if (d < 7) return cap(weekdayName(iso));
+  if (d < 14) return 'Vorige week';
+  return weeksAgo(d);
+}
+
+/** Laatste duel plus een eerder duel uit dezelfde week (max 2, oud → nieuw). Oud seizoen: alleen het slotduel. */
+export function recentMatches(list, current) {
+  const done = sortByDate(list).filter((m) => m.status === 'finished' && m.score);
+  const last = done[done.length - 1];
+  if (!last) return [];
+  if (!current) return [last];
+  const prev = done[done.length - 2];
+  return prev && Date.parse(last.date) - Date.parse(prev.date) < 7 * 864e5 ? [prev, last] : [last];
+}
+
+function reportCard(m, rep, dayTag) {
+  return `<div class="recap__item">
+      ${dayTag ? `<span class="recap__day mono">${esc(dayTag)}</span>` : ''}
       <a class="report" href="#/wedstrijd/${m.id}">
         <div class="report__photo">${rep.hero && rep.hero.number != null
           ? `<span class="report__num">${rep.hero.number}</span><span class="report__who mono">${esc(rep.hero.name)}</span>`
@@ -173,6 +193,26 @@ function lastWeek(m, rep) {
         </div>
       </a>
       ${rep.needsDetail ? `<div><button class="btn" type="button" data-action="fetch-match" data-id="${m.id}">Details ophalen voor het verhaal · ${COST.match} calls</button></div>` : ''}
+    </div>`;
+}
+
+function lastWeek(ms, { current, next } = {}) {
+  const items = ms.map((m) => [m, matchReport(m)]).filter(([, r]) => r);
+  if (!items.length) return '';
+  const last = items[items.length - 1][0];
+  const d = daysAgo(last.date);
+  let title; let side;
+  if (!current) { title = 'Slotduel'; side = dayShort(last.date); }
+  else if (items.length > 1) { title = d < 7 ? 'Afgelopen week' : d < 14 ? 'Vorige week' : weeksAgo(d); side = '2 duels'; }
+  else {
+    title = whenLabel(d, last.date);
+    side = d >= 14 && next ? `voor de break · ${dayShort(last.date)}` : dayShort(last.date);
+  }
+  const tag = (m) => (items.length > 1 ? `${cap(weekdayName(m.date))} · ${dayShort(m.date)}` : '');
+  return `
+    <section class="mag-section">
+      <div class="mag-section__head"><h2>${esc(title)}</h2><span class="mono muted">${esc(side)}</span></div>
+      <div class="recap ${items.length > 1 ? 'recap--two' : ''}">${items.map(([m, r]) => reportCard(m, r, tag(m))).join('')}</div>
     </section>`;
 }
 
@@ -301,7 +341,7 @@ export const magazineViews = {
           ${isCurrentSeason() ? cover(next, preview(next, list, league, standings)) : seasonCover(list, league, standings, team)}
           ${isCurrentSeason() && next && countdown(next.date).state === 'done' ? `<div class="mag-pad"><p class="muted" style="font-size:var(--fs-md);margin:0 0 8px">${matchTitle(next)} is afgelopen. Haal de uitslag op:</p><button class="btn btn--primary" type="button" data-action="sync-season">${icons.refresh}<span>Uitslag ophalen · ${COST.season} calls</span></button></div>` : ''}
           ${storiesRow(stories)}
-          ${lastWeek(last, matchReport(last))}
+          ${lastWeek(recentMatches(list, isCurrentSeason()), { current: isCurrentSeason(), next })}
           </div>
           <aside class="mag-side">
           ${standSide(standings, league, both.matches, cupNow)}
