@@ -79,6 +79,11 @@ export async function getMeta(name) {
   return snap.exists() ? snap.data() : null;
 }
 
+/** Meta-document in zijn geheel vervangen (geen merge). */
+export function replaceMeta(name, data) {
+  return setDoc(doc(db, 'meta', name), data);
+}
+
 export function setMeta(name, data) {
   return setDoc(doc(db, 'meta', name), data, { merge: true });
 }

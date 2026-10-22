@@ -6,6 +6,7 @@
 // Gelezen = id staat in meta/inbox.seen. Wegdoen = id in meta/inbox.dismissed.
 
 import { esc, icons, toast } from './ui.js';
+import { disciplineState, pendingReds } from './discview.js';
 import { getMeta, setMeta } from './store.js';
 import { MAIN_CLUB } from './config.js';
 import { missingDetails } from './sync.js';
@@ -50,11 +51,11 @@ export async function addMessage(msg) {
 
 const KIND = {
   fill: 'Aanvullen', conflicts: 'Afwijkingen', details: 'Details', backup: 'Back-up',
-  injury: 'Blessure', contract: 'Contract', nightshift: 'Nachtploeg', info: 'Melding',
+  injury: 'Blessure', card: 'Schorsing', contract: 'Contract', nightshift: 'Nachtploeg', info: 'Melding',
 };
 
 /** Afgeleide meldingen uit je data. */
-function derived({ list, profiles, conflicts, backup }) {
+function derived({ list, profiles, conflicts, backup, disc }) {
   const out = [];
   const today = new Date().toISOString().slice(0, 10);
   const official = list.filter((m) => m.league && !/friendl/i.test(m.league.name));
@@ -74,6 +75,12 @@ function derived({ list, profiles, conflicts, backup }) {
     const age = backup && backup.at ? (Date.now() - Date.parse(backup.at)) / 864e5 : null;
     if (age == null || age > 30) out.push({ id: `backup:${today.slice(0, 7)}`, kind: 'backup', at: null, title: age == null ? 'Nog nooit een back-up gemaakt' : `Laatste back-up ${Math.floor(age)} dagen geleden`, text: 'Eén bestand met al je aanvullingen, correcties en spelers. Kost een paar seconden.', href: '#/backup' });
   }
+  // 4b. Rode kaarten: standaard 1 duel tot jij de echte straf invult
+  if (isCurrentSeason()) pendingReds(disc).forEach((r) => {
+    const pr = (profiles || {})[String(r.playerId)] || {};
+    const name = pr.fullName || r.name || 'Speler';
+    out.push({ id: `card:${r.key}`, kind: 'card', at: new Date(Date.parse(r.match.date) + 2 * 3600e3).toISOString(), title: `Rood voor ${name}: hoe lang geschorst?`, text: `De app rekent nu ${r.ban} ${r.ban === 1 ? 'duel' : 'duels'} (${r.kind === 'second' ? '2x geel' : 'direct rood'}). Vul in wat de aanklager of tuchtcommissie besliste, of bevestig.`, href: `#/speler/${encodeURIComponent(r.playerId)}` });
+  });
   // 5. Spelers: blessure voorbij de verwachte terugkeer, contract dat binnen 90 dagen afloopt
   Object.entries(profiles || {}).forEach(([id, pr]) => {
     if (!pr || pr.linkedTo) return;
@@ -97,7 +104,8 @@ export async function inboxItems(ctx = null) {
   const c = ctx && ctx.list ? ctx : await correctedList();
   const [s, manual, auto] = await Promise.all([state(), getMeta('backup').catch(() => null), getMeta('autoBackup').catch(() => null)]);
   const backup = [manual, auto].filter((b) => b && b.at).sort((a, b) => b.at.localeCompare(a.at))[0] || null;
-  const all = [...derived({ list: c.list, profiles: c.profiles, conflicts: c.conflicts || 0, backup }), ...s.items];
+  const disc = isCurrentSeason() ? await disciplineState(c.list).catch(() => null) : null;
+  const all = [...derived({ list: c.list, profiles: c.profiles, conflicts: c.conflicts || 0, backup, disc }), ...s.items];
   const dismissed = new Set(s.dismissed); const seen = new Set(s.seen);
   return all.filter((m) => !dismissed.has(m.id))
     .map((m) => ({ ...m, unread: !seen.has(m.id) }))

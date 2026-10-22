@@ -533,6 +533,11 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .report__title { font-weight: 800; font-size: var(--fs-title); letter-spacing: -0.02em; line-height: 1.1; }
 .report__sub { font-size: var(--fs-md); line-height: 1.4; }
 .report__score { font-size: var(--fs-md); }
+.cover__disc { margin: 6px 0 0; font-size: var(--fs-sm); opacity: .9; }
+.ptag--ban { background: var(--danger); color: #fff; border-color: transparent; }
+.ptag--edge { background: color-mix(in srgb, #F5C518 28%, transparent); border-color: color-mix(in srgb, #F5C518 60%, transparent); }
+.disc-row { align-items: center; }
+.disc-row.is-banned .list-row__title { color: var(--danger); }
 .recap { display: grid; gap: 14px; }
 .recap--two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
 .recap__item { display: grid; gap: 8px; align-content: start; min-width: 0; }

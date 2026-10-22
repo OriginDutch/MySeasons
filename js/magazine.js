@@ -21,6 +21,7 @@ import {
   dayShort, timeOf, relativeDay, daysAgo, weekdayName, shortRound, crowdSummary,
 } from './season.js';
 import { clubCode } from './clubnames.js';
+import { disciplineState, previewLine } from './discview.js';
 
 // Clubnamen in koppen nooit over twee regels: spaties binnen een bekende naam worden onbreekbaar.
 let NAMES = [];
@@ -108,6 +109,7 @@ function cover(next, p) {
         <span class="cover__kicker mono">${esc(when)} · ${esc(compName(next))}${esc(round)} · ${isHome(next, TEAM) ? 'thuis' : 'uit'}</span>
         <h2 class="cover__title">${esc(keepNames(p.title))}</h2>
         ${p.sub ? `<p class="cover__sub">${esc(p.sub)}</p>` : ''}
+        ${p.disc ? `<p class="cover__disc mono">${esc(p.disc)}</p>` : ''}
       </div>
     </a>`;
 }
@@ -328,6 +330,11 @@ export const magazineViews = {
       const stories = seasonStories(list, league, standings, { topScorer, homeAvg: crowd.homeAvg, homeCount: crowd.homeCount, season: getSeason(), current: isCurrentSeason(), leagueMatches: both.matches, cup: cupNow });
       const teams = knownTeams(list);
       NAMES = [MAIN_CLUB.name, ...teams.map((t) => t.name)].sort((x, y) => y.length - x.length);
+      const pv = isCurrentSeason() && next ? preview(next, list, league, standings) : null;
+      if (pv) {
+        const short = new Map(players.map((x) => [x.id, x.short || x.name]));
+        pv.disc = previewLine(await disciplineState(list).catch(() => null), next, (id, n) => short.get(id) || n);
+      }
       const nextOpp = next ? opponentOf(next, TEAM) : null;
       const news = await newsFor([TEAM, ...(nextOpp ? [nextOpp.id] : [])], 3).catch(() => []);
       this._teams = teams;
@@ -338,7 +345,7 @@ export const magazineViews = {
           ${conflicts ? `<div class="mag-pad">${devBar(total, conflicts, '#/afwijkingen')}</div>` : ''}
           <div class="mag-main">
           ${todoCard(last)}
-          ${isCurrentSeason() ? cover(next, preview(next, list, league, standings)) : seasonCover(list, league, standings, team)}
+          ${isCurrentSeason() ? cover(next, pv) : seasonCover(list, league, standings, team)}
           ${isCurrentSeason() && next && countdown(next.date).state === 'done' ? `<div class="mag-pad"><p class="muted" style="font-size:var(--fs-md);margin:0 0 8px">${matchTitle(next)} is afgelopen. Haal de uitslag op:</p><button class="btn btn--primary" type="button" data-action="sync-season">${icons.refresh}<span>Uitslag ophalen · ${COST.season} calls</span></button></div>` : ''}
           ${storiesRow(stories)}
           ${lastWeek(recentMatches(list, isCurrentSeason()), { current: isCurrentSeason(), next })}

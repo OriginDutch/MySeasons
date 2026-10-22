@@ -13,6 +13,7 @@ import { statusIn, seasonWindow, spells } from './membership.js';
 import { flag, nationalities, countryCode, NAT_TOP, NAT_ALL } from './flags.js';
 import { COST, missingDetails, fetchMany } from './sync.js';
 import { buildSquad, playerFacts, LINES, LINE_SHORT } from './players.js';
+import { disciplineState, attachDiscTags, discTagsHtml, disciplineBlock, mountDiscipline } from './discview.js';
 import { correctedList, runWithButton, explain, head, crest } from './matchviews.js';
 import { dayShort, opponentOf, isHome } from './season.js';
 import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './playerextra.js';
@@ -453,7 +454,7 @@ function rowHtml(p, sort) {
   const base = p.apps
     ? `${p.apps} ${p.apps === 1 ? 'duel' : 'duels'}${p.subIns ? ` (${p.subIns} in)` : ''} · ${p.minutes}'`
     : p.squads ? `${p.squads}× op de bank` : 'nog geen officieel duel';
-  const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
+  const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p) + discTagsHtml(p.discTags) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
   const sub = `${base}${tags ? ' ' + tags : ''}`;
   const nat = p.nationality || (p.profile && p.profile.nationality);
   const flags = nat ? nationalities(nat).map((n) => flag(n, 12)).join('') : '';
@@ -483,7 +484,7 @@ function squadTable(players, profiles) {
     const age = ageOf(pr.dob);
     const val = (pr.valueHistory || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
     const nat = p.nationality || pr.nationality;
-    const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
+    const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p) + discTagsHtml(p.discTags) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
     const v = { nr: p.number ?? 99, name: p.name, pos: (LINE_ORDER[p.position] || 9) * 100 + (p.number ?? 99), age: age ?? 99, apps: p.apps || 0, min: p.minutes || 0, goals: p.goals || 0, assists: p.assists || 0, rating: p.rating ?? -1, value: val ? val.amount : -1 };
     return `<tr data-line="${esc(p.position || '')}" data-href="#/speler/${encodeURIComponent(p.id)}" ${Object.entries(v).map(([k, x]) => `data-${k}="${esc(String(x))}"`).join(' ')}>
       <td class="mono sq-nr">${p.number ?? '–'}</td>
@@ -694,6 +695,7 @@ export const playerViews = {
       const { members, groups } = seasonMembers(list, built.players, profiles);
       const players = groups.active;
       markDuplicateNumbers(players);
+      if (isCurrentSeason()) attachDiscTags(Object.values(groups).flat(), await disciplineState(list).catch(() => null));
       let site = '';
       if (isCurrentSeason()) {
         const s = await siteSnapshot();
@@ -774,6 +776,7 @@ export const playerViews = {
     mount(root, ctx) {
       mountTransfers(root, ctx);
       mountExtra(root, ctx, async () => (await correctedList()).profiles);
+      mountDiscipline(root, ctx, async () => disciplineState((await correctedList()).list));
       root.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-action="edit-name"]');
         if (!btn) return;
@@ -833,6 +836,7 @@ export const playerViews = {
         ${profileBlock(p.profile, p.id)}
         ${valueBlock(p.profile || {}, p.id)}
         ${injuryBlock(p.profile || {}, p.id)}
+        ${disciplineBlock(await disciplineState(list).catch(() => null), p.id)}
         ${transfersBlock(p.profile, p.id)}
         ${facts.length ? `<section class="section"><div class="section__label"><span>Feitjes</span></div>
           <div class="facts">${facts.map((f) => `<div class="fact"><span>${esc(f)}</span></div>`).join('')}</div></section>` : ''}
