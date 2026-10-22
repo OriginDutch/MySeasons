@@ -14,7 +14,7 @@ import { LEAGUES } from './leagues.js';
 import { seasonOfDate } from './shirts.js';
 import { levelFor, shirtFor } from './shirts.js';
 import { roleFor, lineOfRole } from './roles.js';
-import { opponentOf, dayShort } from './season.js';
+import { opponentOf, dayShort, twinOf, stateWord } from './season.js';
 import { openSheet } from './editor.js';
 import { FORMATIONS, idv, manualScore, manualWarnings, compareManual } from './manual.js';
 
@@ -219,7 +219,18 @@ async function save(root) {
     // Uitslag: wijken de goals af van wat er staat, dan eerst vragen. Zelf toegevoegd duel: geen Highlightly, dus direct.
     const shown = applyCorrections(S.match, S.notes).match;
     const mine = manualScore(manual, S.match, TEAM);
-    if (S.match.manual) {
+    if (!S.match.manual && S.match.status !== 'finished') {
+      // Highlightly: nog niet gespeeld / datum onbekend. Alleen als jij het bevestigt, telt hij als gespeeld.
+      if (!manual.played) {
+        const ok = await openSheet({
+          title: 'Opslaan als gespeeld?',
+          body: `<p>Highlightly heeft deze wedstrijd niet als gespeeld${S.match.stateText ? ` (${esc(S.match.stateText)})` : ''} en geen uitslag. Opslaan als gespeeld, <strong>${mine.home}–${mine.away}</strong>?</p>
+            <p class="muted sheet__note">Ja = hij telt mee zoals elke gespeelde wedstrijd${S.official ? '' : ' (oefenduels apart)'}. Komt er later bij Highlightly een gespeelde versie of uitslag, dan gaat die voor. Nee = je details worden bewaard, maar hij telt niet mee.</p>`,
+          submitLabel: `Ja, gespeeld ${mine.home}–${mine.away}`, cancelLabel: 'Nee',
+        });
+        manual.played = !!ok;
+      }
+    } else if (S.match.manual) {
       if (!S.match.score || S.match.score.home !== mine.home || S.match.score.away !== mine.away) {
         const ok = !S.match.score || await openSheet({ title: 'Uitslag aanpassen?', body: `<p>Jouw goals maken <strong>${mine.home}–${mine.away}</strong>, je had <strong>${S.match.score.home}–${S.match.score.away}</strong> ingevuld.</p>`, submitLabel: `Ja, ${mine.home}–${mine.away}`, cancelLabel: 'Nee, laten staan' });
         if (ok) await saveMatches([{ ...S.match, score: mine, status: 'finished' }]);
@@ -322,8 +333,15 @@ export const manualViews = {
     navKey: 'wedstrijden',
     async render(ctx, args) {
       const id = args[0];
-      const [m, notes] = await Promise.all([getMatch(id), getNotes(id)]);
+      const [m, notes, allBase] = await Promise.all([getMatch(id), getNotes(id), getAllMatches().catch(() => [])]);
       if (!m) return `${head({ kicker: 'Wedstrijden', title: 'Niet gevonden', back: 'wedstrijden' })}<section class="section"><p class="muted">Deze wedstrijd staat niet in je data.</p></section>`;
+      const twin = twinOf(m, allBase);
+      if (twin || m.status === 'postponed') {
+        S = null;
+        return `${head({ kicker: 'Wedstrijden', title: 'Details invullen', back: `wedstrijd/${id}` })}<section class="section">
+          ${twin ? `<p>Deze wedstrijd staat er dubbel in. Vul de details in bij de gespeelde versie:</p><div><a class="btn btn--primary" href="#/invullen/${twin.id}">${esc(twin.homeTeam.name)} – ${esc(twin.awayTeam.name)}, ${esc(dayShort(twin.date))}</a></div>`
+            : `<p class="muted">Deze wedstrijd is ${esc(stateWord(m))}. Daar vul je geen details bij in.</p>`}</section>`;
+      }
       const draft = loadDraft(id, notes && notes.manual);
       S = { id, match: m, notes: notes || null, draft, step: S && S.id === id ? S.step : 0, form: {}, filter: '', official: isOfficial(m), opp: (opponentOf(m, TEAM) || {}).name || 'Tegenstander' };
       S.cands = await candidates(m, draft);

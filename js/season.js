@@ -155,3 +155,29 @@ export function crowdSummary(list, teamId, leagueId) {
     awayTop: top(awayCrowd, 'attendance'),
   };
 }
+
+// ---------- Niet gespeeld: afgelast, uitgesteld, datum onbekend, of dubbel ----------
+/** Woord voor een wedstrijd die niet gespeeld is (of null). Highlightly zegt Cancelled, Postponed of To be announced. */
+export function stateWord(m, now = Date.now()) {
+  if (!m || m.status === 'finished') return null;
+  if (m.status === 'postponed') return /cancel|abandon/i.test(m.stateText || '') ? 'afgelast' : 'uitgesteld';
+  if (m.status === 'scheduled' && ts(m) < now - 3 * 3600e3) return 'datum onbekend';
+  return null;
+}
+
+const pairKey = (m) => [m.homeTeam && m.homeTeam.id, m.awayTeam && m.awayTeam.id].map(String).sort().join('~');
+const roundNr = (r) => { const x = String(r || '').match(/(\d+)\s*$/); return x ? Number(x[1]) : null; };
+
+/**
+ * De gespeelde versie van een niet-gespeelde wedstrijd, of null. Zelfde competitie en seizoen, dezelfde twee clubs
+ * (thuis/uit mag omgedraaid), en binnen 3 dagen, of (officieel) dezelfde speelronde.
+ */
+export function twinOf(m, list) {
+  if (!m || m.status === 'finished' || !m.league) return null;
+  const k = pairKey(m); const t = ts(m);
+  const friendly = /friendl/i.test(m.league.name || '');
+  const rn = friendly ? null : roundNr(m.round);
+  return (list || []).find((x) => x && x.id !== m.id && x.status === 'finished' && x.league
+    && String(x.league.id) === String(m.league.id) && String(x.league.season) === String(m.league.season) && pairKey(x) === k
+    && (Math.abs(ts(x) - t) <= 3 * 864e5 || (rn != null && roundNr(x.round) === rn))) || null;
+}

@@ -8,7 +8,7 @@
 // Tot je beslist, blijft jouw waarde gelden.
 
 import { MAIN_CLUB } from './config.js';
-import { manualDetail } from './manual.js';
+import { manualDetail, manualScore } from './manual.js';
 
 export const EVENT_FIELDS = {
   goal: [['player', 'schutter'], ['assist', 'assist'], ['minute', 'minuut'], ['extra', 'blessuretijd']],
@@ -163,6 +163,11 @@ export function applyCorrections(match, notes) {
     out.apiDetail = out.detail || null;
     out.detail = manualDetail(notes.manual, out, MAIN_CLUB.id);
     out.manualDetail = true;
+    // "Nog niet bekend" bij Highlightly, maar jij zei bij opslaan: gespeeld. (Een gespeelde dubbele versie gaat voor: correctedList.)
+    if (notes.manual.played && out.status === 'scheduled') {
+      out.apiStatus = out.status; out.apiScore = out.score || null;
+      out.status = 'finished'; out.score = out.score || manualScore(notes.manual, out, MAIN_CLUB.id); out.playedByManual = true;
+    }
   }
   return { match: out, statuses };
 }

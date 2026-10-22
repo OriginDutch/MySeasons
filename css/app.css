@@ -985,3 +985,4 @@ a.po-team:hover span { text-decoration: underline; }
 .mv-cmp { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; }
 .mv-cmp__vals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: var(--fs-md); }
 .mv-cmp__vals > div { background: var(--surface-hover); padding: 8px 10px; }
+.match-row--dim { opacity: .5; }

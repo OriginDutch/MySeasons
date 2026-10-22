@@ -20,7 +20,7 @@ import { rowsFor, standTable, zoneLegend, miniStand, periodRows, formMap } from 
 import { LEAGUES, leagueInfo, neighbours, leagueListHtml, openLeagueSheet } from './leagues.js';
 import { PLAYOFFS, playoffInfo, playoffMatches, playoffsHtml } from './playoffs.js';
 import {
-  sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch,
+  sortByDate, resultFor, opponentOf, isHome, mainLeague, leagueSummary, nextMatch, lastMatch, stateWord, twinOf,
   dayShort, dayLong, timeOf, monthOf, relativeDay, shortRound, crowdSummary, penOutcome,
 } from './season.js';
 import { clubCode } from './clubnames.js';
@@ -127,6 +127,8 @@ export async function correctedList(season = getSeason()) {
     total += c.total; conflicts += c.conflicts;
     return applyNames({ ...match, notes: n }, profiles);
   });
+  // Zelf als gespeeld gemarkeerd, maar er is (inmiddels) een gespeelde dubbele versie: die gaat voor.
+  out.forEach((m) => { if (m.playedByManual && twinOf({ ...m, status: m.apiStatus }, out)) { m.status = m.apiStatus; m.score = m.apiScore; m.playedByManual = false; } });
   return { list: out, total, conflicts, profiles };
 }
 
@@ -661,12 +663,13 @@ export const matchViews = {
             <div class="section__label"><span>${esc(month)}</span><span>${games.length}</span></div>
             <div class="list">${games.map((m) => {
               const r = resultFor(m, TEAM);
-              return `<a class="list-row match-row" href="#/wedstrijd/${m.id}">
+              const twin = twinOf(m, list); const word = stateWord(m);
+              return `<a class="list-row match-row${twin || m.status === 'postponed' ? ' match-row--dim' : ''}" href="#/wedstrijd/${m.id}">
                 <span class="match-row__date mono">${esc(dayShort(m.date))}</span>
                 <span class="list-row__main"><span class="list-row__title">${matchTitle(m)}</span>
-                  <span class="list-row__sub">${esc(compName(m))}${m.round && !/friendl/i.test(m.round) ? ' · ' + esc(shortRound(m.round)) : ''}${m.detail ? ' · details ✓' : ''}</span></span>
+                  <span class="list-row__sub">${esc(compName(m))}${m.round && !/friendl/i.test(m.round) ? ' · ' + esc(shortRound(m.round)) : ''}${m.detail ? ' · details ✓' : ''}${twin ? ` · dubbel · zie ${esc(dayShort(twin.date))}` : ''}</span></span>
                 ${matchMore(m, coaches)}
-                <span class="match-row__end mono">${m.status === 'finished' ? `${scoreText(m)} ${resultChip(m)}` : m.status === 'postponed' ? '<span class="muted">uitgesteld</span>' : esc(timeOf(m.date))}</span>
+                <span class="match-row__end mono">${m.status === 'finished' ? `${scoreText(m)} ${resultChip(m)}` : word ? `<span class="muted">${esc(twin ? 'dubbel' : word)}</span>` : esc(timeOf(m.date))}</span>
               </a>`;
             }).join('')}</div>
           </section>`).join('')}`;
@@ -684,7 +687,7 @@ export const matchViews = {
     title: 'Wedstrijd',
     navKey: 'wedstrijden',
     async render(ctx, args) {
-      const [apiM, notes, profiles, coaches] = await Promise.all([getMatch(args[0]), getNotes(args[0]), getPlayers(), getCoaches().catch(() => [])]);
+      const [apiM, notes, profiles, coaches, allBase] = await Promise.all([getMatch(args[0]), getNotes(args[0]), getPlayers(), getCoaches().catch(() => []), getAllMatches().catch(() => [])]);
       if (!apiM) {
         return `${head({ kicker: 'Wedstrijden', title: 'Niet gevonden', back: 'wedstrijden' })}
           <section class="section"><p class="muted">Deze wedstrijd staat niet (meer) in je data.</p></section>`;
@@ -694,13 +697,16 @@ export const matchViews = {
       const sum = correctionSummary(statuses);
       const n = notes || {};
       const r = resultFor(m, TEAM);
+      const twin = twinOf({ ...m, status: m.playedByManual ? m.apiStatus : m.status }, allBase);
+      if (twin && m.playedByManual) { m.status = m.apiStatus; m.score = m.apiScore; m.playedByManual = false; }
+      const word = stateWord(m);
       const d = m.detail;
       const goalsOff = m.status === 'finished' ? goalCheck(m) : null;
       const coach = coachOn(coaches, m.date, n.coachId);
       const motmName = n.motm ? ((n.motm.playerId && profiles[n.motm.playerId] && profiles[n.motm.playerId].fullName) || n.motm.name) : null;
       const kicker = `${compName(m)}${m.round && !/friendl/i.test(m.round) ? ' · ' + shortRound(m.round) : ''} · ${dayShort(m.date)}`;
       return `
-        ${head({ kicker, title: m.status === 'finished' ? (penOutcome(m, TEAM) ? (penOutcome(m, TEAM) === 'W' ? 'Door na pen.' : 'Eruit na pen.') : r === 'W' ? 'Winst' : r === 'V' ? 'Verlies' : 'Gelijk') : timeOf(m.date), back: 'wedstrijden' })}
+        ${head({ kicker, title: m.status === 'finished' ? (penOutcome(m, TEAM) ? (penOutcome(m, TEAM) === 'W' ? 'Door na pen.' : 'Eruit na pen.') : r === 'W' ? 'Winst' : r === 'V' ? 'Verlies' : 'Gelijk') : twin ? 'Dubbel' : word ? word[0].toUpperCase() + word.slice(1) : timeOf(m.date), back: 'wedstrijden' })}
         <section class="section">
           <div class="score-big">
             <div class="score-big__team">${crest(m.homeTeam, 48)}<span>${esc(m.homeTeam.name)}</span></div>
@@ -724,12 +730,16 @@ export const matchViews = {
             ${n.awayFans != null ? `<dt>Uitvak</dt><dd><span class="mono">${nl(n.awayFans)}</span> <span class="muted">${esc(m.awayTeam.name)}</span></dd>` : ''}
           </dl>` : `<p class="muted">${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</p>`}
           ${m.manualDetail ? `<p><a class="ptag ptag--o21" href="#/invullen/${m.id}" style="text-decoration:none">handmatig ingevuld · ✎ aanpassen</a>${d.source ? ` <span class="muted" style="font-size:var(--fs-sm)">bron: ${esc(d.source)}</span>` : ''}</p>` : ''}
+          ${twin ? `<a class="warn-line" href="#/wedstrijd/${twin.id}" style="display:block;text-decoration:none">Deze wedstrijd staat er dubbel in (${esc(m.stateText || 'niet gespeeld')}). De gespeelde versie: ${esc(twin.homeTeam.name)} – ${esc(twin.awayTeam.name)}, ${esc(dayShort(twin.date))} →</a>` : ''}
+          ${m.playedByManual ? '<p class="muted" style="font-size:var(--fs-sm)">Gespeeld volgens jouw invoer. Highlightly: nog niet bekend.</p>' : ''}
           ${m.manualDetail && m.apiDetail ? (() => { const n = openDiffs(notes.manual, m.apiDetail, m, TEAM); return n ? `<a class="warn-line" href="#/vergelijk/${m.id}" style="display:block;text-decoration:none">Highlightly heeft nu ook details: ${n} ${n === 1 ? 'verschil' : 'verschillen'} met jouw invoer. Vergelijken →</a>` : ''; })() : ''}
-          ${m.status === 'finished' || Date.parse(m.date) < Date.now() - 3 * 3600e3
+          ${twin || m.status === 'postponed'
+            ? (m.manual ? '<div class="btn-row"><button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button></div>' : `<p class="muted" style="font-size:var(--fs-sm)">${twin ? 'Vul de details in bij de gespeelde versie.' : `Deze wedstrijd is ${esc(word)}: geen details.`}</p>`)
+            : m.status === 'finished' || Date.parse(m.date) < Date.now() - 3 * 3600e3
             ? `<div class="btn-row">${m.status === 'finished' && !m.manual ? `<button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${m.apiDetail || (d && !m.manualDetail) ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button>` : ''}${!d ? `<a class="btn ${m.status === 'finished' && !m.manual ? '' : 'btn--primary'}" href="#/invullen/${m.id}">Details invullen</a>` : ''}${m.manual ? '<button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button>' : ''}</div>`
             : '<p class="muted" style="font-size:var(--fs-sm)">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
         </section>
-        ${m.status === 'finished' || (Date.parse(m.date) - Date.now() < 12 * 3600e3 && m.status !== 'postponed') ? notesBlock(n, m.status !== 'finished') : ''}
+        ${m.status === 'finished' || (Date.parse(m.date) - Date.now() < 12 * 3600e3 && m.status !== 'postponed' && !twin && !word) ? notesBlock(n, m.status !== 'finished') : ''}
         ${d ? timeline(m) + statsBlock(m) + lineupsBlock(m) + playersBlock(m) : ''}`;
     },
     mount(root, ctx, args) {
