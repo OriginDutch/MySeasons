@@ -1,7 +1,8 @@
 // Trainers: lijst (Meer → Trainers) en een eigen pagina per trainer met aanstellingen en foto's.
 
-import { esc, icons } from './ui.js';
-import { getCoaches } from './store.js';
+import { esc, icons, toast } from './ui.js';
+import { getCoaches, saveCoachesBatch } from './store.js';
+import { openSheet } from './editor.js';
 import { coachName } from './coaches.js';
 import { flag, nationalities } from './flags.js';
 import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb, linkBanner } from './photos.js';
@@ -46,7 +47,7 @@ export const coachViews = {
       return `${head('Trainers', coachName(c) || '?', '#/trainers')}
         <section class="section">
           <div class="player-hero">${hero}<span class="muted">${nat} ${c.dob ? `geboren ${esc(dmy(c.dob))}` : ''}</span></div>
-          <div><button class="btn btn--sm" type="button" data-photo-add>Foto toevoegen</button></div>
+          <div class="btn-row"><button class="btn btn--sm" type="button" data-coach-link="${esc(String(c.id))}" data-url="${esc(c.photoUrl || '')}">Foto-link</button><button class="btn btn--sm" type="button" data-photo-add>Foto toevoegen</button></div>
         </section>
         ${linkBanner(CUR)}
         ${galleryHtml(CUR.photos, c.gallery, { linkUrl: c.photoUrl })}
@@ -54,6 +55,28 @@ export const coachViews = {
           <div class="list">${(c.appointments || []).map((a) => `<div class="list-row"><span class="list-row__main"><span class="list-row__title">${esc(a.role || 'Trainer')}</span>
             <span class="list-row__sub">${esc(dmy(a.from))} → ${esc(dmy(a.to))}</span></span></div>`).join('') || '<p class="muted">Geen aanstellingen bekend.</p>'}</div></section>`;
     },
-    mount(root, ctx) { mountPhotos(root, ctx, () => CUR); },
+    mount(root, ctx) {
+      mountPhotos(root, ctx, () => CUR);
+      root.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-coach-link]');
+        if (!b) return;
+        const before = b.dataset.url || '';
+        const data = await openSheet({
+          title: 'Foto-link',
+          body: `<label class="field"><span>Foto-link</span><input name="photo" type="url" inputmode="url" autocomplete="off" placeholder="https://… (link naar de afbeelding zelf)" value="${esc(before)}" data-photo-input></label>
+            <div class="photo-preview" data-photo-preview ${before ? '' : 'hidden'}><img alt="" referrerpolicy="no-referrer"${before ? ` src="${esc(before)}"` : ''}><span class="muted" data-photo-msg></span></div>
+            <p class="muted sheet__note">Terugval als er geen opgeslagen foto is. Van een Transfermarkt-link kan de app de foto ook binnenhalen (Foto toevoegen) en wekelijks kijken of er een nieuwe versie is.</p>`,
+          validate: (fd) => (fd.get('photo') && !/^https:\/\/\S+$/.test(String(fd.get('photo')).trim()) ? 'De link moet met https:// beginnen.' : null),
+        });
+        if (!data) return;
+        const url = String(data.get('photo') || '').trim() || null;
+        if (url === (before || null)) { toast('Niets veranderd'); return; }
+        try {
+          await saveCoachesBatch([{ id: b.dataset.coachLink, photoUrl: url }]);
+          toast('Foto-link opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await saveCoachesBatch([{ id: b.dataset.coachLink, photoUrl: before || null }]); ctx.refresh(); } });
+          ctx.refresh();
+        } catch (err) { toast(`Opslaan lukte niet: ${err.message || err}`); }
+      });
+    },
   },
 };
