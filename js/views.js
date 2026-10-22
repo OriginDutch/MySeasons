@@ -18,6 +18,7 @@ import { leaguesViews } from './leaguesview.js';
 import { coachViews } from './coachview.js';
 import { photosViews } from './photosview.js';
 import { youthViews } from './youthmigrate.js';
+import { manualViews } from './manualview.js';
 import { squadSiteViews } from './squadsite.js';
 import { getCallsToday, getAllMatches, getAllNotes, attachDetails } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
@@ -62,6 +63,7 @@ export const views = {
   ...coachViews,
   ...photosViews,
   ...youthViews,
+  ...manualViews,
   ...squadSiteViews,
 
   meer: {

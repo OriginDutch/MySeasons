@@ -965,3 +965,20 @@ a.po-team:hover span { text-decoration: underline; }
 }
 .po-legs { font-size: var(--fs-xs); color: var(--muted); padding: 8px 0 2px; }
 .po-legs--back { margin-top: 6px; border-top: 2px solid color-mix(in srgb, var(--ink) 45%, transparent); padding-top: 10px; }
+
+/* ---------- Details invullen (manualview.js) ---------- */
+.mv { display: flex; flex-direction: column; gap: 10px; }
+.mv-steps { display: flex; gap: 4px; }
+.mv-steps i { flex: 1; height: 3px; background: var(--hairline); }
+.mv-steps i.on { background: var(--accent); }
+.mv-title { font-size: var(--fs-xl, 22px); margin: 0 0 4px; }
+.mv-pick { display: grid; grid-template-columns: 22px 26px minmax(0, 1fr) auto; align-items: center; gap: 8px; cursor: pointer; }
+.mv-pick input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.mv-nr { text-align: right; }
+.mv-line { font-size: var(--fs-sm); }
+.mv-warn { color: var(--accent-text); }
+.mv-item { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.mv-min { color: var(--accent-text); }
+.mv-add { display: flex; gap: 8px; align-items: center; }
+.mv-add input { flex: 1; min-width: 0; min-height: 40px; padding: 0 10px; border: 1px solid var(--hairline); background: transparent; color: inherit; font: inherit; }
+.mv-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); }

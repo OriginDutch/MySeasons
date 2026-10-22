@@ -1167,6 +1167,10 @@ export const playerViews = {
         ${galleryHtml(CUR_PH.photos, gal, { linkUrl: p.profile && p.profile.photoUrl })}
         <section class="section">
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
+          ${(() => {
+            const fr = buildSquad(list, TEAM, profiles, { friendlies: true }).players.find((x) => String(x.id) === String(p.id));
+            return fr && fr.apps ? `<p class="muted" style="font-size:var(--fs-sm);margin:0">Oefenduels (tellen hierboven niet mee): ${fr.apps} ${fr.apps === 1 ? 'duel' : 'duels'} · ${fr.goals} ${fr.goals === 1 ? 'goal' : 'goals'}${fr.assists ? ` · ${fr.assists} ${fr.assists === 1 ? 'assist' : 'assists'}` : ''} · ${fr.minutes} min</p>` : '';
+          })()}
         </section>
         ${(() => {
           const al = Object.entries(profiles).filter(([aid, pr]) => /^\d+$/.test(aid) && pr && String(pr.linkedTo) === String(p.id));

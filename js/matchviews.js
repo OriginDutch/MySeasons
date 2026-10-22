@@ -114,9 +114,9 @@ export function resultChip(m) {
   return `<span class="result result--${r}">${r}</span>${p ? ` <span class="result result--${p} result--pen">${p} na pen.</span>` : ''}`;
 }
 
-export async function correctedList() {
-  const [all, notes, profiles] = await Promise.all([getSeasonMatches(getSeason()), getAllNotes(), getPlayers()]);
-  const list = all.filter(inSeason(getSeason()));
+export async function correctedList(season = getSeason()) {
+  const [all, notes, profiles] = await Promise.all([getSeasonMatches(season), getAllNotes(), getPlayers()]);
+  const list = all.filter(inSeason(season));
   let total = 0; let conflicts = 0;
   const out = list.map((m) => {
     const n = notes[m.id];
@@ -716,8 +716,9 @@ export const matchViews = {
             ${n.attendance != null ? `<dt>Toeschouwers</dt><dd class="mono">${nl(n.attendance)}</dd>` : ''}
             ${n.awayFans != null ? `<dt>Uitvak</dt><dd><span class="mono">${nl(n.awayFans)}</span> <span class="muted">${esc(m.awayTeam.name)}</span></dd>` : ''}
           </dl>` : `<p class="muted">${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</p>`}
-          ${m.status === 'finished'
-            ? `<div><button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${d ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button></div>`
+          ${m.manualDetail ? `<p><a class="ptag ptag--o21" href="#/invullen/${m.id}" style="text-decoration:none">handmatig ingevuld · ✎ aanpassen</a>${d.source ? ` <span class="muted" style="font-size:var(--fs-sm)">bron: ${esc(d.source)}</span>` : ''}</p>` : ''}
+          ${m.status === 'finished' || Date.parse(m.date) < Date.now() - 3 * 3600e3
+            ? `<div class="btn-row">${m.status === 'finished' ? `<button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${m.apiDetail || (d && !m.manualDetail) ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button>` : ''}${!d ? `<a class="btn ${m.status === 'finished' ? '' : 'btn--primary'}" href="#/invullen/${m.id}">Details invullen</a>` : ''}</div>`
             : '<p class="muted" style="font-size:var(--fs-sm)">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
         </section>
         ${m.status === 'finished' || (Date.parse(m.date) - Date.now() < 12 * 3600e3 && m.status !== 'postponed') ? notesBlock(n, m.status !== 'finished') : ''}
@@ -790,11 +791,12 @@ function timeline(m) {
   const OTHER = { 'var penalty': 'VAR: penalty', 'missed penalty': 'Pen. gemist', 'var goal cancelled': 'VAR: afgekeurd', 'var goal confirmed': 'VAR: goal telt' };
   const badge = (k, t) => {
     if (k === 'goal') return /own/i.test(t) ? 'Eigen goal' : /penalty/i.test(t) ? 'Penalty' : 'Goal';
+    if (/second yellow|yellow.?red/i.test(String(t || ''))) return '2× geel';
     return word[k] || OTHER[String(t || '').toLowerCase()] || esc(t);
   };
   return `
     <section class="section">
-      <div class="section__label"><span>Tijdlijn</span><span>tik op een moment om te corrigeren</span></div>
+      <div class="section__label"><span>Tijdlijn</span><span>${m.manualDetail ? 'zelf ingevuld' : 'tik op een moment om te corrigeren'}</span></div>
       <ol class="timeline">${ev.map((e) => {
         const k = kind(e.type);
         const side = e.teamId === homeId ? 'home' : 'away';
@@ -857,7 +859,7 @@ function lineupList(l, title) {
     <div class="lineup">
       <div class="lineup__head"><span>${esc(title)}</span><span class="mono muted">${esc(l.formation || '')}</span></div>
       <ul>${l.starters.map(row).join('')}</ul>
-      <div class="lineup__subs muted">Bank</div>
+      <div class="lineup__subs muted">${l.manual ? 'Ingevallen' : 'Bank'}</div>
       <ul class="lineup__bench">${l.subs.map(row).join('')}</ul>
     </div>`;
 }

@@ -41,6 +41,11 @@ export function saveNotes(id, partial) {
   return setDoc(doc(db, 'matchNotes', String(id)), { ...partial, updatedAt: new Date().toISOString() }, { merge: true });
 }
 
+/** Handmatige details (manual.js) in één keer vervangen; null = weg. */
+export function saveManual(id, manual) {
+  return setDoc(doc(db, 'matchNotes', String(id)), { manual: manual === null ? deleteField() : manual, updatedAt: new Date().toISOString() }, { mergeFields: ['manual', 'updatedAt'] });
+}
+
 /** changes: { key: value | null }. null verwijdert die correctie. */
 export function saveCorrections(id, changes) {
   const corrections = {};

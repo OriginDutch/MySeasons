@@ -2,7 +2,7 @@
 //
 // Wie: iedereen die bij de club op het wedstrijdformulier stond (basis of bank), op speler-id.
 // Goals en assists: uit de tijdlijn, mét jouw correcties. Minuten, kaarten en cijfer: box score.
-// Oefenduels tellen niet mee.
+// Oefenduels tellen niet mee (wel apart op te vragen met { friendlies: true }).
 
 import { roleFor, lineOfRole } from './roles.js';
 import { kindOf } from './corrections.js';
@@ -27,11 +27,12 @@ function sideOf(m, teamId) {
 }
 
 /** list: wedstrijden mét correcties toegepast. Geeft { players: [...], matches: n }. */
-export function buildSquad(list, teamId, profiles = {}) {
+export function buildSquad(list, teamId, profiles = {}, { friendlies = false } = {}) {
   // Seizoen van deze lijst (meest voorkomend), voor jouw rugnummer van dat seizoen.
   const seasonCount = {}; list.forEach((m) => { const y = m.league && m.league.season; if (y != null) seasonCount[y] = (seasonCount[y] || 0) + 1; });
   const year = Object.entries(seasonCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  const games = sortByDate(list.filter((m) => m.detail && m.status === 'finished' && official(m)));
+  // Standaard alleen officiële duels; { friendlies: true } = alleen oefenduels (apart op de spelerspagina).
+  const games = sortByDate(list.filter((m) => m.detail && m.status === 'finished' && (friendlies ? !official(m) : official(m))));
   const map = new Map();
   const get = (id) => {
     if (!map.has(id)) {

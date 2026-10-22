@@ -7,6 +7,9 @@
 //   conflict   API is veranderd, of het event bestaat niet meer → jij beslist
 // Tot je beslist, blijft jouw waarde gelden.
 
+import { MAIN_CLUB } from './config.js';
+import { manualDetail } from './manual.js';
+
 export const EVENT_FIELDS = {
   goal: [['player', 'schutter'], ['assist', 'assist'], ['minute', 'minuut'], ['extra', 'blessuretijd']],
   yellow: [['player', 'speler'], ['minute', 'minuut'], ['extra', 'blessuretijd']],
@@ -155,6 +158,12 @@ export function applyCorrections(match, notes) {
 
   if (out.detail) out.detail.events.sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0) || (a.extra ?? 0) - (b.extra ?? 0));
   out.scoreCorrected = !!corrections.score;
+  // Handmatige details gaan voor (zie manual.js); de Highlightly-details blijven bewaard voor de vergelijking.
+  if (notes && notes.manual && (notes.manual.starters || []).length) {
+    out.apiDetail = out.detail || null;
+    out.detail = manualDetail(notes.manual, out, MAIN_CLUB.id);
+    out.manualDetail = true;
+  }
   return { match: out, statuses };
 }
 
