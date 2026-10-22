@@ -553,6 +553,11 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .gal__src { position: absolute; top: 84px; right: 4px; background: rgb(0 0 0 / 0.6); color: #fff; font-size: 9px; padding: 1px 4px; border-radius: 3px; }
 .gal__lab { font-size: var(--fs-micro); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gal__add > span:first-child { width: 84px; height: 105px; border: 1.5px dashed var(--muted); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 28px; color: var(--muted); }
+.ph-new { display: grid; gap: 10px; padding: 12px; border-left: 3px solid var(--accent); background: var(--surface-hover); }
+.ph-new__imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ph-new__imgs figure { margin: 0; display: grid; gap: 4px; }
+.ph-new__imgs img, .ph-new__none { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; object-position: 50% 20%; border-radius: 6px; background: var(--photo); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.ph-new__imgs figcaption { font-size: var(--fs-micro); color: var(--muted); }
 .ph-big { width: 100%; max-height: 60vh; object-fit: contain; background: var(--photo); border-radius: 6px; }
 .stadium-hero { width: 100%; max-height: 260px; object-fit: cover; border-radius: 8px; background: var(--photo); cursor: pointer; }
 .player-hero__photo[data-photo-open] { cursor: pointer; }

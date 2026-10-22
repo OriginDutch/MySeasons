@@ -4,7 +4,7 @@ import { esc, icons } from './ui.js';
 import { getCoaches } from './store.js';
 import { coachName } from './coaches.js';
 import { flag, nationalities } from './flags.js';
-import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb } from './photos.js';
+import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb, linkBanner } from './photos.js';
 import { getSeason } from './seasonstate.js';
 
 let CUR = null;
@@ -40,7 +40,7 @@ export const coachViews = {
       const id = decodeURIComponent(args[0] || '');
       const c = (await getCoaches().catch(() => [])).find((x) => String(x.id) === id);
       if (!c) return `${head('Trainers', 'Niet gevonden', '#/trainers')}<section class="section"><p class="muted">Deze trainer staat niet in je data.</p></section>`;
-      CUR = await loadPhotos('coach', c.id, c.gallery);
+      CUR = await loadPhotos('coach', c.id, c.gallery, { linkUrl: c.photoUrl, linkCheck: c.photoLinkCheck });
       const hero = heroImg(CUR.photos, c.gallery, getSeason(), c.photoUrl);
       const nat = c.nationality ? nationalities(c.nationality).map((n) => flag(n, 14)).join('') : '';
       return `${head('Trainers', coachName(c) || '?', '#/trainers')}
@@ -48,6 +48,7 @@ export const coachViews = {
           <div class="player-hero">${hero}<span class="muted">${nat} ${c.dob ? `geboren ${esc(dmy(c.dob))}` : ''}</span></div>
           <div><button class="btn btn--sm" type="button" data-photo-add>Foto toevoegen</button></div>
         </section>
+        ${linkBanner(CUR)}
         ${galleryHtml(CUR.photos, c.gallery, { linkUrl: c.photoUrl })}
         <section class="section"><div class="section__label"><span>Aanstellingen</span><span>${(c.appointments || []).length}</span></div>
           <div class="list">${(c.appointments || []).map((a) => `<div class="list-row"><span class="list-row__main"><span class="list-row__title">${esc(a.role || 'Trainer')}</span>

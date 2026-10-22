@@ -19,7 +19,7 @@ import { dayShort, opponentOf, isHome } from './season.js';
 import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './playerextra.js';
 import { currentSquad } from './importer.js';
 import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf } from './shirts.js';
-import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb } from './photos.js';
+import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb, linkBanner } from './photos.js';
 
 let CUR_PH = null; // foto's van de geopende spelerspagina
 
@@ -658,7 +658,7 @@ function periodText(pr) {
 
 /** Spelerspagina zonder Highlightly-stats dit seizoen: alleen het profiel uit je archief. */
 async function profileOnlyPage(pr, id) {
-  CUR_PH = await loadPhotos('player', id, pr.gallery);
+  CUR_PH = await loadPhotos('player', id, pr.gallery, { linkUrl: pr.photoUrl, linkCheck: pr.photoLinkCheck });
   const name = profName(pr) || '?';
   const per = periodText(pr);
   return `
@@ -671,6 +671,7 @@ async function profileOnlyPage(pr, id) {
         : 'Geen officiële duels in dit seizoen. Kies een ander seizoen via de clubnaam op Home.'}</p>
       ${pr.linkedTo == null ? `<div><button class="btn btn--sm" type="button" data-link-player="${esc(id)}">Koppelen aan Highlightly-speler</button></div>` : ''}
     </section>
+    ${linkBanner(CUR_PH)}
     ${galleryHtml(CUR_PH.photos, pr.gallery, { linkUrl: pr.photoUrl })}
     ${profileBlock(pr, id)}
     ${valueBlock(pr, id)}
@@ -847,7 +848,7 @@ export const playerViews = {
           <section class="section"><p class="muted">Deze speler staat (nog) niet in een opgehaalde wedstrijd.</p></section>`;
       }
       const gal = p.profile && p.profile.gallery;
-      CUR_PH = await loadPhotos('player', p.id, gal);
+      CUR_PH = await loadPhotos('player', p.id, gal, { linkUrl: p.profile && p.profile.photoUrl, linkCheck: p.profile && p.profile.photoLinkCheck });
       const facts = playerFacts(p, players);
       const tiles = [
         [p.apps, p.apps === 1 ? 'duel' : 'duels', p.starts ? `${p.starts} basis` : ''],
@@ -867,6 +868,7 @@ export const playerViews = {
           <p class="muted" style="font-size:var(--fs-sm);margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>
           <div class="btn-row"><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}" data-photo="${esc((p.profile && p.profile.photoUrl) || '')}">Naam en foto-link</button><button class="btn" type="button" data-photo-add>Foto toevoegen</button></div>
         </section>
+        ${linkBanner(CUR_PH)}
         ${galleryHtml(CUR_PH.photos, gal, { linkUrl: p.profile && p.profile.photoUrl })}
         <section class="section">
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>

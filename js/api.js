@@ -19,7 +19,7 @@ export function getLastRateLimit() {
   return lastRateLimit;
 }
 
-async function call(path, params, { method = 'GET', body, raw = null, binary = false } = {}) {
+async function call(path, params, { method = 'GET', body, raw = null, binary = false, blob = false } = {}) {
   const user = auth.currentUser;
   if (!user) throw new ApiError('Niet ingelogd', 401);
   const token = await user.getIdToken();
@@ -48,6 +48,7 @@ async function call(path, params, { method = 'GET', body, raw = null, binary = f
   }
 
   if (binary && res.ok) return res.arrayBuffer();
+  if (blob && res.ok) return res.blob();
   let data = null;
   try { data = await res.json(); } catch { /* geen JSON */ }
 
@@ -57,6 +58,11 @@ async function call(path, params, { method = 'GET', body, raw = null, binary = f
     throw new ApiError(msg, res.status, data && data.detail);
   }
   return data;
+}
+
+/** Plaatje van een toegestane site (Transfermarkt, clubsite) als Blob, via de Worker. */
+export function fetchImage(url) {
+  return call('/img', { url }, { blob: true });
 }
 
 /** Test login en Worker-instellingen. Kost geen Highlightly-quotum. */

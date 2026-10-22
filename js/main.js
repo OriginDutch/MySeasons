@@ -232,6 +232,7 @@ watchAuth((user) => {
     // Eenmalig: bestaande transfers aan bekende clubs koppelen.
     setTimeout(() => import('./clubpick.js').then((m) => m.linkTransferClubs()).catch(() => {}), 8000);
     // Wekelijkse back-up naar de Worker, rustig na het opstarten.
+    setTimeout(() => import('./photos.js').then((m) => m.checkLinks()).catch(() => {}), 45000); // foto-links: hooguit eens per week
     setTimeout(() => import('./backup.js').then((m) => m.autoBackup()).then((r) => { if (r && r.ok) toast(`Wekelijkse back-up gemaakt · ${r.docs} documenten`); }).catch(() => {}), 20000);
   } else {
     renderLogin();

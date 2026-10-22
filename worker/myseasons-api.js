@@ -22,6 +22,7 @@ import { pushApi, pushScheduled } from './push.js';
 import { backupApi } from './backup.js';
 import { followUp } from './followup.js';
 import { squadApi, squadScheduled } from './squadpage.js';
+import { imgApi } from './imgproxy.js';
 
 const PROJECT_ID = 'myseasons-c1dd9';
 const HIGHLIGHTLY_BASE = 'https://soccer.highlightly.net';
@@ -421,6 +422,9 @@ export default {
       if (!env.MS_KV) return json({ error: 'Selectiepagina: KV-namespace MS_KV is nog niet gekoppeld' }, 501, origin);
       return squadApi(request, env, url, (b, st) => json(b, st, origin));
     }
+
+    // Fotogalerij: plaatje van een toegestane site binnenhalen (geen Highlightly-call).
+    if (url.pathname === '/img') return imgApi(url, (b, st) => json(b, st, origin), corsHeaders(origin));
 
     // Gezondheidscheck: geen Highlightly-call, kost geen quotum.
     if (url.pathname === '/health') {

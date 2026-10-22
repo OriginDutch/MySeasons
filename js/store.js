@@ -324,3 +324,8 @@ export function setOwnerGallery(kind, id, gallery) {
   const [col, field] = GALLERY_AT[kind];
   return setDoc(doc(db, col, String(id)), { [field]: gallery }, { mergeFields: [field] });
 }
+/** Stand van de wekelijkse linkcontrole bij de eigenaar: { url, hash, at, pending: { hash, at } | null }. */
+export function setOwnerLinkCheck(kind, id, lc) {
+  const [col] = GALLERY_AT[kind];
+  return setDoc(doc(db, col, String(id)), { photoLinkCheck: lc }, { mergeFields: ['photoLinkCheck'] });
+}

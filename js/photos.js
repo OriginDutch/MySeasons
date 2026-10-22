@@ -6,7 +6,8 @@
 // Galerijsectie pas vanaf 2 foto's, inklapbaar; open/dicht geldt voor alle galerijen, per apparaat.
 
 import { esc, toast } from './ui.js';
-import { getPhotos, addPhoto, updatePhoto, deletePhoto, setOwnerGallery, setMeta } from './store.js';
+import { getPhotos, addPhoto, updatePhoto, deletePhoto, setOwnerGallery, setOwnerLinkCheck, setMeta, getMeta, getPlayers, getCoaches } from './store.js';
+import { fetchImage } from './api.js';
 import { CURRENT_SEASON } from './config.js';
 
 export const ownerKey = (kind, id) => `${kind}:${id}`;
@@ -132,12 +133,21 @@ function dialog(html) {
 /** Foto toevoegen: van je telefoon (meerdere tegelijk mag). */
 function addSheet(ctx, o) {
   const dlg = dialog(`<div class="sheet__head"><span class="sheet__title">Foto toevoegen</span></div>
-    <label class="btn btn--primary" style="align-self:flex-start;cursor:pointer">Kies van je telefoon<input type="file" accept="image/*" multiple data-ph-file hidden></label>
+    <div class="btn-row"><label class="btn btn--primary" style="cursor:pointer">Kies van je telefoon<input type="file" accept="image/*" multiple data-ph-file hidden></label>
+      ${o.linkUrl ? '<button class="btn" type="button" data-ph-link>Van de link binnenhalen</button>' : ''}</div>
     <div class="field-row"><label class="field"><span>Seizoen</span><select data-ph-season>${seasonOptions(CURRENT_SEASON)}</select></label></div>
     <label class="field field--check"><input type="checkbox" data-ph-main ${o.photos.length ? '' : 'checked'}> <span>Als hoofdfoto gebruiken</span></label>
     <p class="muted sheet__note">Wordt verkleind en privé opgeslagen in je eigen database. Een link (bijv. Transfermarkt) blijft de terugval als er geen opgeslagen foto is.</p>
     <p class="muted sheet__note" data-ph-msg></p>
     <div class="sheet__actions"><button class="btn" type="button" data-close>Sluiten</button></div>`);
+  dlg.querySelector('[data-ph-link]')?.addEventListener('click', async (e) => {
+    const msg = dlg.querySelector('[data-ph-msg]');
+    e.currentTarget.disabled = true; msg.textContent = 'Binnenhalen via de Worker…';
+    try {
+      const r = await importFromLink(o, { season: dlg.querySelector('[data-ph-season]').value, asMain: dlg.querySelector('[data-ph-main]').checked });
+      dlg.close(); toast(r.dup ? 'Deze foto staat er al in' : 'Foto van de link opgeslagen'); ctx.refresh();
+    } catch (err) { msg.textContent = `Lukte niet: ${err.message || err}`; e.currentTarget.disabled = false; }
+  });
   dlg.querySelector('[data-ph-file]').addEventListener('change', async (e) => {
     const files = [...e.target.files];
     if (!files.length) return;
@@ -208,10 +218,10 @@ function viewSheet(ctx, o, photoId) {
  * Laden voor een detailpagina. kind: 'player' | 'coach' | 'stadium'; gallery = verwijzing uit het eigenaar-document.
  * Geeft { owner, kind, id, photos, gallery } terug om aan heroImg/galleryHtml/mountPhotos te geven.
  */
-export async function loadPhotos(kind, id, gallery) {
+export async function loadPhotos(kind, id, gallery, { linkUrl = null, linkCheck = null } = {}) {
   const owner = ownerKey(kind, id);
   const photos = await getPhotos(owner).catch(() => []);
-  return { owner, kind, id: String(id), photos, gallery: gallery || null };
+  return { owner, kind, id: String(id), photos, gallery: gallery || null, linkUrl: linkUrl || null, linkCheck: linkCheck || null };
 }
 
 /** Knoppen: [data-photo-add] (toevoegen) en [data-photo-open] (bekijken). getO: () => object uit loadPhotos. */
@@ -219,10 +229,108 @@ export function mountPhotos(root, ctx, getO) {
   root.addEventListener('click', (e) => {
     const add = e.target.closest('[data-photo-add]');
     const open = e.target.closest('[data-photo-open]');
-    if (!add && !open) return;
+    const la = e.target.closest('[data-link-act]');
+    if (!add && !open && !la) return;
     const o = getO();
     if (!o) return;
+    if (la) { linkAction(ctx, o, la.dataset.linkAct, la); return; }
     if (add) addSheet(ctx, o);
     else viewSheet(ctx, o, open.dataset.photoOpen);
   });
+}
+
+// ---------- Links binnenhalen en nieuwe versies volgen ----------
+
+const LINK_HOSTS = /^https:\/\/([a-z0-9-]+\.)*(transfermarkt\.(technology|nl|com|de|co\.uk|be)|tmssl\.akamaized\.net|cambuur\.nl)\//i;
+export const importableLink = (url) => LINK_HOSTS.test(String(url || ''));
+const bigTm = (url) => String(url || '').replace(/\/portrait\/(header|small|medium)\//, '/portrait/big/');
+
+/** Plaatje achter de link ophalen (grote Transfermarkt-versie eerst). */
+async function linkBlob(url) {
+  const big = bigTm(url);
+  try { return await fetchImage(big); } catch (err) { if (big === url) throw err; }
+  return fetchImage(url);
+}
+
+/** Link binnenhalen als foto. Geeft { dup } terug. */
+export async function importFromLink(o, { season = null, asMain = false } = {}) {
+  if (!o.linkUrl) throw new Error('Geen link ingevuld');
+  if (!importableLink(o.linkUrl)) throw new Error('Van deze site kan de app niet binnenhalen (alleen Transfermarkt en de clubsite)');
+  const blob = await linkBlob(o.linkUrl);
+  const img = await prepareImage(blob);
+  await setOwnerLinkCheck(o.kind, o.id, { url: o.linkUrl, hash: img.hash, at: new Date().toISOString(), pending: null });
+  if (o.photos.some((p) => p.hash === img.hash)) return { dup: true };
+  const data = { owner: o.owner, season: season ? Number(season) : null, ...img, source: 'link', sourceUrl: o.linkUrl, addedAt: new Date().toISOString() };
+  const id = await addPhoto(data);
+  const mainId = asMain || !(o.gallery && o.gallery.main) ? id : o.gallery.main.id;
+  await writeGallery(o.kind, o.id, [...o.photos, { id, ...data }], mainId);
+  return { dup: false, id };
+}
+
+/** Banner als de foto achter de link veranderd is (gevonden door de wekelijkse controle). */
+export function linkBanner(o) {
+  const lc = o && o.linkCheck;
+  if (!lc || !lc.pending || lc.url !== o.linkUrl) return '';
+  const cur = o.gallery && o.gallery.main;
+  return `<section class="section"><div class="ph-new">
+      <div class="ph-new__imgs"><figure>${cur ? `<img src="${cur.thumb}" alt="">` : '<span class="ph-new__none">geen</span>'}<figcaption class="mono">huidige hoofdfoto</figcaption></figure>
+        <figure><img src="${esc(bigTm(o.linkUrl))}" alt="" referrerpolicy="no-referrer" onerror="if(this.src!=='${esc(o.linkUrl)}')this.src='${esc(o.linkUrl)}'"><figcaption class="mono">nieuw · link</figcaption></figure></div>
+      <p style="margin:0;font-size:var(--fs-md)"><strong>Nieuwe versie</strong> van de foto achter je link (gezien ${esc(new Date(lc.pending.at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }))}).</p>
+      <div class="btn-row"><button class="btn btn--primary btn--sm" type="button" data-link-act="main">Als hoofdfoto</button>
+        <button class="btn btn--sm" type="button" data-link-act="add">Alleen toevoegen</button>
+        <button class="btn btn--sm" type="button" data-link-act="ignore">Negeren</button></div>
+    </div></section>`;
+}
+
+async function linkAction(ctx, o, act, btn) {
+  btn.disabled = true;
+  try {
+    if (act === 'ignore') {
+      await setOwnerLinkCheck(o.kind, o.id, { ...o.linkCheck, hash: o.linkCheck.pending.hash, pending: null, at: new Date().toISOString() });
+      toast('Genegeerd: deze versie meldt de app niet opnieuw');
+    } else {
+      const r = await importFromLink(o, { season: CURRENT_SEASON, asMain: act === 'main' });
+      toast(r.dup ? 'Deze foto stond er al in' : act === 'main' ? 'Nieuwe hoofdfoto' : 'Toegevoegd aan de galerij');
+    }
+    ctx.refresh();
+  } catch (err) { toast(`Lukte niet: ${err.message || err}`); btn.disabled = false; }
+}
+
+const WEEK = 7 * 864e5;
+let checking = false;
+/**
+ * Hooguit eens per week (bij het openen van de app): per speler en trainer met een link kijken of het
+ * plaatje veranderd is. Eerste keer: alleen onthouden. Veranderd: melding in de inbox + banner op de pagina.
+ */
+export async function checkLinks({ force = false, max = 80 } = {}) {
+  if (checking) return null;
+  const last = await getMeta('linkCheckRun').catch(() => null);
+  if (!force && last && last.at && Date.now() - Date.parse(last.at) < WEEK) return null;
+  checking = true;
+  const out = { checked: 0, changed: 0, failed: 0 };
+  try {
+    const [players, coaches] = await Promise.all([getPlayers().catch(() => ({})), getCoaches().catch(() => [])]);
+    const owners = [
+      ...Object.entries(players).filter(([, pr]) => pr && !pr.linkedTo && importableLink(pr.photoUrl)).map(([id, pr]) => ({ kind: 'player', id, url: pr.photoUrl, lc: pr.photoLinkCheck, name: pr.fullName || pr.legacyName || pr.apiName || 'speler', href: `#/speler/${encodeURIComponent(id)}` })),
+      ...coaches.filter((c) => importableLink(c.photoUrl)).map((c) => ({ kind: 'coach', id: c.id, url: c.photoUrl, lc: c.photoLinkCheck, name: `${c.firstname || ''} ${c.lastname || ''}`.trim(), href: `#/trainer/${encodeURIComponent(c.id)}` })),
+    ].sort((a, b) => String((a.lc || {}).at || '').localeCompare(String((b.lc || {}).at || ''))).slice(0, max); // langst niet gecontroleerd eerst
+    for (const o of owners) {
+      try {
+        const blob = await linkBlob(o.url);
+        const hash = await sha(await blob.arrayBuffer());
+        const now = new Date().toISOString();
+        const lc = o.lc && o.lc.url === o.url ? o.lc : null;
+        if (!lc) await setOwnerLinkCheck(o.kind, o.id, { url: o.url, hash, at: now, pending: null });
+        else if (hash !== lc.hash && !(lc.pending && lc.pending.hash === hash)) {
+          await setOwnerLinkCheck(o.kind, o.id, { ...lc, at: now, pending: { hash, at: now } });
+          const { addMessage } = await import('./inbox.js');
+          await addMessage({ id: `newphoto:${o.kind}:${o.id}:${hash}`, kind: 'info', title: `Nieuwe foto voor ${o.name}`, text: 'Het plaatje achter je foto-link is veranderd. Kies op de pagina: als hoofdfoto, alleen toevoegen of negeren.', href: o.href });
+          out.changed++;
+        } else await setOwnerLinkCheck(o.kind, o.id, { ...lc, at: now });
+        out.checked++;
+      } catch { out.failed++; }
+    }
+    await setMeta('linkCheckRun', { at: new Date().toISOString(), ...out });
+    return out;
+  } finally { checking = false; }
 }
