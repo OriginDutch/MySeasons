@@ -434,9 +434,10 @@ async function editProfile(ctx, id, profiles) {
       <label class="field"><span>Voet</span><select name="foot">${FOOT_OPTS.map((f) => `<option value="${f}" ${(pr.foot || '') === f ? 'selected' : ''}>${f || '—'}</option>`).join('')}</select></label></div>
       <div class="field-row"><label class="field"><span>Lengte (cm)</span><input name="height" type="number" inputmode="numeric" min="140" max="220" value="${pr.height ?? ''}"></label>
       <label class="field"><span>Contract tot</span><input name="contract" type="date" value="${esc(pr.contractUntil || '')}"></label></div>
+      <label class="field"><span>Bij de club sinds</span><input name="joined" type="date" value="${esc(String(pr.joined || '').slice(0, 10))}"></label>
       <label class="field"><span>Selectie in ${esc(seasonLabel())}</span><select name="level"><option value="first" ${levelFor(pr, getSeason()) === 'first' ? 'selected' : ''}>Eerste elftal</option><option value="o21" ${levelFor(pr, getSeason()) === 'o21' ? 'selected' : ''}>O21</option></select></label>
       <label class="field"><span>Notitie</span><textarea name="note" rows="3" maxlength="500" placeholder="bijv. Clubopties +1 jaar">${esc(pr.note || '')}</textarea></label>
-      <p class="muted sheet__note">Het rugnummer geldt alleen voor ${esc(seasonLabel())}; leeg = het nummer uit de opstellingen. Ander seizoen? Kies dat eerst via de clubnaam op Home.</p>`,
+      <p class="muted sheet__note">Het rugnummer geldt alleen voor ${esc(seasonLabel())}; leeg = het nummer uit de opstellingen. Ander seizoen? Kies dat eerst via de clubnaam op Home. "Bij de club sinds" telt voor de periode bij de club zolang er geen transfers zijn; staan die er wel, dan gaan die voor.</p>`,
     validate: (fd) => {
       if (fd.get('nat2') && fd.get('nat2') === fd.get('nat1')) return 'Twee keer dezelfde nationaliteit.';
       const h = fd.get('height'); if (h && (Number(h) < 140 || Number(h) > 220)) return 'Lengte tussen 140 en 220 cm.';
@@ -455,6 +456,7 @@ async function editProfile(ctx, id, profiles) {
     foot: data.get('foot') || null,
     height: data.get('height') ? Number(data.get('height')) : null,
     contractUntil: data.get('contract') || null,
+    joined: data.get('joined') || null,
     note: String(data.get('note') || '').trim() || null,
   };
   if (data.get('level') !== levelFor(pr, getSeason())) { next.levels = { ...(pr.levels || levelsOf(pr)), [getSeason()]: data.get('level') }; next.squadLevel = null; }
