@@ -8,9 +8,10 @@
 import { db } from './firebase.js';
 import { nameMatch as nameOnly, nameStandings, nameTeam, rawMatch, rawStandings } from './clubnames.js';
 import { markShootout } from './shootout.js';
+import { reconcileIds } from './reconcile.js';
 
 // Bij elke gelezen wedstrijd: eigen clubnamen erop en de strafschoppenserie herkennen (telt niet als goals).
-const nameMatch = (m) => markShootout(nameOnly(m));
+const nameMatch = (m) => markShootout(reconcileIds(nameOnly(m)));
 import {
   collection, doc, getDoc, getDocs, setDoc, deleteDoc, writeBatch, increment, deleteField, query, where, arrayUnion, onSnapshot,
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
@@ -73,7 +74,7 @@ export async function attachDetails(list) {
   list.forEach((m) => {
     if (m.detail || !m.hasDetail || !m.league) return;
     const d = (maps.get(Number(m.league.season)) || new Map()).get(String(m.id));
-    if (d) { m.detail = stripDetail(d); markShootout(m); }
+    if (d) { m.detail = stripDetail(d); reconcileIds(m); markShootout(m); }
   });
   return list;
 }
@@ -91,6 +92,7 @@ export async function getMatch(id) {
     const d = await one('matchDetails', id);
     if (d) m.detail = stripDetail(d);
   }
+  reconcileIds(m);
   return nameMatch(m);
 }
 
