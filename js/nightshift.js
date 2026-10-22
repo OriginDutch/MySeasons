@@ -4,6 +4,7 @@
 // in KV. Hier verwerken we ze met dezelfde normalisatie als bij handmatig ophalen.
 
 import { addMessage } from './inbox.js';
+import { ensureLeagues, followedIds } from './leagues.js';
 import { ns } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import {
@@ -12,7 +13,7 @@ import {
 } from './store.js';
 import { normalizeListMatch, normalizeDetail, normalizeEvents, normalizeStandings } from './normalize.js';
 
-export const FOLLOWS = [75672, 76523]; // Eredivisie en KKD, elk seizoen
+// Gevolgde competities: Meer → Competities (followedIds). Niet gevolgd = niet verversen, data blijft.
 export const CUP = 77374; // KNVB Beker: alleen de lijst (voor de bekerwinnaar en Europese tickets), geen events
 export const FIRST_BACKFILL = 2019;
 const DAILY_WRITES = 4000; // ruim onder de 20.000 gratis Firestore-writes per dag
@@ -28,6 +29,8 @@ export const setPrefs = (p) => setMeta('nsPrefs', p);
 
 /** Bouwt de wachtrij: eerst wat nu telt, dan het verleden. */
 export async function buildQueue() {
+  await ensureLeagues();
+  const FOLLOWS = followedIds();
   const [matches, indexes, prefs, seasons] = await Promise.all([getAllMatches(), getLeagueIndexes().catch(() => []), getPrefs(), getSeasons().catch(() => [])]);
   const own = matches.filter(isOwn);
   const ownIds = new Set(own.map((m) => m.id));

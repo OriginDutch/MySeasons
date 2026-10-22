@@ -10,6 +10,7 @@ import { CURRENT_SEASON } from './config.js';
 import { autoSync } from './nightshift.js';
 import { clubNamesLoaded, setClubOverrides } from './clubnames.js';
 import { getClubMarks } from './store.js';
+import { ensureLeagues } from './leagues.js';
 
 const appEl = document.getElementById('app');
 
@@ -125,6 +126,7 @@ async function route({ keepScroll = false } = {}) {
   });
 
   if (!clubNamesLoaded()) await getClubMarks().then(setClubOverrides).catch(() => {}); // eigen clubnamen vóór het eerste scherm (offline: volgende keer opnieuw)
+  await ensureLeagues(); // gevolgde competities (Meer → Competities)
 
   let html;
   try {

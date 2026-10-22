@@ -538,6 +538,11 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .ptag--edge { background: color-mix(in srgb, #F5C518 28%, transparent); border-color: color-mix(in srgb, #F5C518 60%, transparent); }
 .disc-row { align-items: center; }
 .disc-row.is-banned .list-row__title { color: var(--danger); }
+.lg-admin { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; text-align: left; width: 100%; }
+.lg-admin .list-row__main { justify-self: stretch; min-width: 0; }
+.lg-cost { display: grid; gap: 2px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--surface-hover); font-size: var(--fs-sm); }
+.lg-cost .mono { font-size: var(--fs-md); font-weight: 700; }
+.lg-search { display: flex; gap: 8px; align-items: end; }
 .recap { display: grid; gap: 14px; }
 .recap--two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
 .recap__item { display: grid; gap: 8px; align-content: start; min-width: 0; }

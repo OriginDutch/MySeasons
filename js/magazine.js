@@ -22,6 +22,7 @@ import {
 } from './season.js';
 import { clubCode } from './clubnames.js';
 import { disciplineState, previewLine } from './discview.js';
+import { leagueShort } from './leagues.js';
 
 // Clubnamen in koppen nooit over twee regels: spaties binnen een bekende naam worden onbreekbaar.
 let NAMES = [];
@@ -48,7 +49,7 @@ function masthead(team, league, unread = null) {
       <button class="mast__club mast__btn" type="button" data-open-season aria-label="Club of seizoen wisselen">
         <span class="mast__crest">${team.logo ? crest(team, 30) : esc(MAIN_CLUB.short)}</span>
         <span class="mast__titles"><span class="mast__name">${esc(MAIN_CLUB.name)} <svg class="mast__chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
-        <span class="mast__sub mono">${league ? esc(league.id === 76523 ? 'KKD' : league.name) + ' · ' : ''}${esc(seasonLabel())}</span></span>
+        <span class="mast__sub mono">${league ? esc(leagueShort(league)) + ' · ' : ''}${esc(seasonLabel())}</span></span>
       </button>
       <span class="mast__end"><span class="mast__date mono">${esc(today())}</span>${unread != null ? bellButton(unread) : ''}</span>
     </header>`;
@@ -121,7 +122,7 @@ function seasonCover(list, league, standings, team) {
   const ls = leagueSummary(list, TEAM, league.id);
   const s = !ls.played && me ? { ...me.total, points: me.points } : ls;
   const done = s.played && !list.some((m) => m.league && m.league.id === league.id && m.status !== 'finished');
-  const title = me ? `${me.position}e in de ${league.id === 76523 ? 'KKD' : league.name}` : `${MAIN_CLUB.name} in de ${league.name}`;
+  const title = me ? `${me.position}e in de ${leagueShort(league)}` : `${MAIN_CLUB.name} in de ${league.name}`;
   return `
     <div class="cover">
       <div class="cover__photo" style="height:150px"><div class="cover__crests">${crest(team, 64)}</div><span class="cover__tag">Seizoensverslag</span></div>

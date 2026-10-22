@@ -1,7 +1,8 @@
 // Seizoenen: kiezen wat je bekijkt (paneel "Bekijken") en seizoenen beheren (Meer → Seizoenen).
 
 import { esc, icons, toast } from './ui.js';
-import { MAIN_CLUB, CURRENT_SEASON, LEAGUES } from './config.js';
+import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
+import { followedIds, leagueInfo, leagueShort as lgShort } from './leagues.js';
 import { getAllMatches, getSeasons, saveSeason, getCallsToday } from './store.js';
 import { syncSeason, COST } from './sync.js';
 import { getSeason, setSeason, isCurrentSeason, seasonLabel, seasonOf } from './seasonstate.js';
@@ -12,9 +13,8 @@ import { importRsssf } from './rsssfimport.js';
 import { getAllRsssf } from './store.js';
 
 const FIRST_YEAR = 2018;
-const DEFAULT_FOLLOWS = [75672, 76523]; // Eredivisie en Eerste Divisie, elk seizoen standaard
 
-const leagueShort = (l) => (!l ? '' : l.id === 76523 ? 'KKD' : l.name);
+const leagueShort = (l) => lgShort(l);
 
 /** Alle seizoenen die opgehaald of aangemaakt zijn, nieuwste eerst, met wat erin zit. */
 export async function seasonRows() {
@@ -107,7 +107,7 @@ export const seasonViews = {
           <a class="back-btn" href="#/meer" aria-label="Terug">${icons.back}</a>
           <span class="page-head__kicker">Meer / Seizoenen</span><h1 class="page-head__title">Seizoenen</h1></div></header>
         <section class="section">
-          <p class="muted" style="font-size:var(--fs-md)">Per seizoen volg je ${esc(MAIN_CLUB.name)} en standaard de ${DEFAULT_FOLLOWS.map((id) => esc(LEAGUES[id])).join(' en ')}. API vandaag: ${calls} calls.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Per seizoen volg je ${esc(MAIN_CLUB.name)} en standaard de ${followedIds().map((id) => esc((leagueInfo(id) || {}).name || id)).join(', ').replace(/, ([^,]*)$/, ' en $1')}. API vandaag: ${calls} calls.</p>
           <div class="list">${rows.map((r) => `
             <div class="season-row">
               <span class="season-row__year mono">${esc(seasonLabel(r.year))}</span>
@@ -159,15 +159,15 @@ export const seasonViews = {
         try {
           if (add && add.dataset.add === 'rsssf') {
             const data = await runWithButton(btn, 'Lezen…', () => importRsssf(year));
-            await saveSeason(year, { source: 'manual', follows: DEFAULT_FOLLOWS, createdAt: new Date().toISOString() });
+            await saveSeason(year, { source: 'manual', follows: followedIds(), createdAt: new Date().toISOString() });
             const bad = data.checks.filter((c) => !c.ok);
             toast(bad.length ? `${seasonLabel(year)} aangemaakt; RSSSF-controle wijkt af: ${bad.map((c) => c.problems[0]).join('; ')}` : `${seasonLabel(year)} aangemaakt met RSSSF-basis · controle klopt`, { duration: 7000 });
           } else if (add && add.dataset.add === 'manual') {
-            await saveSeason(year, { source: 'manual', follows: DEFAULT_FOLLOWS, createdAt: new Date().toISOString() });
+            await saveSeason(year, { source: 'manual', follows: followedIds(), createdAt: new Date().toISOString() });
             toast(`${seasonLabel(year)} aangemaakt als leeg seizoen`);
           } else {
             const n = await runWithButton(btn, 'Ophalen…', () => syncSeason(year));
-            await saveSeason(year, { source: n ? 'highlightly' : 'manual', follows: DEFAULT_FOLLOWS, createdAt: new Date().toISOString() });
+            await saveSeason(year, { source: n ? 'highlightly' : 'manual', follows: followedIds(), createdAt: new Date().toISOString() });
             toast(n ? `${seasonLabel(year)}: ${n} wedstrijden · ${COST.season} calls` : `Highlightly heeft ${seasonLabel(year)} niet; leeg seizoen aangemaakt`);
           }
           ctx.refresh();

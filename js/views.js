@@ -14,6 +14,7 @@ import { backupViews } from './backup.js';
 import { inboxViews } from './inbox.js';
 import { meldingenViews } from './meldingen.js';
 import { clubNamesViews } from './clubnamesview.js';
+import { leaguesViews } from './leaguesview.js';
 import { squadSiteViews } from './squadsite.js';
 import { getCallsToday, getAllMatches, getAllNotes } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
@@ -54,6 +55,7 @@ export const views = {
   ...inboxViews,
   ...meldingenViews,
   ...clubNamesViews,
+  ...leaguesViews,
   ...squadSiteViews,
 
   meer: {
@@ -90,6 +92,10 @@ export const views = {
             </a>
             <a class="list-row" href="#/clubsite">
               <span class="list-row__main"><span class="list-row__title">Clubsite</span><span class="list-row__sub">Selectiepagina's volgen: verschillen met je selectie</span></span>
+              ${icons.chevron}
+            </a>
+            <a class="list-row" href="#/competities">
+              <span class="list-row__main"><span class="list-row__title">Competities</span><span class="list-row__sub">Welke competities je volgt: toevoegen, aan/uit, niveau</span></span>
               ${icons.chevron}
             </a>
             <a class="list-row" href="#/clubnamen">
