@@ -220,6 +220,7 @@ const NS_INBOX = 'ns:inbox:';
 const MAX_CALLS = 40;
 const RESERVE = 15; // in de gratis stand blijven er altijd zoveel calls over voor de app zelf
 const RESERVE_LATE = 3; // laatste half uur voor de reset (00:00 UTC): de 15 zouden anders ongebruikt verlopen
+const RESERVE_TURBO = 200; // turbo: ~7.300 van de 7.500; de rest blijft voor uitslagen op wedstrijddag en de app
 /** Reserve op dit moment: 15, behalve 23:30–00:00 UTC (dan 3). */
 export function reserveAt(time = Date.now()) {
   const d = new Date(time);
@@ -268,7 +269,7 @@ async function nsRun(env, why) {
     const paths = pathsFor(item);
     if (!paths) { queue.shift(); continue; }
     if (calls + paths.length > MAX_CALLS) break;
-    if (mode !== 'turbo' && remaining != null && remaining - paths.length < reserve) { stop = 'reserve'; break; }
+    if (remaining != null && remaining - paths.length < (mode === 'turbo' ? RESERVE_TURBO : reserve)) { stop = 'reserve'; break; }
     const bodies = []; let status = 200;
     for (const p of paths) {
       const res = await fetch(`${HIGHLIGHTLY_BASE}${p}`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });

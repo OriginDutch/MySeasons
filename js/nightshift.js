@@ -16,8 +16,10 @@ import { normalizeListMatch, normalizeDetail, normalizeEvents, normalizeStanding
 // Gevolgde competities: Meer → Competities (followedIds). Niet gevolgd = niet verversen, data blijft.
 export const CUP = 77374; // KNVB Beker: alleen de lijst (voor de bekerwinnaar en Europese tickets), geen events
 export const FIRST_BACKFILL = 2019;
-const DAILY_WRITES = 4000; // ruim onder de 20.000 gratis Firestore-writes per dag
+const DAILY_WRITES = 17500; // gratis Firestore: 20.000 writes per dag; ~2.500 blijven over voor de app zelf
 const today = () => new Date().toISOString().slice(0, 10);
+// Firestore telt writes per dag in Amerikaanse westkusttijd (reset 09:00 bij ons); het write-budget dus ook.
+const quotaDay = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Los_Angeles' }).format(new Date());
 const official = (m) => m.league && !/friendl/i.test(m.league.name);
 const isOwn = (m) => [m.homeTeam, m.awayTeam].some((t) => t && t.id === MAIN_CLUB.id);
 const parse = (t) => { try { return t ? JSON.parse(t) : null; } catch { return null; } };
@@ -83,11 +85,11 @@ export async function pushQueue() {
 
 async function writeBudget() {
   const w = await getMeta('nsWrites').catch(() => null);
-  return w && w.day === today() ? DAILY_WRITES - (w.count || 0) : DAILY_WRITES;
+  return w && w.day === quotaDay() ? DAILY_WRITES - (w.count || 0) : DAILY_WRITES;
 }
 async function spendWrites(n) {
   const w = await getMeta('nsWrites').catch(() => null);
-  await setMeta('nsWrites', { day: today(), count: (w && w.day === today() ? w.count || 0 : 0) + n });
+  await setMeta('nsWrites', { day: quotaDay(), count: (w && w.day === quotaDay() ? w.count || 0 : 0) + n });
 }
 
 /** Eén resultaat uit de brievenbus naar Firestore. Geeft het aantal writes terug. */
@@ -100,7 +102,7 @@ async function apply(r) {
       if (!d) return 0;
       const { base, detail } = normalizeDetail(d, l, b);
       await saveMatchDetail(item.id, base, detail, { detail: bodies[0], lineups: bodies[1] || null, boxScore: bodies[2] || null, fetchedAt: detail.fetchedAt, via: 'nachtploeg' });
-      return 2;
+      return 3; // matches + matchDetails + rawMatches
     }
     case 'events': {
       const raw = parse(bodies[0]);
