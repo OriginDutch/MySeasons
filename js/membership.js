@@ -81,7 +81,10 @@ export function statusIn(profile, win, ref, { onSheet = false, lastSheet = null 
   if (!inSeason.length && !onSheet) return { member: false };
 
   // Formulier zegt "erbij", transfers zeggen "weg": conflict, jij beslist (Afwijkingen).
-  const conflict = onSheet && lastSheet && !sp.some((s) => within(iso(lastSheet), s.from, s.to));
+  // 'early' = speelde al vóór zijn eerste komst volgens je transfers; 'late' = speelde nog na zijn vertrek.
+  const outside = onSheet && lastSheet && !sp.some((s) => within(iso(lastSheet), s.from, s.to));
+  const firstFrom = sp.map((s) => s.from).filter(Boolean).sort()[0];
+  const conflict = outside ? (firstFrom && iso(lastSheet) < firstFrom ? 'early' : 'late') : false;
 
   const s = current || inSeason[inSeason.length - 1] || null;
   if (s && s.kind === 'huur') labels.push(`huur${s.club ? ' · van ' + s.club : ''}`);

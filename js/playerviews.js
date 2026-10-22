@@ -154,7 +154,9 @@ async function addPlayer(ctx, pre = {}) {
   const start = `${getSeason()}-07-01`;
   const sheet = openSheet({
     title: 'Speler toevoegen',
-    body: `<label class="field"><span>Naam</span><input name="name" maxlength="60" autocomplete="off" required placeholder="Voor- en achternaam" value="${esc(pre.name || '')}"></label>${pre.level === 'o21' ? '<input type="hidden" name="level" value="o21"><p class="muted sheet__note">Komt bij O21 (staat op de O21-pagina van de club).</p>' : ''}
+    body: `<label class="field"><span>Naam</span><input name="name" maxlength="60" autocomplete="off" required placeholder="Voor- en achternaam" value="${esc(pre.name || '')}"></label>
+      <label class="field"><span>Selectie</span><select name="level"><option value="first" ${pre.level === 'o21' ? '' : 'selected'}>Eerste elftal</option><option value="o21" ${pre.level === 'o21' ? 'selected' : ''}>O21 / jeugd</option></select></label>
+      <p class="muted sheet__note">O21 geldt vanaf het seizoen van de datum hieronder, en ook voor de seizoenen erna, tot je hem op zijn pagina naar het eerste zet of een transfer "Doorgestroomd uit de jeugd" toevoegt.</p>
       <div data-dup class="sheet__note" hidden></div>
       <div class="field-row"><label class="field"><span>Positie</span><select name="position">${POS_OPTS.map(([v, l]) => `<option value="${v}" ${pre.position === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="field"><span>Rugnummer</span><input name="shirt" type="number" inputmode="numeric" min="1" max="99" value="${pre.shirt ?? ''}"></label></div>
@@ -509,6 +511,9 @@ function markDuplicateNumbers(players) {
   players.forEach((p) => { p.dupWith = null; if (p.number != null) byNr.set(p.number, [...(byNr.get(p.number) || []), p]); });
   byNr.forEach((ps) => { if (ps.length > 1) ps.forEach((p) => { p.dupWith = ps.filter((x) => x !== p).map((x) => x.name); }); });
 }
+const conflictTag = (p) => (!p.conflict ? '' : p.conflict === 'early'
+  ? '<span class="ptag ptag--warn" title="Hij stond al op een wedstrijdformulier vóór zijn eerste transfer. Vul een eerdere komst in (bijv. vanuit de jeugd), of zet de datum goed.">⚠ volgens transfers nog niet bij de club</span>'
+  : '<span class="ptag ptag--warn" title="Hij stond nog op een wedstrijdformulier na zijn vertrek volgens je transfers.">⚠ volgens transfers al weg</span>');
 const dupTag = (p) => (p.dupWith && p.dupWith.length ? `<span class="ptag ptag--warn" title="Pas het nummer aan op de spelerspagina als het niet klopt">⚠ nr. ${esc(String(p.number))} ook: ${esc(p.dupWith.join(', '))}</span>` : '');
 const fmtLabel = (l) => l.replace(/(\d{4})-(\d{2})-(\d{2})/, (_, y, m, d) => new Date(`${y}-${m}-${d}T12:00:00`).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: y === String(new Date().getFullYear()) ? undefined : 'numeric' }));
 
@@ -516,7 +521,7 @@ function rowHtml(p, sort) {
   const base = p.apps
     ? `${p.apps} ${p.apps === 1 ? 'duel' : 'duels'}${p.subIns ? ` (${p.subIns} in)` : ''} · ${p.minutes}'`
     : p.squads ? `${p.squads}× op de bank` : 'nog geen officieel duel';
-  const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p) + discTagsHtml(p.discTags) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
+  const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + conflictTag(p) + dupTag(p) + discTagsHtml(p.discTags) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
   const sub = `${base}${tags ? ' ' + tags : ''}`;
   const nat = p.nationality || (p.profile && p.profile.nationality);
   const flags = nat ? nationalities(nat).map((n) => flag(n, 12)).join('') : '';
@@ -546,7 +551,7 @@ function squadTable(players, profiles) {
     const age = ageOf(pr.dob);
     const val = (pr.valueHistory || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
     const nat = p.nationality || pr.nationality;
-    const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + (p.conflict ? '<span class="ptag ptag--warn">⚠ volgens transfers al weg</span>' : '') + dupTag(p) + discTagsHtml(p.discTags) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
+    const tags = (p.labels || []).map((l) => `<span class="ptag ${l.startsWith('geblesseerd') ? 'ptag--inj' : ''}">${esc(fmtLabel(l))}</span>`).join('') + conflictTag(p) + dupTag(p) + discTagsHtml(p.discTags) + (p.status === 'youth' && p.apps ? `<span class="ptag ptag--o21">speelde mee in het eerste${p.apps > 1 ? ` · ${p.apps}×` : ''}</span>` : '');
     const v = { nr: p.number ?? 99, name: p.name, pos: (LINE_ORDER[p.position] || 9) * 100 + (p.number ?? 99), age: age ?? 99, apps: p.apps || 0, min: p.minutes || 0, goals: p.goals || 0, assists: p.assists || 0, rating: p.rating ?? -1, value: val ? val.amount : -1 };
     return `<tr data-line="${esc(p.position || '')}" data-href="#/speler/${encodeURIComponent(p.id)}" ${Object.entries(v).map(([k, x]) => `data-${k}="${esc(String(x))}"`).join(' ')}>
       <td class="mono sq-nr">${p.number ?? '–'}</td>
@@ -663,7 +668,7 @@ function seasonMembers(list, squadPlayers, profiles) {
     seen.add(String(p.id));
     const inj = injuryLabel(p.profile, ref, isCurrentSeason());
     const lvl = levelFor(p.profile || profiles[String(p.id)], getSeason());
-    members.push({ ...p, status: lvl === 'o21' && (st.status || 'active') === 'active' ? 'youth' : (st.status || 'active'), labels: [...(inj ? [inj] : []), ...(st.labels || [])], conflict: !!st.conflict, injured: !!inj });
+    members.push({ ...p, status: lvl === 'o21' && (st.status || 'active') === 'active' ? 'youth' : (st.status || 'active'), labels: [...(inj ? [inj] : []), ...(st.labels || [])], conflict: st.conflict || false, injured: !!inj });
   });
   Object.entries(profiles || {}).forEach(([id, pr]) => {
     if (seen.has(id) || pr.linkedTo) return; // gekoppelde oud-profielen staan al onder hun Highlightly-id
