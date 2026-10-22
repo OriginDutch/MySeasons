@@ -12,13 +12,34 @@ import { NAT_TOP, NAT_ALL, nationalities } from './flags.js';
 export const normName = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
 
 /** Lijkt deze naam op iemand die je al hebt? Zelfde achternaam + zelfde eerste letter, of de ene naam zit in de andere. */
+/** Aantal letters verschil (Levenshtein), met een plafond voor snelheid. */
+export function editDistance(a, b, max = 3) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]; let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Lijkt deze naam op iemand die je al hebt? Zelfde achternaam + zelfde eerste letter, de ene naam zit in de andere,
+ * of een spelfout van één letter in een achternaam van 6+ letters (Ottesen/Ottensen, van Mullem/van Mullen).
+ */
 export function similarNames(name, known) {
   const n = normName(name); if (n.length < 3) return [];
   const parts = n.split(' '); const last = parts[parts.length - 1]; const first = parts[0][0];
   return known.filter((k) => {
     const m = normName(k.name); if (!m) return false;
-    const mp = m.split(' ');
-    return m === n || (mp[mp.length - 1] === last && last.length > 2 && mp[0][0] === first) || (n.length > 5 && (m.includes(n) || n.includes(m)));
+    const mp = m.split(' '); const mlast = mp[mp.length - 1];
+    if (m === n || (mlast === last && last.length > 2 && mp[0][0] === first) || (n.length > 5 && (m.includes(n) || n.includes(m)))) return true;
+    return mp[0][0] === first && last.length >= 6 && mlast.length >= 6 && editDistance(last, mlast, 1) <= 1;
   }).slice(0, 3);
 }
 

@@ -305,7 +305,9 @@ export async function findDuplicates(profiles) {
     const cands = [...hits.values()];
     if (!cands.length) return;
     const exact = (h) => normName(h.name) === normName(name) || (h.alt && normName(h.alt) === normName(name));
-    out.push({ from: id, name, transfers: pr.transfers || [], cands: cands.map((h) => ({ ...h, sure: exact(h) || cands.length === 1, taken: taken.has(h.id) })) });
+    const lastOf = (x) => normName(x).split(' ').pop();
+    const sameLast = (h) => [h.name, h.alt].filter(Boolean).some((x) => lastOf(x) === lastOf(name)); // anders: spelfout-match → twijfel
+    out.push({ from: id, name, transfers: pr.transfers || [], cands: cands.map((h) => ({ ...h, sure: exact(h) || (cands.length === 1 && sameLast(h)), taken: taken.has(h.id) })) });
   });
   return out.sort((a, b) => a.name.localeCompare(b.name, 'nl'));
 }
@@ -890,7 +892,8 @@ export const playerViews = {
             <div><a class="btn" href="#/home">Naar Home</a></div></div></section>`}`;
       }
       const hlMembers = members.filter((m) => !m.profileOnly).map((m) => ({ id: String(m.id), name: m.name }));
-      const hlDup = players.filter((p) => !p.profileOnly && p.dupWith && p.dupWith.some((n) => similarNames(n, [{ id: 'x', name: p.name }]).length)).length;
+      const hlOnly = players.filter((p) => !p.profileOnly);
+      const hlDup = hlOnly.filter((p) => p.number != null && hlOnly.some((q) => q !== p && q.number === p.number && similarNames(q.name, [{ id: 'x', name: p.name }]).length)).length;
       const dupCount = members.filter((m) => m.profileOnly && similarNames(m.name, hlMembers).length).length + Math.ceil(hlDup / 2);
       const used = members.filter((p) => p.apps).length;
       const extra = [
