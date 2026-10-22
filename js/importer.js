@@ -6,7 +6,7 @@
 
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB } from './config.js';
-import { getAllMatches, getPlayers, getNotes, getAllNotes, savePlayersBatch, saveNotesBatch, saveCoachesBatch, saveClubMarksBatch, getAllLeagueTeams } from './store.js';
+import { attachDetails, getAllMatches, getPlayers, getNotes, getAllNotes, savePlayersBatch, saveNotesBatch, saveCoachesBatch, saveClubMarksBatch, getAllLeagueTeams } from './store.js';
 import { applyCorrections } from './corrections.js';
 import { buildSquad } from './players.js';
 import { tokens } from './rsssf.js';
@@ -62,7 +62,7 @@ export function suggest(p, squad) {
 
 /** Alle Highlightly-spelers van Cambuur over alle opgehaalde seizoenen. */
 export async function currentSquad() {
-  const all = await getAllMatches();
+  const all = await attachDetails(await getAllMatches());
   const withNotes = await Promise.all(all.map(async (m) => (m.detail ? applyCorrections(m, await getNotes(m.id).catch(() => null)).match : m)));
   const seasons = [...new Set(withNotes.map((m) => m.league && m.league.season).filter((x) => x != null))];
   const byId = new Map();
@@ -244,7 +244,7 @@ export const importViews = {
           if (cats.has('notes')) {
             const legacyToHl = {};
             root.querySelectorAll('[data-link]').forEach((s) => { if (s.value) legacyToHl[s.dataset.link] = s.value; });
-            const [matches, notes] = await Promise.all([getAllMatches(), getAllNotes()]);
+            const [matches, notes] = await Promise.all([getAllMatches().then(attachDetails), getAllNotes()]);
             const plan = planNotes(loaded.data, matches, legacyToHl, notes, planCoaches(loaded.data));
             if (plan.writes.length) await saveNotesBatch(plan.writes);
             report.push(`${plan.writes.length}/${plan.total} wedstrijden aangevuld${plan.unmatched.length ? ` (${plan.unmatched.length} niet gevonden: seizoen nog niet opgehaald?)` : ''}${plan.keptNote ? `, ${plan.keptNote} eigen notitie behouden` : ''}`);

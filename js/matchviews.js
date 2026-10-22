@@ -4,7 +4,7 @@ import { shootoutKicks } from './shootout.js';
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
 import { getSeason, seasonLabel, inSeason, isCurrentSeason } from './seasonstate.js';
-import { getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers, getLeagueMatches, getLeagueIndexes } from './store.js';
+import { getSeasonMatches, getAllMatches, getMatch, getMeta, getCallsToday, getStandings, getNotes, getAllNotes, getPlayers, getLeagueMatches, getLeagueIndexes } from './store.js';
 import { applyNames } from './names.js';
 import { bestStandings, standingsAndMatches } from './livetable.js';
 import { rulesFor, zonesFor, playoffBracket, SPECIAL_SEASONS, cupWinner, cupWinnerRsssf, rsssfAsMatches } from './rules.js';
@@ -115,7 +115,7 @@ export function resultChip(m) {
 }
 
 export async function correctedList() {
-  const [all, notes, profiles] = await Promise.all([getAllMatches(), getAllNotes(), getPlayers()]);
+  const [all, notes, profiles] = await Promise.all([getSeasonMatches(getSeason()), getAllNotes(), getPlayers()]);
   const list = all.filter(inSeason(getSeason()));
   let total = 0; let conflicts = 0;
   const out = list.map((m) => {

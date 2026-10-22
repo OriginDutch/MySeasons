@@ -9,7 +9,7 @@ import { setSeason } from './seasonstate.js';
 import { CURRENT_SEASON } from './config.js';
 import { autoSync } from './nightshift.js';
 import { clubNamesLoaded, setClubOverrides, teamAliasesLoaded, setTeamAliases } from './clubnames.js';
-import { getClubMarks, getAllLeagueTeams, setLiveChangeHandler } from './store.js';
+import { getClubMarks, getAllLeagueTeams, setLiveChangeHandler, getAllMatches, migrateDetails } from './store.js';
 import { ensureLeagues } from './leagues.js';
 
 const appEl = document.getElementById('app');
@@ -249,6 +249,7 @@ watchAuth((user) => {
     // Wekelijkse back-up naar de Worker, rustig na het opstarten.
     setTimeout(() => import('./photos.js').then((m) => m.checkLinks()).catch(() => {}), 45000); // foto-links: hooguit eens per week
     setTimeout(() => import('./photos.js').then((m) => m.shrinkThumbs()).catch(() => {}), 15000); // eenmalig: kleinere lijst-plaatjes
+    setTimeout(() => getAllMatches().then((l) => (l.some((m) => m.detail) ? migrateDetails() : 0)).then((n) => { if (n) toast(`${n} wedstrijden omgezet naar de nieuwe opslag`); }).catch(() => {}), 3000); // details uit matches halen (v0.44)
     setTimeout(() => import('./backup.js').then((m) => m.autoBackup()).then((r) => { if (r && r.ok) toast(`Wekelijkse back-up gemaakt · ${r.docs} documenten`); }).catch(() => {}), 20000);
   } else {
     renderLogin();

@@ -4,7 +4,7 @@ import { hl } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import { getSeason } from './seasonstate.js';
 import { normalizeListMatch, normalizeDetail, normalizeStandings } from './normalize.js';
-import { saveMatches, saveMatchDetail, saveStandings, setMeta, countCalls, saveLeagueMatches, addToLeagueIndex } from './store.js';
+import { hasDetail, saveMatches, saveMatchDetail, saveStandings, setMeta, countCalls, saveLeagueMatches, addToLeagueIndex } from './store.js';
 import { mainLeague } from './season.js';
 
 export const COST = { season: 3, match: 3, standings: 1, league: 4 };
@@ -91,7 +91,7 @@ export async function fetchMatch(id) {
 
 /** Gespeelde officiële wedstrijden (geen oefenduels) zonder details. */
 export function missingDetails(list) {
-  return list.filter((m) => m.status === 'finished' && !m.detail && m.league && !/friendl/i.test(m.league.name));
+  return list.filter((m) => m.status === 'finished' && !hasDetail(m) && m.league && !/friendl/i.test(m.league.name));
 }
 
 /**

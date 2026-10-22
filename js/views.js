@@ -18,7 +18,7 @@ import { leaguesViews } from './leaguesview.js';
 import { coachViews } from './coachview.js';
 import { photosViews } from './photosview.js';
 import { squadSiteViews } from './squadsite.js';
-import { getCallsToday, getAllMatches, getAllNotes } from './store.js';
+import { getCallsToday, getAllMatches, getAllNotes, attachDetails } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
 import { getThemePref, setThemePref, getClubColors, setClubColors } from './theme.js';
 import { signOutUser, testConnection } from './firebase.js';
@@ -67,7 +67,8 @@ export const views = {
     async render() {
       let total = 0; let conflicts = 0;
       try {
-        const [list, notes] = await Promise.all([getAllMatches(), getAllNotes()]);
+        const [all, notes] = await Promise.all([getAllMatches(), getAllNotes()]);
+        const list = await attachDetails(all.filter((m) => notes[m.id]));
         list.forEach((m) => {
           if (!notes[m.id]) return;
           const c = correctionSummary(applyCorrections(m, notes[m.id]).statuses);

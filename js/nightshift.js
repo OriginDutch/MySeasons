@@ -8,7 +8,7 @@ import { ensureLeagues, followedIds } from './leagues.js';
 import { ns } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import {
-  getAllMatches, saveMatches, saveMatchDetail, saveLeagueMatches, saveStandings, setMeta, getMeta,
+  getAllMatches, hasDetail, saveMatches, saveMatchDetail, saveLeagueMatches, saveStandings, setMeta, getMeta,
   countCalls, getLeagueIndexes, addToLeagueIndex, saveSeason, getSeasons, noteRateLimit,
 } from './store.js';
 import { normalizeListMatch, normalizeDetail, normalizeEvents, normalizeStandings } from './normalize.js';
@@ -56,7 +56,7 @@ export async function buildQueue() {
     if (y === CURRENT_SEASON || !ci || !(ci.ids || []).length) bucket.push({ type: 'league', leagueId: CUP, season: y });
   });
   // Cambuur: volledige details van gespeelde officiële duels, nieuwste eerst.
-  const full = own.filter((m) => m.status === 'finished' && !m.detail && official(m))
+  const full = own.filter((m) => m.status === 'finished' && !hasDetail(m) && official(m))
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
     .map((m) => ({ type: 'full', id: m.id, season: seasonOf(m) }));
   // Andere clubs: alleen de events (schutters, assists, kaarten), 1 call per duel.

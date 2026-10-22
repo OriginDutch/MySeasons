@@ -47,20 +47,77 @@ export function saveCorrections(id, changes) {
   return setDoc(doc(db, 'matchNotes', String(id)), { corrections, updatedAt: new Date().toISOString() }, { merge: true });
 }
 
+// Wedstrijden: matches/{id} = de basis (datum, teams, uitslag, ronde) + hasDetail. De details (events,
+// opstellingen, spelersstats, ~19 kB per duel) staan sinds v0.44 in matchDetails/{id} = { ...detail, season, matchId },
+// en worden per seizoen geladen. Oude documenten met `detail` erin werken nog (worden bij het openen omgezet).
+
+export const hasDetail = (m) => !!(m && (m.detail || m.hasDetail));
+
+/** Alle wedstrijden, alleen de basis (snel, alle seizoenen). */
 export async function getAllMatches() {
   return (await coll('matches')).map((d) => nameMatch(d.data()));
 }
 
+async function detailsOfSeason(season) {
+  const q = query(collection(db, 'matchDetails'), where('season', '==', Number(season)));
+  const out = new Map();
+  (await live.docs(`md:${Number(season)}`, q)).forEach((d) => out.set(d.id, d.data()));
+  return out;
+}
+const stripDetail = ({ season, matchId, ...detail }) => detail;
+
+/** Details erbij voor deze wedstrijden (per seizoen één live query). Muteert en geeft de lijst terug. */
+export async function attachDetails(list) {
+  const seasons = [...new Set(list.filter((m) => !m.detail && m.hasDetail && m.league).map((m) => Number(m.league.season)))];
+  const maps = new Map(await Promise.all(seasons.map(async (y) => [y, await detailsOfSeason(y)])));
+  list.forEach((m) => {
+    if (m.detail || !m.hasDetail || !m.league) return;
+    const d = (maps.get(Number(m.league.season)) || new Map()).get(String(m.id));
+    if (d) { m.detail = stripDetail(d); markShootout(m); }
+  });
+  return list;
+}
+
+/** Wedstrijden van één seizoen, mét details. */
+export async function getSeasonMatches(season) {
+  const list = (await getAllMatches()).filter((m) => m.league && Number(m.league.season) === Number(season));
+  return attachDetails(list);
+}
+
 export async function getMatch(id) {
   const m = await byId('matches', id);
-  return m ? nameMatch(m) : null;
+  if (!m) return null;
+  if (!m.detail && m.hasDetail) {
+    const d = await one('matchDetails', id);
+    if (d) m.detail = stripDetail(d);
+  }
+  return nameMatch(m);
+}
+
+/** Eenmalig: details die nog ín matches staan naar matchDetails verhuizen. Eerst kopiëren, dan pas weghalen. */
+export async function migrateDetails() {
+  const snap = await getDocs(collection(db, 'matches'));
+  const todo = snap.docs.filter((d) => d.data().detail);
+  let moved = 0;
+  for (let i = 0; i < todo.length; i += 50) {
+    const part = todo.slice(i, i + 50);
+    const copy = writeBatch(db);
+    part.forEach((d) => { const m = d.data(); copy.set(doc(db, 'matchDetails', d.id), { ...m.detail, season: m.league ? Number(m.league.season) : null, matchId: d.id }); });
+    await copy.commit(); // pas als de kopie bij de server staat, gaat het origineel eruit
+    const strip = writeBatch(db);
+    part.forEach((d) => strip.set(doc(db, 'matches', d.id), { detail: deleteField(), hasDetail: true }, { merge: true }));
+    await strip.commit();
+    moved += part.length;
+  }
+  if (moved) await setMeta('detailsV2', { at: new Date().toISOString(), moved });
+  return moved;
 }
 
 /** Programma opslaan. merge: een al opgehaald `detail` blijft staan. */
 export async function saveMatches(list) {
   for (let i = 0; i < list.length; i += 400) {
     const batch = writeBatch(db);
-    list.slice(i, i + 400).forEach((m) => batch.set(doc(db, 'matches', String(m.id)), rawMatch(m), { merge: true }));
+    list.slice(i, i + 400).forEach((m) => { const { detail, notes, ...plain } = rawMatch(m); batch.set(doc(db, 'matches', String(m.id)), plain, { merge: true }); });
     await batch.commit();
   }
   await indexTeams(list);
@@ -68,7 +125,9 @@ export async function saveMatches(list) {
 
 export async function saveMatchDetail(id, base, detail, raw) {
   const batch = writeBatch(db);
-  batch.set(doc(db, 'matches', String(id)), { ...rawMatch(base), detail }, { merge: true });
+  const { detail: _old, ...plain } = rawMatch(base);
+  batch.set(doc(db, 'matches', String(id)), { ...plain, hasDetail: true, detail: deleteField() }, { merge: true });
+  batch.set(doc(db, 'matchDetails', String(id)), { ...detail, season: base && base.league ? Number(base.league.season) : null, matchId: String(id) });
   batch.set(doc(db, 'rawMatches', String(id)), raw, { merge: true });
   await batch.commit();
 }

@@ -1,7 +1,7 @@
 // Handwerk: wedstrijd aanvullen, API-data corrigeren en het Afwijkingen-scherm.
 
 import { esc, icons, toast } from './ui.js';
-import { getMatch, getAllMatches, getNotes, getAllNotes, saveNotes, saveCorrections } from './store.js';
+import { getMatch, getAllMatches, getNotes, getAllNotes, saveNotes, saveCorrections, attachDetails } from './store.js';
 import {
   EVENT_FIELDS, KIND_LABEL, FILTER_OF, kindOf, keyOf, indexEvents, fieldValue, applyCorrections,
   buildChanges, display, looksLikeTypo,
@@ -237,7 +237,8 @@ const TYPE_FILTERS = [['all', 'Alles'], ['goals', 'Goals'], ['kaarten', 'Kaarten
 const STATUS_FILTERS = [['all', 'Alle'], ['conflict', 'Conflict'], ['active', 'Eigen'], ['redundant', 'Overbodig']];
 
 async function collect(onlyId) {
-  const [matches, notes] = await Promise.all([onlyId ? getMatch(onlyId).then((m) => (m ? [m] : [])) : getAllMatches(), onlyId ? getNotes(onlyId).then((n) => ({ [onlyId]: n })) : getAllNotes()]);
+  const [base, notes] = await Promise.all([onlyId ? getMatch(onlyId).then((m) => (m ? [m] : [])) : getAllMatches(), onlyId ? getNotes(onlyId).then((n) => ({ [onlyId]: n })) : getAllNotes()]);
+  const matches = onlyId ? base : await attachDetails(base.filter((m) => notes[m.id]));
   const out = [];
   sortByDate(matches).reverse().forEach((m) => {
     const n = notes[m.id];

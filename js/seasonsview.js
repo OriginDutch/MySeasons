@@ -3,7 +3,7 @@
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import { followedIds, leagueInfo, leagueShort as lgShort } from './leagues.js';
-import { getAllMatches, getSeasons, saveSeason, getCallsToday } from './store.js';
+import { getAllMatches, hasDetail, getSeasons, saveSeason, getCallsToday } from './store.js';
 import { syncSeason, COST } from './sync.js';
 import { getSeason, setSeason, isCurrentSeason, seasonLabel, seasonOf } from './seasonstate.js';
 import { mainLeague } from './season.js';
@@ -35,7 +35,7 @@ export async function seasonRows() {
       ...r, league,
       count: own.length,
       played: own.filter((m) => m.status === 'finished').length,
-      detailed: own.filter((m) => m.detail).length,
+      detailed: own.filter(hasDetail).length,
       source: r.saved ? r.saved.source : own.length ? 'highlightly' : null,
     };
   });

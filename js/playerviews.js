@@ -1,7 +1,7 @@
 // Selectie en spelerspagina's.
 
 import { esc, toast } from './ui.js';
-import { savePlayer, deletePlayer, savePlayersBatch, getAllMatches } from './store.js';
+import { savePlayer, deletePlayer, savePlayersBatch, getAllMatches, attachDetails } from './store.js';
 import { addMessageOnce } from './inbox.js';
 import { similarNames, siteSnapshot, compareSquad, siteBlock, ignoredKeys, ignoreKey } from './squadsite.js';
 import { clubField, clubCrest, knownTeams, matchTeam } from './clubpick.js';
@@ -632,12 +632,15 @@ const profName = (pr) => (pr && (pr.fullName || pr.legacyName || pr.apiName)) ||
  * opgehaalde wedstrijden (opstellingen en events) en zet hem eenmalig als apiName in het profiel.
  * Vult alleen een leeg veld; fullName/legacyName blijven onaangeraakt. Muteert profiles voor deze render.
  */
+let namesTried = false; // hooguit eens per sessie alle details doorzoeken
 async function backfillNames(profiles) {
+  if (namesTried) return 0;
   const missing = Object.entries(profiles || {}).filter(([id, pr]) => pr && !profName(pr) && !String(id).startsWith('legacy-'));
   if (!missing.length) return 0;
+  namesTried = true;
   const names = new Map();
   const put = (id, n) => { if (id != null && n && !names.has(String(id))) names.set(String(id), String(n)); };
-  (await getAllMatches().catch(() => [])).forEach((m) => {
+  (await getAllMatches().then(attachDetails).catch(() => [])).forEach((m) => {
     const d = m.detail; if (!d) return;
     Object.values(d.players || {}).forEach((side) => (side || []).forEach((pl) => put(pl.id, pl.name)));
     (d.events || []).forEach((e) => { put(e.playerId, e.player); put(e.inId, e.inName); put(e.outId, e.outName); });
