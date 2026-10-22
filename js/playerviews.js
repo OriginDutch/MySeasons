@@ -20,7 +20,7 @@ import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './player
 import { currentSquad } from './importer.js';
 import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf } from './shirts.js';
 import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb, linkBanner } from './photos.js';
-import { ROLES, roleLabel, lineOfRole, rolesOf, roleFor, inferRoles } from './roles.js';
+import { ROLES, roleLabel, lineOfRole, rolesOf, roleFor, inferRoles, isGeneric, sidesOf, fitsRole } from './roles.js';
 
 let CUR_PH = null; // foto's van de geopende spelerspagina
 
@@ -764,7 +764,11 @@ function rolesBlock(pr, id, hint) {
         <span class="list-row__main"><span class="list-row__title">${esc(roleLabel(r.role))}</span>
         <span class="list-row__sub">vanaf ${yLab(r.year)}${r.note ? ` · ${esc(r.note)}` : ''}${r.year === getSeason() ? ' · dit seizoen' : ''}</span></span>
         <span class="muted" aria-hidden="true">✎</span></button>`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Nog geen rol. De app gebruikt de linie van Highlightly.</p>'}
-    ${hint && hint.starts ? `<p class="muted" style="font-size:var(--fs-sm);margin:0">Volgens de opstellingen van ${yLab(getSeason())}: <strong>${esc(roleLabel(hint.top))}</strong> in ${hint.count} van ${hint.starts} basisplaatsen${cur && cur !== hint.top ? ` (jij: ${esc(roleLabel(cur))})` : ''}.${cur !== hint.top ? ` <button class="link-btn" type="button" data-take-role="${hint.top}" data-pid="${pid}">Overnemen voor ${yLab(getSeason())}</button>` : ''}</p>` : ''}
+    ${hint && hint.starts ? (() => {
+      const fits = fitsRole(cur, hint.top);
+      const take = fits ? '' : sidesOf(hint.top).map((r) => ` <button class="link-btn" type="button" data-take-role="${r}" data-pid="${pid}">${isGeneric(hint.top) ? esc(roleLabel(r)) : `Overnemen voor ${yLab(getSeason())}`}</button>`).join(' ·');
+      return `<p class="muted" style="font-size:var(--fs-sm);margin:0">Volgens de opstellingen van ${yLab(getSeason())}: <strong>${esc(roleLabel(hint.top))}</strong> in ${hint.count} van ${hint.starts} basisplaatsen${cur && !fits ? ` (jij: ${esc(roleLabel(cur))})` : ''}.${isGeneric(hint.top) && !fits ? ' De kant weet Highlightly niet zeker:' : ''}${take}</p>`;
+    })() : ''}
     <div><button class="btn btn--sm" type="button" data-add-role data-pid="${pid}">+ Rolwijziging</button></div>
   </section>`;
 }
@@ -821,30 +825,47 @@ export const playerViews = {
         const own = rolesOf(pr).find((r) => r.year === y);
         const cur = roleFor(pr, y);
         const share = x.count / x.starts;
-        return { p, x, own, cur, same: cur === x.top, pick: !own && cur !== x.top && share >= 0.5 && x.starts >= 3 };
+        const generic = isGeneric(x.top);
+        const same = fitsRole(cur, x.top);
+        return { p, x, own, cur, generic, same, pick: !generic && !own && !same && share >= 0.5 && x.starts >= 3 };
       }).sort((a, b) => b.x.starts - a.x.starts);
       this._rows = rows;
       return `${head({ kicker: 'Selectie', title: 'Rollen uit opstellingen', back: 'selectie' })}
         <section class="section">
           <label class="field" style="max-width:220px"><span>Seizoen</span><select data-role-season>${seasons.map((s) => `<option value="${s}" ${s === y ? 'selected' : ''}>${yLab(s)}</option>`).join('')}</select></label>
           <p class="muted" style="font-size:var(--fs-md)">Uit de formatie en de plek in de opstelling (alleen basisplaatsen). Aangevinkt = nog geen eigen rol voor dit seizoen, en in minstens de helft van de duels dezelfde rol. Jouw eigen rollen worden nooit overschreven zonder dat je ze aanvinkt.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Links of rechts haalt de app niet uit Highlightly (die volgorde klopt niet altijd). Bij backs en vleugelspelers kies je zelf de kant; die worden nooit vanzelf aangevinkt.</p>
         </section>
         <section class="section"><div class="list">${rows.map((r, i) => `<label class="list-row dup-row">
             ${r.same ? '<span class="muted" style="width:18px">✓</span>' : `<input type="checkbox" data-role-pick="${i}" ${r.pick ? 'checked' : ''}>`}
             <span class="list-row__main"><span class="list-row__title">${esc(r.p.name)} <span class="muted">→ ${esc(roleLabel(r.x.top))}</span></span>
-              <span class="list-row__sub">${r.x.count} van ${r.x.starts} basisplaatsen · ${Object.entries(r.x.all).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${esc(roleLabel(k))} ${n}`).join(', ')}${r.cur ? ` · nu: ${esc(roleLabel(r.cur))}${r.own ? ' (eigen)' : ''}` : ''}${r.same ? ' · klopt al' : ''}</span></span>
+              <span class="list-row__sub">${r.x.count} van ${r.x.starts} basisplaatsen · ${Object.entries(r.x.all).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${esc(roleLabel(k))} ${n}`).join(', ')}${r.cur ? ` · nu: ${esc(roleLabel(r.cur))}${r.own ? (r.own.note === 'uit opstellingen' && isGeneric(r.x.top) ? ' (eerder overgenomen, kant controleren)' : ' (eigen)') : ''}` : ''}${r.same ? ' · klopt al' : ''}</span></span>
+            ${r.generic && !r.same ? `<select class="role-side" data-role-side="${i}" aria-label="Kant"><option value="">Kant…</option>${sidesOf(r.x.top).map((k) => `<option value="${k}">${esc(roleLabel(k))}</option>`).join('')}</select>` : ''}
           </label>`).join('') || '<p class="muted">Geen opstellingen met formatie in dit seizoen.</p>'}</div>
           ${rows.some((r) => !r.same) ? '<div><button class="btn btn--primary" type="button" data-role-go>Aangevinkte rollen opslaan</button></div>' : ''}</section>`;
     },
     mount(root, ctx) {
       const view = this;
       root.querySelector('[data-role-season]')?.addEventListener('change', (e) => { setSeason(e.target.value); ctx.refresh(); });
+      root.addEventListener('change', (e) => {
+        const sel = e.target.closest('[data-role-side]');
+        if (!sel) return;
+        const box = root.querySelector(`[data-role-pick="${sel.dataset.roleSide}"]`);
+        if (box) box.checked = !!sel.value;
+      });
       root.querySelector('[data-role-go]')?.addEventListener('click', async (e) => {
-        const picks = [...root.querySelectorAll('[data-role-pick]:checked')].map((c) => view._rows[Number(c.dataset.rolePick)]);
+        const picked = [...root.querySelectorAll('[data-role-pick]:checked')].map((c) => {
+          const r = view._rows[Number(c.dataset.rolePick)];
+          const side = root.querySelector(`[data-role-side="${c.dataset.rolePick}"]`);
+          return { r, role: r.generic ? (side && side.value) || null : r.x.top };
+        });
+        const noSide = picked.filter((x) => !x.role);
+        if (noSide.length) { toast(`Kies eerst een kant voor ${noSide.map((x) => x.r.p.name).join(', ')}`); return; }
+        const picks = picked.map((x) => ({ ...x.r, role: x.role }));
         if (!picks.length) { toast('Niets aangevinkt'); return; }
         e.currentTarget.disabled = true;
         try {
-          await savePlayersBatch(picks.map((r) => [String(r.p.id), { roles: { ...((r.p.profile && r.p.profile.roles) || {}), [getSeason()]: { role: r.x.top, note: 'uit opstellingen' } } }]));
+          await savePlayersBatch(picks.map((r) => [String(r.p.id), { roles: { ...((r.p.profile && r.p.profile.roles) || {}), [getSeason()]: { role: r.role, note: r.generic ? null : 'uit opstellingen' } } }]));
           toast(`${picks.length} rollen opgeslagen voor ${yLab(getSeason())}`); ctx.refresh();
         } catch (err) { toast(`Lukte niet: ${err.message || err}`); e.currentTarget.disabled = false; }
       });

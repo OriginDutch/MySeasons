@@ -5,6 +5,8 @@
 // per rij (keeper → aanval). Binnen een rij staat de EERSTE speler RECHTS en de laatste links
 // (bevestigd: Galvez eerste = rechtsback, Marsman laatste = linksback; Kvam rechtsbuiten, Ferrah linksbuiten).
 // Alleen basisspelers; invallers hebben geen plek in de formatie.
+// LET OP: die volgorde is niet betrouwbaar (vanaf sept. 2026 draaide Highlightly hem om). Afleiden geeft daarom
+// geen kant: 'FB' (back) en 'W' (vleugelspeler). De kant kiest de gebruiker; FB/W wordt nooit zo opgeslagen.
 
 export const ROLES = [
   ['GK', 'Keeper', 'Goalkeeper'],
@@ -13,8 +15,14 @@ export const ROLES = [
   ['RW', 'Rechtsbuiten', 'Forward'], ['LW', 'Linksbuiten', 'Forward'], ['ST', 'Spits', 'Forward'],
 ];
 const BY = Object.fromEntries(ROLES.map(([k, l, line]) => [k, { label: l, line }]));
-export const roleLabel = (r) => (r && BY[r] ? BY[r].label : null);
-export const lineOfRole = (r) => (r && BY[r] ? BY[r].line : null);
+// Alleen voor voorstellen (zonder kant):
+const GENERIC = { FB: { label: 'Back', line: 'Defender', sides: ['RB', 'LB'] }, W: { label: 'Vleugelspeler', line: 'Forward', sides: ['RW', 'LW'] } };
+export const isGeneric = (r) => !!GENERIC[r];
+export const sidesOf = (r) => (GENERIC[r] ? GENERIC[r].sides : [r]);
+/** Past een echte rol bij een voorstel? (Rechtsback past bij 'Back'.) */
+export const fitsRole = (role, suggestion) => !!role && sidesOf(suggestion).includes(role);
+export const roleLabel = (r) => (r && BY[r] ? BY[r].label : r && GENERIC[r] ? GENERIC[r].label : null);
+export const lineOfRole = (r) => (r && BY[r] ? BY[r].line : r && GENERIC[r] ? GENERIC[r].line : null);
 
 /** { jaar: { role, note } } opgeschoond, oud → nieuw. */
 export function rolesOf(pr) {
@@ -31,30 +39,30 @@ export function roleFor(pr, year) {
 }
 
 // ---------- Afleiden ----------
-/** Rollen voor één rij, van rechts naar links. ctx: { kind: 'def'|'mid'|'att', defSize, nearAttack } */
+/** Rollen voor één rij (zonder kant). ctx: { kind: 'def'|'mid'|'att', defSize, nearAttack } */
 function rowRoles(n, ctx) {
   if (ctx.kind === 'def') {
-    if (n === 4) return ['RB', 'CB', 'CB', 'LB'];
-    if (n === 5) return ['RB', 'CB', 'CB', 'CB', 'LB'];
+    if (n === 4) return ['FB', 'CB', 'CB', 'FB'];
+    if (n === 5) return ['FB', 'CB', 'CB', 'CB', 'FB'];
     return Array(n).fill('CB');
   }
   if (ctx.kind === 'att') {
-    if (n === 3) return ['RW', 'ST', 'LW'];
-    if (n === 4) return ['RW', 'ST', 'ST', 'LW'];
+    if (n === 3) return ['W', 'ST', 'W'];
+    if (n === 4) return ['W', 'ST', 'ST', 'W'];
     return Array(n).fill('ST');
   }
   // middenveld
-  if (ctx.defSize === 3 && n >= 4) return ['RB', ...Array(n - 2).fill('CM'), 'LB']; // vleugelverdedigers bij drie centrale
+  if (ctx.defSize === 3 && n >= 4) return ['FB', ...Array(n - 2).fill('CM'), 'FB']; // vleugelverdedigers bij drie centrale
   if (ctx.nearAttack) {
-    if (n >= 3) return ['RW', ...Array(n - 2).fill('AM'), 'LW'];
+    if (n >= 3) return ['W', ...Array(n - 2).fill('AM'), 'W'];
     return Array(n).fill('AM');
   }
   if (ctx.only) {
-    if (n >= 4) return ['RW', ...Array(n - 2).fill('CM'), 'LW'];
+    if (n >= 4) return ['W', ...Array(n - 2).fill('CM'), 'W'];
     return Array(n).fill('CM');
   }
   if (n <= 2) return Array(n).fill('DM');
-  if (n >= 4) return ['RW', ...Array(n - 2).fill('CM'), 'LW'];
+  if (n >= 4) return ['W', ...Array(n - 2).fill('CM'), 'W'];
   return Array(n).fill('CM');
 }
 

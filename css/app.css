@@ -564,6 +564,7 @@ a.list-row:hover, button.list-row:hover { background: var(--surface-hover); }
 .dup-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: start; gap: 10px; text-align: left; }
 .dup-row .list-row__main { justify-self: stretch; min-width: 0; }
 .dup-row > input[type=checkbox] { margin-top: 3px; }
+.dup-row .role-side { grid-column: 2; justify-self: start; min-height: 36px; padding: 4px 8px; border: 1px solid var(--hairline); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
 .dup-keep { display: flex; gap: 6px; align-items: baseline; font-size: var(--fs-md); }
 .recap { display: grid; gap: 14px; }
 .recap--two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
