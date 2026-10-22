@@ -7,8 +7,8 @@ import { similarNames, normName, siteSnapshot, compareSquad, siteBlock, ignoredK
 import { clubField, clubCrest, knownTeams, matchTeam } from './clubpick.js';
 import { autoShort } from './names.js';
 import { openSheet } from './editor.js';
-import { MAIN_CLUB } from './config.js';
-import { seasonLabel, isCurrentSeason, getSeason } from './seasonstate.js';
+import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
+import { seasonLabel, isCurrentSeason, getSeason, setSeason } from './seasonstate.js';
 import { statusIn, seasonWindow, spells } from './membership.js';
 import { flag, nationalities, countryCode, NAT_TOP, NAT_ALL } from './flags.js';
 import { COST, missingDetails, fetchMany } from './sync.js';
@@ -20,6 +20,7 @@ import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './player
 import { currentSquad } from './importer.js';
 import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf } from './shirts.js';
 import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb, linkBanner } from './photos.js';
+import { ROLES, roleLabel, lineOfRole, rolesOf, roleFor, inferRoles } from './roles.js';
 
 let CUR_PH = null; // foto's van de geopende spelerspagina
 
@@ -158,7 +159,7 @@ async function addPlayer(ctx, pre = {}) {
       <label class="field"><span>Selectie</span><select name="level"><option value="first" ${pre.level === 'o21' ? '' : 'selected'}>Eerste elftal</option><option value="o21" ${pre.level === 'o21' ? 'selected' : ''}>O21 / jeugd</option></select></label>
       <p class="muted sheet__note">O21 geldt vanaf het seizoen van de datum hieronder, en ook voor de seizoenen erna, tot je hem op zijn pagina naar het eerste zet of een transfer "Doorgestroomd uit de jeugd" toevoegt.</p>
       <div data-dup class="sheet__note" hidden></div>
-      <div class="field-row"><label class="field"><span>Positie</span><select name="position">${POS_OPTS.map(([v, l]) => `<option value="${v}" ${pre.position === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <div class="field-row"><label class="field"><span>Rol</span><select name="role">${roleOptions(null, { empty: '— onbekend' })}</select></label>
       <label class="field"><span>Rugnummer</span><input name="shirt" type="number" inputmode="numeric" min="1" max="99" value="${pre.shirt ?? ''}"></label></div>
       <div class="field-row"><label class="field"><span>Nationaliteit</span>${natSelect('nat1', '', false)}</label>
       <label class="field"><span>Geboortedatum</span><input name="dob" type="date"></label></div>
@@ -197,7 +198,7 @@ async function addPlayer(ctx, pre = {}) {
   const id = `legacy-m${Date.now().toString(36)}`;
   const shirt = data.get('shirt') === '' ? null : Number(data.get('shirt'));
   const prof = {
-    fullName: String(data.get('name')).trim(), position: data.get('position') || null, shirts: shirt != null ? { [seasonOfDate(data.get('date'))]: shirt } : null,
+    fullName: String(data.get('name')).trim(), position: lineOfRole(data.get('role')) || null, roles: data.get('role') ? { [seasonOfDate(data.get('date'))]: { role: data.get('role') } } : null, shirts: shirt != null ? { [seasonOfDate(data.get('date'))]: shirt } : null,
     nationality: data.get('nat1') || null, dob: data.get('dob') || null, manual: true, linkedTo: null,
     photoUrl: String(data.get('photo') || '').trim() || null,
     levels: data.get('level') === 'o21' ? { [seasonOfDate(data.get('date'))]: 'o21' } : null,
@@ -429,7 +430,7 @@ async function editProfile(ctx, id, profiles) {
       <label class="field"><span>Tweede nationaliteit</span>${natSelect('nat2', n2, true)}</label>
       <div class="field-row"><label class="field"><span>Geboortedatum</span><input name="dob" type="date" value="${esc(pr.dob || '')}"></label>
       <label class="field"><span>Rugnummer in ${esc(seasonLabel())}</span><input name="shirt" type="number" inputmode="numeric" min="1" max="99" placeholder="uit de opstellingen" value="${shirtFor(pr, getSeason()) ?? ''}"></label></div>
-      <div class="field-row"><label class="field"><span>Positie</span><select name="position">${POS_OPTS.map(([v, l]) => `<option value="${v}" ${(pr.position || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <div class="field-row"><label class="field"><span>Linie (als er geen rol is)</span><select name="position">${POS_OPTS.map(([v, l]) => `<option value="${v}" ${(pr.position || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="field"><span>Voet</span><select name="foot">${FOOT_OPTS.map((f) => `<option value="${f}" ${(pr.foot || '') === f ? 'selected' : ''}>${f || '—'}</option>`).join('')}</select></label></div>
       <div class="field-row"><label class="field"><span>Lengte (cm)</span><input name="height" type="number" inputmode="numeric" min="140" max="220" value="${pr.height ?? ''}"></label>
       <label class="field"><span>Contract tot</span><input name="contract" type="date" value="${esc(pr.contractUntil || '')}"></label></div>
@@ -528,7 +529,7 @@ function rowHtml(p, sort) {
   return `<a class="list-row player-row" href="#/speler/${encodeURIComponent(p.id)}">
     ${avatar(p)}
     <span class="list-row__main"><span class="list-row__title">${esc(p.name)}${flags ? `<span class="row-flags">${flags}</span>` : ''}</span>
-      <span class="list-row__sub">${sort === 'line' ? '' : esc(LINE_SHORT[p.position] || '—') + ' · '}${sub}</span></span>
+      <span class="list-row__sub">${p.role ? esc(roleLabel(p.role)) + ' · ' : sort === 'line' ? '' : esc(LINE_SHORT[p.position] || '—') + ' · '}${sub}</span></span>
     <span class="player-row__stats mono">
       <span title="Goals">${p.goals || '·'}</span><span title="Assists">${p.assists || '·'}</span>
       <span class="${p.rating >= 7 ? 'accent-text' : ''}" title="Gemiddeld cijfer">${p.rating == null ? '–' : p.rating.toFixed(1)}</span>
@@ -556,7 +557,7 @@ function squadTable(players, profiles) {
     return `<tr data-line="${esc(p.position || '')}" data-href="#/speler/${encodeURIComponent(p.id)}" ${Object.entries(v).map(([k, x]) => `data-${k}="${esc(String(x))}"`).join(' ')}>
       <td class="mono sq-nr">${p.number ?? '–'}</td>
       <td class="sq-name"><a href="#/speler/${encodeURIComponent(p.id)}">${avatar(p)}<span class="sq-name__txt"><span class="sq-name__n">${esc(p.name)}${nat ? `<span class="row-flags">${nationalities(nat).map((n) => flag(n, 14)).join('')}</span>` : ''}</span>${tags ? `<span class="sq-name__tags">${tags}</span>` : ''}</span></a></td>
-      <td>${esc(LINE_SHORT[p.position] || '—')}</td>
+      <td>${esc(roleLabel(p.role) || LINE_SHORT[p.position] || '—')}</td>
       <td class="mono">${age ?? '–'}</td>
       <td class="mono">${p.apps || 0}${p.subIns ? `<span class="muted"> (${p.subIns})</span>` : ''}</td>
       <td class="mono">${p.minutes || 0}</td>
@@ -676,7 +677,7 @@ function seasonMembers(list, squadPlayers, profiles) {
     const st = statusIn(pr, win, ref);
     if (!st.member) return;
     members.push({
-      id, name: profName(pr) || '?', number: shirtFor(pr, getSeason()) ?? latestShirt(pr, getSeason()), position: pr.position || '',
+      id, name: profName(pr) || '?', number: shirtFor(pr, getSeason()) ?? latestShirt(pr, getSeason()), role: roleFor(pr, getSeason()), position: lineOfRole(roleFor(pr, getSeason())) || pr.position || '',
       photo: shownThumb(pr.gallery, getSeason()) || pr.photoUrl || null, nationality: pr.nationality || null,
       apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
       status: levelFor(pr, getSeason()) === 'o21' && st.status === 'active' ? 'youth' : st.status, labels: [...(injuryLabel(pr, ref, isCurrentSeason()) ? [injuryLabel(pr, ref, isCurrentSeason())] : []), ...(st.labels || [])], conflict: false, profileOnly: true,
@@ -729,7 +730,7 @@ async function profileOnlyPage(pr, id) {
   const name = profName(pr) || '?';
   const per = periodText(pr);
   return `
-    ${head({ kicker: `Archief · ${LINE_SHORT[pr.position] || '—'}`, title: name, back: 'selectie' })}
+    ${head({ kicker: `Archief · ${roleLabel(roleFor(pr, getSeason())) || LINE_SHORT[pr.position] || '—'}`, title: name, back: 'selectie' })}
     <section class="section">
       <div class="player-hero">${heroImg(CUR_PH.photos, pr.gallery, getSeason(), null) || (pr.photoUrl ? photoImg(pr.photoUrl, 'player-hero__photo', '') : '')}<span class="player-hero__num">${shirtFor(pr, getSeason()) ?? latestShirt(pr) ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
       <div class="btn-row"><button class="btn btn--sm" type="button" data-action="edit-name" data-id="${esc(id)}" data-api="${esc(pr.apiName || '')}" data-full="${esc(pr.fullName || '')}" data-short="${esc(pr.shortName || '')}" data-photo="${esc(pr.photoUrl || '')}">Naam en foto-link</button><button class="btn btn--sm" type="button" data-photo-add>Foto toevoegen</button></div>
@@ -741,13 +742,115 @@ async function profileOnlyPage(pr, id) {
     ${linkBanner(CUR_PH)}
     ${galleryHtml(CUR_PH.photos, pr.gallery, { linkUrl: pr.photoUrl })}
     ${profileBlock(pr, id)}
+    ${rolesBlock(pr, id, null)}
     ${valueBlock(pr, id)}
     ${injuryBlock(pr, id)}
     ${transfersBlock(pr, id)}
     ${String(id).startsWith('legacy-') ? `<section class="section"><button class="btn btn--sm btn--danger" type="button" data-delete-player="${esc(id)}">Speler verwijderen</button></section>` : ''}`;
 }
 
+// ---------- Rollen per seizoen ----------
+const yLab = (y) => `${y}–${String(Number(y) + 1).slice(2)}`;
+const roleOptions = (sel, { empty = null } = {}) => `${empty ? `<option value="">${esc(empty)}</option>` : ''}${['Goalkeeper', 'Defender', 'Midfielder', 'Forward'].map((line) => `<optgroup label="${esc(LINE_SHORT[line])}">${ROLES.filter((r) => r[2] === line).map(([k, l]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('')}`;
+const seasonOptions = (sel) => { const o = []; for (let y = CURRENT_SEASON; y >= 2010; y--) o.push(`<option value="${y}" ${Number(sel) === y ? 'selected' : ''}>${yLab(y)}</option>`); return o.join(''); };
+
+function rolesBlock(pr, id, hint) {
+  const list = rolesOf(pr).slice().reverse();
+  const pid = esc(String(id));
+  const cur = roleFor(pr, getSeason());
+  return `<section class="section">
+    <div class="section__label"><span>Rollen</span><span>${list.length || ''}</span></div>
+    ${list.length ? `<div class="list">${list.map((r) => `<button type="button" class="list-row transfer-row" data-edit-role="${r.year}" data-pid="${pid}">
+        <span class="list-row__main"><span class="list-row__title">${esc(roleLabel(r.role))}</span>
+        <span class="list-row__sub">vanaf ${yLab(r.year)}${r.note ? ` · ${esc(r.note)}` : ''}${r.year === getSeason() ? ' · dit seizoen' : ''}</span></span>
+        <span class="muted" aria-hidden="true">✎</span></button>`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Nog geen rol. De app gebruikt de linie van Highlightly.</p>'}
+    ${hint && hint.starts ? `<p class="muted" style="font-size:var(--fs-sm);margin:0">Volgens de opstellingen van ${yLab(getSeason())}: <strong>${esc(roleLabel(hint.top))}</strong> in ${hint.count} van ${hint.starts} basisplaatsen${cur && cur !== hint.top ? ` (jij: ${esc(roleLabel(cur))})` : ''}.${cur !== hint.top ? ` <button class="link-btn" type="button" data-take-role="${hint.top}" data-pid="${pid}">Overnemen voor ${yLab(getSeason())}</button>` : ''}</p>` : ''}
+    <div><button class="btn btn--sm" type="button" data-add-role data-pid="${pid}">+ Rolwijziging</button></div>
+  </section>`;
+}
+
+async function editRole(ctx, id, year, profiles) {
+  const pr = profiles[String(id)] || {};
+  const cur = year != null ? (pr.roles || {})[year] : null;
+  const data = await openSheet({
+    title: cur ? 'Rol aanpassen' : 'Rolwijziging',
+    body: `<div class="field-row"><label class="field"><span>Vanaf seizoen</span><select name="year">${seasonOptions(year ?? getSeason())}</select></label>
+      <label class="field"><span>Rol</span><select name="role">${roleOptions(cur ? cur.role : roleFor(pr, getSeason()))}</select></label></div>
+      <label class="field"><span>Notitie</span><input name="note" maxlength="80" placeholder="bijv. omgeschoold door de trainer" value="${esc((cur && cur.note) || '')}"></label>
+      <p class="muted sheet__note">Geldt vanaf dat seizoen tot de volgende wijziging.</p>
+      ${cur ? '<label class="field field--check"><input type="checkbox" name="delete"> <span>Deze wijziging verwijderen</span></label>' : ''}`,
+  });
+  if (!data) return;
+  const y = Number(data.get('year'));
+  const patch = {};
+  if (year != null && (data.get('delete') || y !== Number(year))) patch[year] = null;
+  if (!data.get('delete')) patch[y] = { role: data.get('role'), note: String(data.get('note') || '').trim() || null };
+  const before = {}; Object.keys(patch).forEach((k) => { before[k] = (pr.roles || {})[k] ?? null; });
+  try {
+    await savePlayer(id, { roles: { ...(pr.roles || {}), ...patch } }); // hele map: zo blijft alles staan, ook buiten Firestore-merge
+    toast(data.get('delete') ? 'Rol verwijderd' : 'Rol opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await savePlayer(id, { roles: before }); ctx.refresh(); } });
+    ctx.refresh();
+  } catch (err) { toast(`Opslaan lukte niet: ${err.message || err}`); }
+}
+
+function mountRoles(root, ctx) {
+  root.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-add-role],[data-edit-role],[data-take-role]');
+    if (!b) return;
+    const { profiles } = await correctedList();
+    if (b.matches('[data-take-role]')) {
+      try { const pr = profiles[String(b.dataset.pid)] || {}; await savePlayer(b.dataset.pid, { roles: { ...(pr.roles || {}), [getSeason()]: { role: b.dataset.takeRole } } }); toast('Rol overgenomen'); ctx.refresh(); } catch (err) { toast(`Lukte niet: ${err.message || err}`); }
+      return;
+    }
+    editRole(ctx, b.dataset.pid, b.matches('[data-edit-role]') ? Number(b.dataset.editRole) : null, profiles);
+  });
+}
+
 export const playerViews = {
+  rollen: {
+    title: 'Rollen uit opstellingen',
+    navKey: 'selectie',
+    async render() {
+      const { list, profiles } = await correctedList();
+      const { players } = buildSquad(list, TEAM, profiles);
+      const inf = inferRoles(list, TEAM);
+      const y = getSeason();
+      const seasons = [...new Set((await getAllMatches().catch(() => [])).filter((m) => m.hasDetail || m.detail).map((m) => m.league && Number(m.league.season)).filter(Boolean))].sort((a, b) => b - a);
+      const rows = players.filter((p) => inf.has(p.id)).map((p) => {
+        const x = inf.get(p.id); const pr = p.profile || {};
+        const own = rolesOf(pr).find((r) => r.year === y);
+        const cur = roleFor(pr, y);
+        const share = x.count / x.starts;
+        return { p, x, own, cur, same: cur === x.top, pick: !own && cur !== x.top && share >= 0.5 && x.starts >= 3 };
+      }).sort((a, b) => b.x.starts - a.x.starts);
+      this._rows = rows;
+      return `${head({ kicker: 'Selectie', title: 'Rollen uit opstellingen', back: 'selectie' })}
+        <section class="section">
+          <label class="field" style="max-width:220px"><span>Seizoen</span><select data-role-season>${seasons.map((s) => `<option value="${s}" ${s === y ? 'selected' : ''}>${yLab(s)}</option>`).join('')}</select></label>
+          <p class="muted" style="font-size:var(--fs-md)">Uit de formatie en de plek in de opstelling (alleen basisplaatsen). Aangevinkt = nog geen eigen rol voor dit seizoen, en in minstens de helft van de duels dezelfde rol. Jouw eigen rollen worden nooit overschreven zonder dat je ze aanvinkt.</p>
+        </section>
+        <section class="section"><div class="list">${rows.map((r, i) => `<label class="list-row dup-row">
+            ${r.same ? '<span class="muted" style="width:18px">✓</span>' : `<input type="checkbox" data-role-pick="${i}" ${r.pick ? 'checked' : ''}>`}
+            <span class="list-row__main"><span class="list-row__title">${esc(r.p.name)} <span class="muted">→ ${esc(roleLabel(r.x.top))}</span></span>
+              <span class="list-row__sub">${r.x.count} van ${r.x.starts} basisplaatsen · ${Object.entries(r.x.all).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${esc(roleLabel(k))} ${n}`).join(', ')}${r.cur ? ` · nu: ${esc(roleLabel(r.cur))}${r.own ? ' (eigen)' : ''}` : ''}${r.same ? ' · klopt al' : ''}</span></span>
+          </label>`).join('') || '<p class="muted">Geen opstellingen met formatie in dit seizoen.</p>'}</div>
+          ${rows.some((r) => !r.same) ? '<div><button class="btn btn--primary" type="button" data-role-go>Aangevinkte rollen opslaan</button></div>' : ''}</section>`;
+    },
+    mount(root, ctx) {
+      const view = this;
+      root.querySelector('[data-role-season]')?.addEventListener('change', (e) => { setSeason(e.target.value); ctx.refresh(); });
+      root.querySelector('[data-role-go]')?.addEventListener('click', async (e) => {
+        const picks = [...root.querySelectorAll('[data-role-pick]:checked')].map((c) => view._rows[Number(c.dataset.rolePick)]);
+        if (!picks.length) { toast('Niets aangevinkt'); return; }
+        e.currentTarget.disabled = true;
+        try {
+          await savePlayersBatch(picks.map((r) => [String(r.p.id), { roles: { ...((r.p.profile && r.p.profile.roles) || {}), [getSeason()]: { role: r.x.top, note: 'uit opstellingen' } } }]));
+          toast(`${picks.length} rollen opgeslagen voor ${yLab(getSeason())}`); ctx.refresh();
+        } catch (err) { toast(`Lukte niet: ${err.message || err}`); e.currentTarget.disabled = false; }
+      });
+    },
+  },
+
   dubbelen: {
     title: 'Dubbele spelers',
     navKey: 'selectie',
@@ -929,7 +1032,7 @@ export const playerViews = {
           <summary class="section__label"><span>${esc(label)}</span><span>${groups[k].length}</span></summary>
           <div class="mob-only">${statHead}<div class="list">${groups[k].map((p) => rowHtml(p, 'all')).join('')}</div></div>
           <div class="desk-only-block">${squadTable(groups[k], profiles)}</div></details></section>`).join('')}
-        <section class="section"><div class="btn-row"><button class="btn btn--sm" type="button" data-add-player>+ Speler toevoegen</button><a class="link-btn" href="#/archief">Alle spelers uit je archief</a></div></section>`;
+        <section class="section"><div class="btn-row"><button class="btn btn--sm" type="button" data-add-player>+ Speler toevoegen</button><a class="link-btn" href="#/rollen">Rollen uit opstellingen</a><a class="link-btn" href="#/archief">Alle spelers uit je archief</a></div></section>`;
     },
     mount(root, ctx) {
       mountTransfers(root, ctx);
@@ -962,6 +1065,7 @@ export const playerViews = {
       mountExtra(root, ctx, async () => (await correctedList()).profiles);
       mountDiscipline(root, ctx, async () => disciplineState((await correctedList()).list));
       mountPhotos(root, ctx, () => CUR_PH);
+      mountRoles(root, ctx);
       root.addEventListener('click', async (e) => {
         const b = e.target.closest('[data-unalias]');
         if (!b) return;
@@ -1018,11 +1122,11 @@ export const playerViews = {
       ];
       const log = p.log.slice().reverse();
       return `
-        ${head({ kicker: `Selectie${levelFor(p.profile, getSeason()) === 'o21' ? ' · O21' : ''} · ${LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
+        ${head({ kicker: `Selectie${levelFor(p.profile, getSeason()) === 'o21' ? ' · O21' : ''} · ${roleLabel(p.role) || LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
         <section class="section">
           ${levelFor(p.profile, getSeason()) === 'o21' && p.apps >= PROMOTE_AT ? `<div class="promote-line"><span>Staat bij O21, maar speelde ${p.apps} duels in het eerste.</span><button class="btn btn--sm btn--primary" type="button" data-promote="${esc(String(p.id))}">Naar eerste elftal</button></div>` : ''}
           <div class="player-hero">${heroImg(CUR_PH.photos, gal, getSeason(), null) || (p.profile && p.profile.photoUrl ? photoImg(p.profile.photoUrl, 'player-hero__photo', '') : '')}<span class="player-hero__num">${p.number ?? '–'}</span>
-            <span class="muted">${esc(LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
+            <span class="muted">${esc(roleLabel(p.role) || LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
           <p class="muted" style="font-size:var(--fs-sm);margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>
           <div class="btn-row"><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}" data-photo="${esc((p.profile && p.profile.photoUrl) || '')}">Naam en foto-link</button><button class="btn" type="button" data-photo-add>Foto toevoegen</button></div>
         </section>
@@ -1039,6 +1143,7 @@ export const playerViews = {
               <button class="btn btn--sm" type="button" data-unalias="${esc(aid)}">Ontkoppelen</button></div>`).join('')}</div></section>` : '';
         })()}
         ${profileBlock(p.profile, p.id)}
+        ${rolesBlock(p.profile || {}, p.id, inferRoles(list, TEAM).get(p.id))}
         ${valueBlock(p.profile || {}, p.id)}
         ${injuryBlock(p.profile || {}, p.id)}
         ${disciplineBlock(await disciplineState(list).catch(() => null), p.id)}

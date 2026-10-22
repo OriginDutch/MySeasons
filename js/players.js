@@ -4,6 +4,7 @@
 // Goals en assists: uit de tijdlijn, mét jouw correcties. Minuten, kaarten en cijfer: box score.
 // Oefenduels tellen niet mee.
 
+import { roleFor, lineOfRole } from './roles.js';
 import { kindOf } from './corrections.js';
 import { sortByDate, resultFor } from './season.js';
 import { bestApiName, fullName, shortName } from './names.js';
@@ -103,7 +104,9 @@ export function buildSquad(list, teamId, profiles = {}) {
     const lineupNr = num ? Number(num[0]) : null;
     const ownNr = year != null ? shirtFor(prof, year) : null;
     return {
-      id: p.id, name, short: shortName(prof, apiName), apiName, profile: prof || null, number: ownNr ?? lineupNr, lineupNumber: lineupNr, position: (prof && ['Goalkeeper', 'Defender', 'Midfielder', 'Forward'].includes(prof.position) && prof.position) || (pos ? pos[0] : ''),
+      id: p.id, name, short: shortName(prof, apiName), apiName, profile: prof || null, number: ownNr ?? lineupNr, lineupNumber: lineupNr,
+      role: year != null ? roleFor(prof, year) : null,
+      position: lineOfRole(year != null ? roleFor(prof, year) : null) || (prof && ['Goalkeeper', 'Defender', 'Midfielder', 'Forward'].includes(prof.position) && prof.position) || (pos ? pos[0] : ''),
       squads: p.squads, apps: p.apps, starts: p.starts, subIns: p.subIns, minutes: p.minutes,
       goals: p.goals, assists: p.assists, penalties: p.penalties, yellow: p.yellow, red: p.red,
       rating: p.ratings.length ? p.ratings.reduce((t, r) => t + r, 0) / p.ratings.length : null,
