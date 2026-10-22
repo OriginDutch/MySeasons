@@ -107,7 +107,7 @@ export function buildSquad(list, teamId, profiles = {}) {
       squads: p.squads, apps: p.apps, starts: p.starts, subIns: p.subIns, minutes: p.minutes,
       goals: p.goals, assists: p.assists, penalties: p.penalties, yellow: p.yellow, red: p.red,
       rating: p.ratings.length ? p.ratings.reduce((t, r) => t + r, 0) / p.ratings.length : null,
-      rated: p.ratings.length, log: p.log, lastSeen: latest ? latest.match.date : null,
+      rated: p.ratings.length, log: p.log, lastSeen: latest ? latest.match.date : null, numbers: Object.keys(p.numbers).map(Number),
     };
   });
   return { players, matches: games.length };

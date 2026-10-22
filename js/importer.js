@@ -4,6 +4,7 @@
 // Wedstrijdnotities, MOTM en trainer koppelen op datum (±1 dag) + tegenstander. Alles is opnieuw
 // te draaien: dezelfde documenten worden bijgewerkt, jouw eigen notities worden nooit overschreven.
 
+import { aliasMap, applyAliases } from './names.js';
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB } from './config.js';
 import { attachDetails, getAllMatches, getPlayers, getNotes, getAllNotes, savePlayersBatch, saveNotesBatch, saveCoachesBatch, saveClubMarksBatch, getAllLeagueTeams } from './store.js';
@@ -62,12 +63,15 @@ export function suggest(p, squad) {
 
 /** Alle Highlightly-spelers van Cambuur over alle opgehaalde seizoenen. */
 export async function currentSquad() {
-  const all = await attachDetails(await getAllMatches());
-  const withNotes = await Promise.all(all.map(async (m) => (m.detail ? applyCorrections(m, await getNotes(m.id).catch(() => null)).match : m)));
+  const [base, profiles] = await Promise.all([getAllMatches(), getPlayers().catch(() => ({}))]);
+  const all = await attachDetails(base);
+  const alias = aliasMap(profiles);
+  const withNotes = await Promise.all(all.map(async (m) => (m.detail ? applyAliases(applyCorrections(m, await getNotes(m.id).catch(() => null)).match, alias) : m)));
   const seasons = [...new Set(withNotes.map((m) => m.league && m.league.season).filter((x) => x != null))];
   const byId = new Map();
   seasons.forEach((y) => buildSquad(withNotes.filter((m) => m.league && m.league.season === y), MAIN_CLUB.id).players.forEach((p) => {
-    if (!byId.has(p.id)) byId.set(p.id, { ...p, seasons: [y] }); else byId.get(p.id).seasons.push(y);
+    if (!byId.has(p.id)) byId.set(p.id, { ...p, seasons: [y], log: [...p.log], numbers: [...(p.numbers || [])] });
+    else { const x = byId.get(p.id); x.seasons.push(y); x.log.push(...p.log); x.apps += p.apps; x.numbers = [...new Set([...x.numbers, ...(p.numbers || [])])]; }
   }));
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

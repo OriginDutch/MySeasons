@@ -269,7 +269,7 @@ async function linkPlayer(ctx, id) {
 }
 
 /** Oud/eigen profiel `id` samenvoegen met Highlightly-speler `to`: lege velden aanvullen, lijsten samenvoegen, id → linkedTo. */
-async function mergeInto(id, to, profiles) {
+async function mergeInto(id, to, profiles, { name = null } = {}) {
   const pr = profiles[String(id)] || {};
   const target = profiles[String(to)] || {};
   const merged = {};
@@ -286,7 +286,7 @@ async function mergeInto(id, to, profiles) {
   });
   if (pr.gallery && !target.gallery) merged.gallery = pr.gallery;
   await savePlayer(to, merged);
-  await savePlayer(id, { linkedTo: Number(to) });
+  await savePlayer(id, { linkedTo: Number(to), ...(name && !pr.apiName && !pr.fullName && !pr.legacyName ? { apiName: name } : {}) });
 }
 
 // ---------- Dubbele spelers: oude profielen die nog niet aan hun Highlightly-speler gekoppeld zijn ----------
@@ -308,6 +308,35 @@ export async function findDuplicates(profiles) {
     out.push({ from: id, name, transfers: pr.transfers || [], cands: cands.map((h) => ({ ...h, sure: exact(h) || cands.length === 1, taken: taken.has(h.id) })) });
   });
   return out.sort((a, b) => a.name.localeCompare(b.name, 'nl'));
+}
+
+/**
+ * Twee Highlightly-id's voor één speler: lijkende naam én (zelfde rugnummer in een gedeeld seizoen of precies dezelfde
+ * naam), en nooit samen in één wedstrijd. Voorstel wie blijft: met profiel/foto, anders de meeste duels.
+ */
+export async function findHlDuplicates(profiles) {
+  const squad = await currentSquad().catch(() => []);
+  const info = squad.map((p) => ({
+    id: String(p.id), name: p.name, alt: p.apiName, apps: p.apps || 0, seasons: p.seasons || [],
+    nums: new Set([...(p.numbers || []), ...(p.lineupNumber != null ? [p.lineupNumber] : [])]),
+    games: new Set((p.log || []).map((l) => String(l.match.id))),
+    rich: (() => { const pr = profiles[String(p.id)] || {}; return (pr.gallery && pr.gallery.main ? 4 : 0) + (pr.photoUrl ? 2 : 0) + (pr.fullName || pr.legacyId ? 2 : 0) + (pr.transfers && pr.transfers.length ? 1 : 0); })(),
+  }));
+  const pairs = []; const used = new Set();
+  info.forEach((a, i) => info.slice(i + 1).forEach((b) => {
+    if (used.has(a.id) || used.has(b.id)) return;
+    const names = (x) => [x.name, x.alt].filter(Boolean);
+    const similar = names(a).some((n) => similarNames(n, names(b).map((m) => ({ id: b.id, name: m }))).length);
+    if (!similar) return;
+    const sameName = names(a).some((n) => names(b).some((m) => normName(n) === normName(m)));
+    const sameNum = [...a.nums].some((n) => b.nums.has(n)) && a.seasons.some((y) => b.seasons.includes(y));
+    const together = [...a.games].some((g) => b.games.has(g));
+    if (together || !(sameName || sameNum)) return;
+    const [keep, drop] = (b.rich - a.rich || b.apps - a.apps || (b.name || '').length - (a.name || '').length) > 0 ? [b, a] : [a, b];
+    pairs.push({ keep, drop, why: sameName && sameNum ? 'zelfde naam en rugnummer' : sameName ? 'zelfde naam' : `zelfde rugnummer (${[...a.nums].find((n) => b.nums.has(n))})` });
+    used.add(a.id); used.add(b.id);
+  }));
+  return pairs.sort((x, y) => x.keep.name.localeCompare(y.keep.name, 'nl'));
 }
 
 function mountTransfers(root, ctx) {
@@ -717,11 +746,20 @@ export const playerViews = {
     navKey: 'selectie',
     async render() {
       const { profiles } = await correctedList();
-      const list = await findDuplicates(profiles);
-      this._list = list;
+      const [list, hlPairs] = await Promise.all([findDuplicates(profiles), findHlDuplicates(profiles)]);
+      this._list = list; this._hl = hlPairs;
       const per = (t) => { const ys = (t || []).map((x) => String(x.date || '').slice(0, 4)).filter(Boolean).sort(); return ys.length ? `${ys[0]}–${ys[ys.length - 1]}` : ''; };
       return `${head({ kicker: 'Selectie', title: 'Dubbele spelers', back: 'selectie' })}
-        <section class="section"><p class="muted" style="font-size:var(--fs-md)">${list.length ? `${list.length} spelers uit je oude tracker lijken op een speler uit Highlightly. Samenvoegen = het oude profiel (transfers, rugnummers, waarde, blessures, foto's) gaat naar de Highlightly-speler; wat daar al staat blijft staan. Het oude profiel verdwijnt uit de lijsten maar blijft bewaard (gekoppeld).` : 'Geen dubbele spelers gevonden.'}</p>
+        ${hlPairs.length ? `<section class="section"><div class="section__label"><span>Twee Highlightly-id's voor één speler</span><span>${hlPairs.length}</span></div>
+          <p class="muted" style="font-size:var(--fs-md)">Highlightly gebruikt soms twee id's voor dezelfde speler (bijv. "J. Nap" en "Jochem Nap"). Samenvoegen: alle duels, goals en kaarten van het ene id tellen voor de speler die je houdt. De ruwe data blijft onaangeraakt; ontkoppelen kan op de spelerspagina.</p>
+          <div class="list">${hlPairs.map((pr, i) => `<div class="list-row dup-row dup-row--hl">
+            <input type="checkbox" data-hl="${i}" checked aria-label="Samenvoegen">
+            <span class="list-row__main"><span class="list-row__sub">${esc(pr.why)} · nooit samen in één duel</span>
+              ${[pr.keep, pr.drop].map((x, k) => `<label class="dup-keep"><input type="radio" name="hlkeep${i}" value="${k}" ${k === 0 ? 'checked' : ''}> <span>${esc(x.name)} <span class="muted">· ${x.apps} ${x.apps === 1 ? 'duel' : 'duels'} · ${x.seasons.map((y) => `'${String(y).slice(2)}`).join(' ')}${x.rich ? ' · profiel' : ''}</span></span></label>`).join('')}
+              <span class="list-row__sub muted">De aangevinkte blijft; de ander wordt een alias.</span></span>
+          </div>`).join('')}</div>
+          <div><button class="btn btn--primary" type="button" data-hl-go>Samenvoegen</button></div></section>` : ''}
+        <section class="section"><p class="muted" style="font-size:var(--fs-md)">${list.length ? `${list.length} spelers uit je oude tracker lijken op een speler uit Highlightly. Samenvoegen = het oude profiel (transfers, rugnummers, waarde, blessures, foto's) gaat naar de Highlightly-speler; wat daar al staat blijft staan. Het oude profiel verdwijnt uit de lijsten maar blijft bewaard (gekoppeld).` : hlPairs.length ? 'Geen oude profielen die nog gekoppeld moeten worden.' : 'Geen dubbele spelers gevonden.'}</p>
           ${list.length ? '<label class="field field--check"><input type="checkbox" data-dup-all> <span>Alles aan/uit</span></label>' : ''}</section>
         ${list.length ? `<section class="section"><div class="list">${list.map((d, i) => {
           const best = d.cands.find((c) => c.sure && !c.taken) || null;
@@ -738,6 +776,25 @@ export const playerViews = {
     },
     mount(root, ctx) {
       const view = this;
+      root.querySelector('[data-hl-go]')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const picks = [...root.querySelectorAll('[data-hl]:checked')].map((c) => {
+          const i = Number(c.dataset.hl); const pr = view._hl[i];
+          const k = Number((root.querySelector(`input[name="hlkeep${i}"]:checked`) || {}).value || 0);
+          return k === 0 ? { keep: pr.keep.id, drop: pr.drop.id, name: pr.drop.alt || pr.drop.name } : { keep: pr.drop.id, drop: pr.keep.id, name: pr.keep.alt || pr.keep.name };
+        });
+        if (!picks.length) { toast('Niets gekozen'); return; }
+        btn.disabled = true; let n = 0;
+        try {
+          for (const p of picks) {
+            btn.textContent = `Bezig… ${n + 1} van ${picks.length}`;
+            const { profiles } = await correctedList();
+            await mergeInto(p.drop, p.keep, profiles, { name: p.name });
+            n++;
+          }
+          toast(`${n} spelers samengevoegd`); ctx.refresh();
+        } catch (err) { toast(`Gestopt na ${n}: ${err.message || err}`); btn.disabled = false; btn.textContent = 'Samenvoegen'; }
+      });
       root.querySelector('[data-dup-all]')?.addEventListener('change', (e) => root.querySelectorAll('[data-dup]').forEach((c) => { c.checked = e.target.checked; }));
       root.querySelector('[data-dup-go]')?.addEventListener('click', async (e) => {
         const btn = e.currentTarget;
@@ -833,7 +890,8 @@ export const playerViews = {
             <div><a class="btn" href="#/home">Naar Home</a></div></div></section>`}`;
       }
       const hlMembers = members.filter((m) => !m.profileOnly).map((m) => ({ id: String(m.id), name: m.name }));
-      const dupCount = members.filter((m) => m.profileOnly && similarNames(m.name, hlMembers).length).length;
+      const hlDup = players.filter((p) => !p.profileOnly && p.dupWith && p.dupWith.some((n) => similarNames(n, [{ id: 'x', name: p.name }]).length)).length;
+      const dupCount = members.filter((m) => m.profileOnly && similarNames(m.name, hlMembers).length).length + Math.ceil(hlDup / 2);
       const used = members.filter((p) => p.apps).length;
       const extra = [
         ['left', isCurrentSeason() ? 'Vertrokken dit seizoen' : 'Vertrokken tijdens het seizoen'],
@@ -851,7 +909,7 @@ export const playerViews = {
           </fieldset>
         </section>
         ${missingBlock(list)}
-        ${dupCount ? `<section class="section"><a class="warn-line" href="#/dubbelen" style="display:block;text-decoration:none">${dupCount} ${dupCount === 1 ? 'speler staat' : 'spelers staan'} dubbel: oud profiel + Highlightly-speler. Samenvoegen →</a></section>` : ''}
+        ${dupCount ? `<section class="section"><a class="warn-line" href="#/dubbelen" style="display:block;text-decoration:none">${dupCount} ${dupCount === 1 ? 'speler staat' : 'spelers staan'} dubbel. Samenvoegen →</a></section>` : ''}
         ${site}
         <div class="mob-only">${SORTS.map(([v], i) => `<div data-sq="${v}" ${i === 0 ? '' : 'hidden'}>${squadList(players, v)}</div>`).join('')}</div>
         <section class="section desk-only-block">
@@ -897,6 +955,12 @@ export const playerViews = {
       mountDiscipline(root, ctx, async () => disciplineState((await correctedList()).list));
       mountPhotos(root, ctx, () => CUR_PH);
       root.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-unalias]');
+        if (!b) return;
+        b.disabled = true;
+        try { await savePlayer(b.dataset.unalias, { linkedTo: null }); toast('Ontkoppeld: dat id telt weer als eigen speler'); ctx.refresh(); } catch (err) { toast(`Lukte niet: ${err.message || err}`); b.disabled = false; }
+      });
+      root.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-action="edit-name"]');
         if (!btn) return;
         const { id, api, full, short, photo } = btn.dataset;
@@ -927,6 +991,7 @@ export const playerViews = {
       const { players } = buildSquad(list, TEAM, profiles);
       const p = players.find((x) => x.id === id);
       const prof = profiles[rawId];
+      if (!p && prof && /^\d+$/.test(String(prof.linkedTo ?? ''))) { location.replace(`#/speler/${prof.linkedTo}`); return ''; } // alias → hoofdspeler
       if (!p && prof) { await backfillNames({ [rawId]: prof }); return profileOnlyPage(prof, rawId); }
       if (!p) {
         return `${head({ kicker: 'Selectie', title: 'Niet gevonden', back: 'selectie' })}
@@ -958,6 +1023,13 @@ export const playerViews = {
         <section class="section">
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>
+        ${(() => {
+          const al = Object.entries(profiles).filter(([aid, pr]) => /^\d+$/.test(aid) && pr && String(pr.linkedTo) === String(p.id));
+          return al.length ? `<section class="section"><div class="section__label"><span>Ook bekend als</span><span>${al.length}</span></div>
+            <div class="list">${al.map(([aid, pr]) => `<div class="list-row"><span class="list-row__main"><span class="list-row__title">${esc(pr.apiName || pr.fullName || `Highlightly-id ${aid}`)}</span>
+              <span class="list-row__sub">tweede Highlightly-id (${esc(aid)}), telt mee voor deze speler</span></span>
+              <button class="btn btn--sm" type="button" data-unalias="${esc(aid)}">Ontkoppelen</button></div>`).join('')}</div></section>` : '';
+        })()}
         ${profileBlock(p.profile, p.id)}
         ${valueBlock(p.profile || {}, p.id)}
         ${injuryBlock(p.profile || {}, p.id)}
