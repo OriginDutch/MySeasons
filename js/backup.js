@@ -21,19 +21,21 @@ export const COLLECTIONS = [
   ['rsssf', 'RSSSF-seizoenen', 'core'],
   ['news', 'Bewaard nieuws', 'core'],
   ['meta', 'Instellingen en synchronisatie', 'core'],
+  ['photos', "Foto's (groot)", 'photos'],
   ['rawMatches', 'Ruwe Highlightly-data (groot)', 'raw'],
 ];
 const LABEL = Object.fromEntries(COLLECTIONS.map(([k, l]) => [k, l]));
 const WRITE_WARN = 15000; // Firestore gratis: 20.000 writes per dag
 // Tellers die bij vandaag horen: nooit terugzetten, anders klopt je quotum niet meer.
-const SKIP_META = new Set(['quota', 'nsWrites', 'backup', 'autoBackup']);
+const SKIP_META = new Set(['quota', 'nsWrites', 'backup', 'autoBackup', 'photoExport']);
 const docsFor = (b, k) => (b.collections[k] || []).filter((d) => !(k === 'meta' && SKIP_META.has(d.id)));
 const docWord = (n) => `${n} ${n === 1 ? 'document' : 'documenten'}`;
 
-export async function buildBackup({ raw = false } = {}, onProgress) {
+export async function buildBackup({ raw = false, photos = false } = {}, onProgress) {
   const out = { app: 'MySeasons', format: 1, version: APP_VERSION, exportedAt: new Date().toISOString(), collections: {} };
   for (const [name, , kind] of COLLECTIONS) {
     if (kind === 'raw' && !raw) continue;
+    if (kind === 'photos' && !photos) continue; // automatische back-up: nooit (te groot voor de Worker-opslag)
     out.collections[name] = await dumpCollection(name);
     if (onProgress) onProgress(name);
   }
@@ -103,7 +105,7 @@ export const backupViews = {
     title: 'Back-up',
     navKey: 'meer',
     async render() {
-      const last = await getMeta('backup').catch(() => null);
+      const [last, photoLast] = await Promise.all([getMeta('backup').catch(() => null), getMeta('photoExport').catch(() => null)]);
       const head = `<header class="page-head"><div class="page-head__titles">
         <a class="back-btn" href="#/meer" aria-label="Terug">${icons.back}</a>
         <span class="page-head__kicker">Meer / Back-up</span><h1 class="page-head__title">Back-up</h1></div></header>`;
@@ -129,7 +131,7 @@ export const backupViews = {
       return `${head}
         <section class="section">
           <div class="section__label"><span>Automatisch</span><span>${cloud ? `${cloud.items.length} van ${cloud.keep}` : ''}</span></div>
-          <p class="muted" style="font-size:var(--fs-md)">Eens per week maakt de app bij het openen zelf een back-up en bewaart die (gecomprimeerd) bij je Worker. De laatste 4 blijven staan. Zonder de ruwe Highlightly-data.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Eens per week maakt de app bij het openen zelf een back-up en bewaart die (gecomprimeerd) bij je Worker. De laatste 4 blijven staan. Zonder de ruwe Highlightly-data en <strong>zonder foto's</strong> (te groot); die zitten alleen in een export met foto's hieronder.</p>
           <label class="field field--check"><input type="checkbox" data-auto ${auto ? 'checked' : ''}> <span>Wekelijks automatisch</span></label>
           ${cloudErr ? `<p class="warn-line">${esc(cloudErr.status === 404 ? 'De Worker kent back-ups nog niet: de nieuwe versie is nog niet gedeployd.' : (cloudErr.message || 'Worker niet bereikbaar'))}</p>` : ''}
           ${cloud && cloud.items.length ? `<div class="list">${cloud.items.map((it) => `
@@ -143,6 +145,7 @@ export const backupViews = {
         <section class="section">
           <div class="section__label"><span>Exporteren</span><span>${last ? `laatst ${esc(dayShort(last.at))}` : 'nog nooit'}</span></div>
           <p class="muted" style="font-size:var(--fs-md)">Alles uit je database als één bestand: wedstrijden, je aanvullingen en correcties, spelers, transfers, trainers, seizoenen en standen. Bewaar het op je telefoon, PC of cloud.</p>
+          <label class="field field--check"><input type="checkbox" data-photos ${photoLast ? '' : 'checked'}> <span>Met foto's (groot bestand${photoLast ? `; laatste export met foto's: ${esc(dayShort(photoLast.at))}` : '; nog nooit met foto\'s geëxporteerd'})</span></label>
           <label class="field field--check"><input type="checkbox" data-raw> <span>Ook de ruwe Highlightly-data (groter bestand; alleen nodig om later alles opnieuw te verwerken)</span></label>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn--primary" type="button" data-bk="export">Back-up downloaden</button>
@@ -224,9 +227,10 @@ export const backupViews = {
         }
         if (act === 'export' || act === 'share') {
           const raw = !!root.querySelector('[data-raw]:checked');
+          const photos = !!root.querySelector('[data-photos]:checked');
           const label = b.innerHTML; b.disabled = true;
           try {
-            const backup = await buildBackup({ raw }, (name) => { b.textContent = `Lezen: ${LABEL[name] || name}…`; });
+            const backup = await buildBackup({ raw, photos }, (name) => { b.textContent = `Lezen: ${LABEL[name] || name}…`; });
             const { blob, name, file } = download(backup);
             if (act === 'share' && navigator.canShare && navigator.canShare({ files: [file] })) {
               await navigator.share({ files: [file], title: 'MySeasons back-up' });
@@ -236,7 +240,8 @@ export const backupViews = {
               document.body.append(a); a.click(); a.remove();
               setTimeout(() => URL.revokeObjectURL(a.href), 10000);
             }
-            await setMeta('backup', { at: backup.exportedAt, docs: count(backup), size: kb(blob.size), raw });
+            await setMeta('backup', { at: backup.exportedAt, docs: count(backup), size: kb(blob.size), raw, photos });
+            if (photos) await setMeta('photoExport', { at: backup.exportedAt, count: (backup.collections.photos || []).length, size: kb(blob.size) });
             toast(`Back-up gemaakt: ${count(backup)} documenten · ${kb(blob.size)}`);
             ctx.refresh();
           } catch (err) {

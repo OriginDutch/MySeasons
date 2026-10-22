@@ -287,12 +287,40 @@ export async function dumpCollection(name) {
 /** Documenten terugzetten (samenvoegen), in batches van 400. Geeft het aantal writes terug. */
 export async function restoreCollection(name, docs, onProgress) {
   let n = 0;
-  for (let i = 0; i < docs.length; i += 400) {
+  const step = name === 'photos' ? 20 : 400; // foto's zijn groot: kleine batches (max. 10 MB per verzoek)
+  for (let i = 0; i < docs.length; i += step) {
     const batch = writeBatch(db);
-    docs.slice(i, i + 400).forEach(({ id, data }) => batch.set(doc(db, name, String(id)), data, { merge: true }));
+    docs.slice(i, i + step).forEach(({ id, data }) => batch.set(doc(db, name, String(id)), data, { merge: true }));
     await batch.commit();
-    n += Math.min(400, docs.length - i);
+    n += Math.min(step, docs.length - i);
     if (onProgress) onProgress(n);
   }
   return n;
+}
+
+// ---------- Foto's: photos/{autoId} ----------
+// { owner: 'player:123' | 'coach:abc' | 'stadium:456', season, thumb, small, large, w, h, bytes, hash,
+//   source: 'upload' | 'link', sourceUrl, addedAt }. Verwijzing naar de hoofdfoto staat bij de eigenaar
+// (players/coaches.gallery, clubs.stadiumGallery), met een klein plaatje voor lijsten.
+
+export async function getPhotos(owner) {
+  const snap = await getDocs(query(collection(db, 'photos'), where('owner', '==', owner)));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+export async function addPhoto(data) {
+  const ref = doc(collection(db, 'photos'));
+  await setDoc(ref, data);
+  return ref.id;
+}
+export function updatePhoto(id, patch) {
+  return setDoc(doc(db, 'photos', String(id)), patch, { merge: true });
+}
+export function deletePhoto(id) {
+  return deleteDoc(doc(db, 'photos', String(id)));
+}
+const GALLERY_AT = { player: ['players', 'gallery'], coach: ['coaches', 'gallery'], stadium: ['clubs', 'stadiumGallery'] };
+/** Galerijverwijzing bij de eigenaar in zijn geheel vervangen (mergeFields: geen oude seizoenen laten staan). */
+export function setOwnerGallery(kind, id, gallery) {
+  const [col, field] = GALLERY_AT[kind];
+  return setDoc(doc(db, col, String(id)), { [field]: gallery }, { mergeFields: [field] });
 }

@@ -14,6 +14,9 @@ import { tokens } from './rsssf.js';
 import { bestStandings, regularOnly } from './livetable.js';
 import { clubCode } from './clubnames.js';
 import { leagueInfo } from './leagues.js';
+import { loadPhotos, heroImg, galleryHtml, mountPhotos } from './photos.js';
+
+let CUR_PH = null; // stadionfoto's van de geopende club
 
 const TEAM = MAIN_CLUB.id;
 const clean = (n) => String(n || '').replace(/\s*\(.*?\)\s*/g, ' ').trim();
@@ -128,7 +131,12 @@ export const clubViews = {
           <section class="section"><p class="muted">Deze club staat niet in de stand van ${esc(seasonLabel())}.</p></section>`;
       }
       const t = d.team;
-      const mark = (await getClubMarks().catch(() => ({})))[teamKey] || null;
+      const marks = await getClubMarks().catch(() => ({}));
+      const mark = marks[teamKey] || null;
+      const stadiumKey = t.id != null ? String(t.id) : teamKey;
+      const stadiumGal = (marks[stadiumKey] || {}).stadiumGallery || null;
+      CUR_PH = await loadPhotos('stadium', stadiumKey, stadiumGal);
+      const stadiumHero = heroImg(CUR_PH.photos, stadiumGal, getSeason(), null, 'stadium-hero');
       const played = d.matches.filter((m) => m.hs != null);
       const upcoming = d.matches.filter((m) => m.hs == null && m.status !== 'finished');
       const form = played.slice(-5).map((m) => resultOf(m, teamKey));
@@ -149,6 +157,10 @@ export const clubViews = {
           ${d.me && d.me.deduction ? `<p class="warn-line">${d.me.deduction} punten in mindering gebracht</p>` : ''}
           <p style="font-size:var(--fs-sm);margin:0"><a class="muted" href="#/clubnamen/${encodeURIComponent(String(t.id))}">Naam aanpassen${t.apiName && t.apiName !== t.name ? ` · Highlightly: ${esc(t.apiName)}` : ''}</a></p>
         </section>
+        <section class="section"><div class="section__label"><span>Stadion</span><span>${CUR_PH.photos.length ? CUR_PH.photos.length : ''}</span></div>
+          ${stadiumHero || '<p class="muted" style="font-size:var(--fs-md);margin:0">Nog geen stadionfoto.</p>'}
+          <div><button class="btn btn--sm" type="button" data-photo-add>Stadionfoto toevoegen</button></div></section>
+        ${galleryHtml(CUR_PH.photos, stadiumGal, { title: "Stadionfoto's" })}
         ${upcoming.length ? `<section class="section"><div class="section__label"><span>Programma</span><span>${upcoming.length}</span></div>
           <div class="list">${upcoming.map((m) => matchRow(m, teamKey, d.ownIds)).join('')}</div></section>` : ''}
         <section class="section"><div class="section__label"><span>Gespeeld</span><span>${played.length}</span></div>
@@ -165,6 +177,7 @@ export const clubViews = {
         </section>`;
     },
     mount(root, ctx) {
+      mountPhotos(root, ctx, () => CUR_PH);
       root.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-sync-league]');
         if (!btn) return;

@@ -52,7 +52,7 @@ function resultsHtml(list) {
   if (!list.length) return '<p class="muted" style="font-size:var(--fs-md)">Niets gevonden. Andere spelling, of de Engelse naam (bijv. "Eerste Divisie", "Premier League")? Of voeg hem met de hand toe.</p>';
   return `<div class="list">${list.map((r, i) => {
     const have = leagueInfo(r.id);
-    return `<div class="list-row">
+    return `<div class="list-row lg-res">
       ${r.logo ? `<img class="crest" src="${esc(r.logo)}" width="22" height="22" alt="" loading="lazy">` : '<span></span>'}
       <span class="list-row__main"><span class="list-row__title">${esc(r.name)}</span><span class="list-row__sub">${esc(r.country)} · id ${r.id}</span></span>
       ${have ? '<span class="muted" style="font-size:var(--fs-sm)">staat erin</span>' : `<button class="btn btn--sm" type="button" data-add-result="${i}">Toevoegen</button>`}

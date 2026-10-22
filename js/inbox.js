@@ -55,7 +55,7 @@ const KIND = {
 };
 
 /** Afgeleide meldingen uit je data. */
-function derived({ list, profiles, conflicts, backup, disc }) {
+function derived({ list, profiles, conflicts, backup, disc, photoState }) {
   const out = [];
   const today = new Date().toISOString().slice(0, 10);
   const official = list.filter((m) => m.league && !/friendl/i.test(m.league.name));
@@ -81,6 +81,13 @@ function derived({ list, profiles, conflicts, backup, disc }) {
     const name = pr.fullName || r.name || 'Speler';
     out.push({ id: `card:${r.key}`, kind: 'card', at: new Date(Date.parse(r.match.date) + 2 * 3600e3).toISOString(), title: `Rood voor ${name}: hoe lang geschorst?`, text: `De app rekent nu ${r.ban} ${r.ban === 1 ? 'duel' : 'duels'} (${r.kind === 'second' ? '2x geel' : 'direct rood'}). Vul in wat de aanklager of tuchtcommissie besliste, of bevestig.`, href: `#/speler/${encodeURIComponent(r.playerId)}` });
   });
+  // 4c. Foto's zitten niet in de automatische back-up: maandelijks herinneren aan een export met foto's
+  if (photoState && photoState.lastChange) {
+    const lastExp = photoState.exportAt ? Date.parse(photoState.exportAt) : 0;
+    if (Date.parse(photoState.lastChange) > lastExp && Date.now() - lastExp > 30 * 864e5) {
+      out.push({ id: `photoexport:${today.slice(0, 7)}`, kind: 'backup', at: null, title: lastExp ? "Tijd voor een export met foto's" : "Nog nooit een export met foto's gemaakt", text: "Je foto's zitten niet in de automatische back-up. Maak een export met foto's en bewaar het bestand op je pc of in de cloud.", href: '#/backup' });
+    }
+  }
   // 5. Spelers: blessure voorbij de verwachte terugkeer, contract dat binnen 90 dagen afloopt
   Object.entries(profiles || {}).forEach(([id, pr]) => {
     if (!pr || pr.linkedTo) return;
@@ -105,7 +112,9 @@ export async function inboxItems(ctx = null) {
   const [s, manual, auto] = await Promise.all([state(), getMeta('backup').catch(() => null), getMeta('autoBackup').catch(() => null)]);
   const backup = [manual, auto].filter((b) => b && b.at).sort((a, b) => b.at.localeCompare(a.at))[0] || null;
   const disc = isCurrentSeason() ? await disciplineState(c.list).catch(() => null) : null;
-  const all = [...derived({ list: c.list, profiles: c.profiles, conflicts: c.conflicts || 0, backup, disc }), ...s.items];
+  const [ph, phx] = await Promise.all([getMeta('photos').catch(() => null), getMeta('photoExport').catch(() => null)]);
+  const photoState = ph ? { lastChange: ph.lastChange, exportAt: phx && phx.at } : null;
+  const all = [...derived({ list: c.list, profiles: c.profiles, conflicts: c.conflicts || 0, backup, disc, photoState }), ...s.items];
   const dismissed = new Set(s.dismissed); const seen = new Set(s.seen);
   return all.filter((m) => !dismissed.has(m.id))
     .map((m) => ({ ...m, unread: !seen.has(m.id) }))

@@ -705,7 +705,7 @@ export const matchViews = {
           ${devBar(sum.total, sum.conflicts, `#/afwijkingen/${m.id}`)}
           ${goalsOff ? `<p class="warn-line">De uitslag is ${m.score.home}–${m.score.away}, maar de goals in de tijdlijn tellen op tot ${goalsOff.home}–${goalsOff.away}. Klopt er iets niet?</p>` : ''}
           ${coach || motmName ? `<dl class="kv">
-            ${coach ? `<dt>Trainer</dt><dd>${esc(coachName(coach))}</dd>` : ''}
+            ${coach ? `<dt>Trainer</dt><dd><a href="#/trainer/${encodeURIComponent(coach.id)}">${esc(coachName(coach))}</a></dd>` : ''}
             ${motmName ? `<dt>Man van de wedstrijd</dt><dd>${n.motm.playerId ? `<a class="plain-link" href="#/speler/${n.motm.playerId}">${esc(motmName)}</a>` : esc(motmName)} <span class="muted">· jouw keuze</span></dd>` : ''}
           </dl>` : ''}
           ${d ? `<dl class="kv">

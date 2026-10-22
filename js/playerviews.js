@@ -19,6 +19,9 @@ import { dayShort, opponentOf, isHome } from './season.js';
 import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './playerextra.js';
 import { currentSquad } from './importer.js';
 import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf } from './shirts.js';
+import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb } from './photos.js';
+
+let CUR_PH = null; // foto's van de geopende spelerspagina
 
 const TEAM = MAIN_CLUB.id;
 const r1 = (v) => (v == null ? '–' : v.toFixed(2));
@@ -433,7 +436,7 @@ function photoImg(url, cls, ini) {
 
 /** Portret met rugnummer; zonder foto initialen in clubkleuren. */
 function avatar(p) {
-  const photo = p.photo || (p.profile && p.profile.photoUrl);
+  const photo = shownThumb(p.profile && p.profile.gallery, getSeason()) || p.photo || (p.profile && p.profile.photoUrl);
   const ini = esc(initials(p.name));
   return `<span class="avatar">${photo ? photoImg(photo, 'avatar__img', ini) : `<span class="avatar__ini">${ini}</span>`}${p.number != null ? `<span class="avatar__num mono">${p.number}</span>` : ''}</span>`;
 }
@@ -610,7 +613,7 @@ function seasonMembers(list, squadPlayers, profiles) {
     if (!st.member) return;
     members.push({
       id, name: profName(pr) || '?', number: shirtFor(pr, getSeason()) ?? latestShirt(pr, getSeason()), position: pr.position || '',
-      photo: pr.photoUrl || null, nationality: pr.nationality || null,
+      photo: shownThumb(pr.gallery, getSeason()) || pr.photoUrl || null, nationality: pr.nationality || null,
       apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
       status: levelFor(pr, getSeason()) === 'o21' && st.status === 'active' ? 'youth' : st.status, labels: [...(injuryLabel(pr, ref, isCurrentSeason()) ? [injuryLabel(pr, ref, isCurrentSeason())] : []), ...(st.labels || [])], conflict: false, profileOnly: true,
       injured: !!injuryLabel(pr, ref, isCurrentSeason()),
@@ -654,19 +657,21 @@ function periodText(pr) {
 }
 
 /** Spelerspagina zonder Highlightly-stats dit seizoen: alleen het profiel uit je archief. */
-function profileOnlyPage(pr, id) {
+async function profileOnlyPage(pr, id) {
+  CUR_PH = await loadPhotos('player', id, pr.gallery);
   const name = profName(pr) || '?';
   const per = periodText(pr);
   return `
     ${head({ kicker: `Archief · ${LINE_SHORT[pr.position] || '—'}`, title: name, back: 'selectie' })}
     <section class="section">
-      <div class="player-hero">${pr.photoUrl ? photoImg(pr.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${shirtFor(pr, getSeason()) ?? latestShirt(pr) ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
-      <div><button class="btn btn--sm" type="button" data-action="edit-name" data-id="${esc(id)}" data-api="${esc(pr.apiName || '')}" data-full="${esc(pr.fullName || '')}" data-short="${esc(pr.shortName || '')}" data-photo="${esc(pr.photoUrl || '')}">Naam en foto</button></div>
+      <div class="player-hero">${heroImg(CUR_PH.photos, pr.gallery, getSeason(), null) || (pr.photoUrl ? photoImg(pr.photoUrl, 'player-hero__photo', '') : '')}<span class="player-hero__num">${shirtFor(pr, getSeason()) ?? latestShirt(pr) ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
+      <div class="btn-row"><button class="btn btn--sm" type="button" data-action="edit-name" data-id="${esc(id)}" data-api="${esc(pr.apiName || '')}" data-full="${esc(pr.fullName || '')}" data-short="${esc(pr.shortName || '')}" data-photo="${esc(pr.photoUrl || '')}">Naam en foto-link</button><button class="btn btn--sm" type="button" data-photo-add>Foto toevoegen</button></div>
       <p class="muted" style="font-size:var(--fs-md);margin:0">${pr.linkedTo === null || String(id).startsWith('legacy-')
         ? 'Nog niet gekoppeld aan Highlightly. Stats verschijnen zodra hij in een opgehaald seizoen voorkomt en je hem hieronder koppelt.'
         : 'Geen officiële duels in dit seizoen. Kies een ander seizoen via de clubnaam op Home.'}</p>
       ${pr.linkedTo == null ? `<div><button class="btn btn--sm" type="button" data-link-player="${esc(id)}">Koppelen aan Highlightly-speler</button></div>` : ''}
     </section>
+    ${galleryHtml(CUR_PH.photos, pr.gallery, { linkUrl: pr.photoUrl })}
     ${profileBlock(pr, id)}
     ${valueBlock(pr, id)}
     ${injuryBlock(pr, id)}
@@ -696,7 +701,7 @@ export const playerViews = {
       const label = (k) => (k === 'now' ? 'Nu bij de club' : k === 'unknown' ? 'Geen periode bekend' : `Vertrokken in ${k}–${String(Number(k) + 1).slice(2)}`);
       const sortIn = (a, b) => (LO[a.pr.position] || 9) - (LO[b.pr.position] || 9) || a.name.localeCompare(b.name, 'nl');
       const row = (r) => `<a class="list-row player-row" href="#/speler/${encodeURIComponent(r.id)}">
-            ${avatar({ name: r.name, photo: r.pr.photoUrl, number: latestShirt(r.pr) })}
+            ${avatar({ name: r.name, photo: shownThumb(r.pr.gallery) || r.pr.photoUrl, number: latestShirt(r.pr) })}
             <span class="list-row__main"><span class="list-row__title">${esc(r.name)}${r.pr.nationality ? `<span class="row-flags">${nationalities(r.pr.nationality).map((n) => flag(n, 12)).join('')}</span>` : ''}</span>
               <span class="list-row__sub">${esc(LINE_SHORT[r.pr.position] || '—')}${periodText(r.pr) ? ' · ' + esc(periodText(r.pr)) : ''}${String(r.id).startsWith('legacy-') ? ' · niet gekoppeld' : ''}</span></span>
             <span></span></a>`;
@@ -804,6 +809,7 @@ export const playerViews = {
       mountTransfers(root, ctx);
       mountExtra(root, ctx, async () => (await correctedList()).profiles);
       mountDiscipline(root, ctx, async () => disciplineState((await correctedList()).list));
+      mountPhotos(root, ctx, () => CUR_PH);
       root.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-action="edit-name"]');
         if (!btn) return;
@@ -840,6 +846,8 @@ export const playerViews = {
         return `${head({ kicker: 'Selectie', title: 'Niet gevonden', back: 'selectie' })}
           <section class="section"><p class="muted">Deze speler staat (nog) niet in een opgehaalde wedstrijd.</p></section>`;
       }
+      const gal = p.profile && p.profile.gallery;
+      CUR_PH = await loadPhotos('player', p.id, gal);
       const facts = playerFacts(p, players);
       const tiles = [
         [p.apps, p.apps === 1 ? 'duel' : 'duels', p.starts ? `${p.starts} basis` : ''],
@@ -854,10 +862,13 @@ export const playerViews = {
         ${head({ kicker: `Selectie${levelFor(p.profile, getSeason()) === 'o21' ? ' · O21' : ''} · ${LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
         <section class="section">
           ${levelFor(p.profile, getSeason()) === 'o21' && p.apps >= PROMOTE_AT ? `<div class="promote-line"><span>Staat bij O21, maar speelde ${p.apps} duels in het eerste.</span><button class="btn btn--sm btn--primary" type="button" data-promote="${esc(String(p.id))}">Naar eerste elftal</button></div>` : ''}
-          <div class="player-hero">${p.profile && p.profile.photoUrl ? photoImg(p.profile.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${p.number ?? '–'}</span>
+          <div class="player-hero">${heroImg(CUR_PH.photos, gal, getSeason(), null) || (p.profile && p.profile.photoUrl ? photoImg(p.profile.photoUrl, 'player-hero__photo', '') : '')}<span class="player-hero__num">${p.number ?? '–'}</span>
             <span class="muted">${esc(LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
           <p class="muted" style="font-size:var(--fs-sm);margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>
-          <div><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}" data-photo="${esc((p.profile && p.profile.photoUrl) || '')}">Naam en foto</button></div>
+          <div class="btn-row"><button class="btn" type="button" data-action="edit-name" data-id="${p.id}" data-api="${esc(p.apiName)}" data-full="${esc((p.profile && p.profile.fullName) || '')}" data-short="${esc((p.profile && p.profile.shortName) || '')}" data-photo="${esc((p.profile && p.profile.photoUrl) || '')}">Naam en foto-link</button><button class="btn" type="button" data-photo-add>Foto toevoegen</button></div>
+        </section>
+        ${galleryHtml(CUR_PH.photos, gal, { linkUrl: p.profile && p.profile.photoUrl })}
+        <section class="section">
           <div class="tiles">${tiles.map(([v, l, sub]) => `<div class="tile"><span class="tile__num">${v}</span><span class="tile__label">${l}</span>${sub ? `<span class="tile__sub muted">${sub}</span>` : ''}</div>`).join('')}</div>
         </section>
         ${profileBlock(p.profile, p.id)}
