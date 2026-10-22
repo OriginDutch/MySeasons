@@ -24,6 +24,49 @@ export function setOne(id, m) {
 
 export const overrideOf = (id) => overrides.get(String(id)) || null;
 
+// ---------- RSSSF-namen koppelen aan Highlightly-clubs ----------
+// RSSSF levert alleen tekst ("NEC", "Go Ahead Eagles"). Via de teamindex vinden we het Highlightly-id,
+// zodat je eigen naam, korte naam, code en het wapen ook in oude seizoenen verschijnen.
+const aliases = new Map(); // sleutel -> { id, logo }
+let aliasesLoaded = false;
+export const teamAliasesLoaded = () => aliasesLoaded;
+const keyOf = (n) => String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\(.*?\)/g, ' ')
+  .replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w && !['fc', 'sc', 'sv', 'afc', 'bv', 'vv'].includes(w)).join(' ').trim();
+
+/** teams: uitkomst van getAllLeagueTeams(). */
+export function setTeamAliases(teams) {
+  aliases.clear();
+  (teams || []).forEach((t) => [t.apiName, t.name].forEach((n) => { const k = keyOf(n); if (k && !aliases.has(k)) aliases.set(k, { id: t.id, logo: t.logo || null }); }));
+  aliasesLoaded = true;
+}
+
+/** Highlightly-club bij een RSSSF-naam: exact, anders één unieke club waarvan de naam de andere bevat. */
+export function aliasOf(name) {
+  const k = keyOf(name);
+  if (!k) return null;
+  if (aliases.has(k)) return aliases.get(k);
+  const hits = [...aliases.entries()].filter(([a]) => (a.startsWith(`${k} `) || k.startsWith(`${a} `)) && !/^jong /.test(a) === !/^jong /.test(k));
+  const ids = new Set(hits.map(([, v]) => v.id));
+  return ids.size === 1 ? hits[0][1] : null;
+}
+
+/** Team uit RSSSF (muteert): naam en id blijven de RSSSF-sleutel (rsName), weergave krijgt je eigen naam en het wapen. */
+export function nameRs(t) {
+  if (!t || typeof t !== 'object') return t;
+  t.rsName = t.rsName || t.name;
+  let id = t.id;
+  if (String(id).startsWith('rs:')) {
+    const a = aliasOf(t.rsName);
+    if (a) { t.hlId = a.id; id = a.id; if (!t.logo) t.logo = a.logo; }
+  }
+  const o = overrides.get(String(id));
+  t.apiName = t.rsName;
+  t.name = (o && o.name) || t.rsName;
+  t.short = (o && o.short) || t.name;
+  t.code = (o && o.code) || defaultCode(t.name);
+  return t;
+}
+
 const clean = (v) => String(v || '').trim().slice(0, 60);
 
 /** Standaardcode: "FC Twente" -> TWE, "Go Ahead Eagles" -> GO… zoals voorheen. */

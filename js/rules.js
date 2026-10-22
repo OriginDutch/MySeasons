@@ -253,7 +253,8 @@ export function cupWinnerRsssf(rs, rows) {
   if (homeWins === null) return null;
   const name = homeWins ? f.home : f.away;
   const key = (n) => String(n || '').toLowerCase().replace(/\s*\(.*?\)\s*/g, ' ').replace(/[^a-z0-9 ]/g, '').split(' ').filter((w) => w && !['fc', 'sc', 'sv', 'afc', 'bv'].includes(w)).join(' ');
-  const row = rows.find((r) => key(r.team.name) === key(name)) || rows.find((r) => key(r.team.name).includes(key(name)) || key(name).includes(key(r.team.name)));
+  const nm = (r) => key(r.team.rsName || r.team.name);
+  const row = rows.find((r) => nm(r) === key(name)) || rows.find((r) => nm(r).includes(key(name)) || key(name).includes(nm(r)));
   return { team: row ? row.team : { id: `rs:${name}`, name }, source: 'rsssf' };
 }
 

@@ -4,6 +4,7 @@ import { rsssf } from './api.js';
 import { saveRsssf, getRsssf } from './store.js';
 import { parseRsssf, verify, RSSSF_CREDIT, RSSSF_LEAGUE, tokens } from './rsssf.js';
 import { MAIN_CLUB } from './config.js';
+import { nameRs } from './clubnames.js';
 
 /** Seizoen 2024 (= 2024/25) staat op RSSSF als ned2025. */
 export async function importRsssf(year) {
@@ -39,7 +40,7 @@ export function rsssfStandings(rs, leagueId) {
       name: d.name,
       rows: d.table.map((r) => ({
         position: r.pos, points: r.points,
-        team: { id: isMain(r.name) ? MAIN_CLUB.id : `rs:${cleanName(r.name)}`, name: cleanName(r.name), logo: null },
+        team: nameRs({ id: isMain(r.name) ? MAIN_CLUB.id : `rs:${cleanName(r.name)}`, name: cleanName(r.name), logo: null }),
         total: { played: r.played, w: r.w, d: r.d, l: r.l, gf: r.gf, ga: r.ga },
         home: null, away: null, deduction: r.deduction, remark: r.remark,
       })),

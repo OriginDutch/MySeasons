@@ -54,6 +54,7 @@ export async function saveMatches(list) {
     list.slice(i, i + 400).forEach((m) => batch.set(doc(db, 'matches', String(m.id)), rawMatch(m), { merge: true }));
     await batch.commit();
   }
+  await indexTeams(list);
 }
 
 export async function saveMatchDetail(id, base, detail, raw) {
@@ -214,6 +215,7 @@ export async function saveLeagueMatches(list) {
     list.slice(i, i + 400).forEach((m) => batch.set(doc(db, 'leagueMatches', String(m.id)), rawMatch(m), { merge: true }));
     await batch.commit();
   }
+  await indexTeams(list);
 }
 
 // ---------- Handwerk in bulk (import) ----------
@@ -252,11 +254,35 @@ export async function saveClubMarksBatch(entries) {
 }
 
 /** Alle clubs die de app kent (uit Cambuur-wedstrijden en competitiewedstrijden), uniek op id. */
-export async function getAllLeagueTeams() {
+// Teamindex: meta/teamIndex = { teams: { [id]: { name, logo } }, builtAt }. Eén document in plaats van alle
+// wedstrijden lezen (duizenden reads). Wordt bijgewerkt bij elke opgeslagen wedstrijd en eens per 30 dagen
+// helemaal opnieuw opgebouwd, voor de zekerheid.
+const TEAM_INDEX_DAYS = 30;
+const teamsOf = (list) => {
+  const out = {};
+  (list || []).forEach((m) => [m && m.homeTeam, m && m.awayTeam].forEach((t) => { if (t && t.id != null && /^\d+$/.test(String(t.id))) out[String(t.id)] = { name: t.apiName || t.name || '', logo: t.logo || null }; }));
+  return out;
+};
+function indexTeams(list) {
+  const teams = teamsOf(list);
+  if (!Object.keys(teams).length) return Promise.resolve();
+  return setDoc(doc(db, 'meta', 'teamIndex'), { teams }, { merge: true }).catch(() => {});
+}
+const fromIndex = (teams) => Object.entries(teams || {}).map(([id, t]) => nameTeam({ id: Number(id), name: t.name, logo: t.logo || null }));
+
+export async function rebuildTeamIndex() {
   const [a, b] = await Promise.all([getDocs(collection(db, 'matches')), getDocs(collection(db, 'leagueMatches'))]);
-  const map = new Map();
-  [...a.docs, ...b.docs].forEach((d) => { const m = d.data(); [m.homeTeam, m.awayTeam].forEach((t) => { if (t && t.id) map.set(t.id, nameTeam({ id: t.id, name: t.apiName || t.name, logo: t.logo || null })); }); });
-  return [...map.values()];
+  const teams = teamsOf([...a.docs, ...b.docs].map((d) => d.data()));
+  await setDoc(doc(db, 'meta', 'teamIndex'), { teams, builtAt: new Date().toISOString() });
+  return teams;
+}
+
+export async function getAllLeagueTeams() {
+  const snap = await getDoc(doc(db, 'meta', 'teamIndex'));
+  const d = snap.exists() ? snap.data() : null;
+  const fresh = d && d.builtAt && Date.now() - Date.parse(d.builtAt) < TEAM_INDEX_DAYS * 864e5;
+  if (d && d.teams && Object.keys(d.teams).length && fresh) return fromIndex(d.teams);
+  return fromIndex(await rebuildTeamIndex());
 }
 
 // ---------- Competitie-index: leagueIndex/{leagueId}_{season} ----------

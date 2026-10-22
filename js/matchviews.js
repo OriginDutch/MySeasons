@@ -279,7 +279,7 @@ async function playoffsPage(info, matches, { listHtml, kicker, rs }) {
   for (const l of LEAGUES) {
     const st = (await bestStandings(l.id, getSeason()).catch(() => null)) || rsssfStandings(rs, l.id);
     const g = st && st.groups && st.groups[0];
-    if (g) rowsFor(g, 'total').forEach((r) => seeds.push({ id: r.team.id, name: r.team.name, pos: r.pos, short: l.short, leagueId: l.id }));
+    if (g) rowsFor(g, 'total').forEach((r) => seeds.push({ id: r.team.hlId || r.team.id, name: r.team.name, pos: r.pos, short: l.short, leagueId: l.id }));
   }
   const seed = (t) => seeds.find((s) => (t.id != null && s.id === t.id)) || seeds.find((s) => tokens(s.name).join(' ') === tokens(t.name).join(' ')) || null;
   let projected = null;
@@ -565,7 +565,7 @@ export const matchViews = {
       const cup = cupWinner(cupList) || (rs ? cupWinnerRsssf(rs, g.rows) : null);
       // Periodes van oude seizoenen: Highlightly-wedstrijden als die er zijn, anders de RSSSF-uitslagen.
       const rsDivL = rs && rs.divisions ? rs.divisions.find((d) => d.leagueId === league.id) : null;
-      const idOf = (name) => { const r = g.rows.find((x) => tokens(x.team.name).join(' ') === tokens(name).join(' ')); return r ? r.team.id : `rs:${name}`; };
+      const idOf = (name) => { const r = g.rows.find((x) => tokens(x.team.rsName || x.team.name).join(' ') === tokens(name).join(' ')); return r ? r.team.id : `rs:${name}`; };
       const lmUse = lm.length ? lm : rsDivL ? rsssfAsMatches(rsDivL, idOf) : [];
       const zones = rules && !special ? zonesFor(rules, g.rows, { matches: lmUse, cup, final: !isCurrentSeason() }) : null;
       const pModes = zones && rules.periods && lmUse.length ? zones.periods : [];

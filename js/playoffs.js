@@ -9,7 +9,7 @@ import { tokens } from './rsssf.js';
 import { regularOnly } from './livetable.js';
 import { dayShort, timeOf } from './season.js';
 import { knownTeams, matchTeam, clubCrest } from './clubpick.js';
-import { clubName } from './clubnames.js';
+import { clubName, aliasOf } from './clubnames.js';
 
 export const PLAYOFFS = [
   { key: 'nacompetitie', name: 'Nacompetitie', sub: 'promotie/degradatie' },
@@ -58,7 +58,7 @@ export async function playoffMatches(season, { rs = null, own = [] } = {}) {
   if (rs && rs.divisions) {
     const all = rs.divisions.flatMap((d) => d.matches || []);
     const teams = await knownTeams().catch(() => []);
-    const resolve = (name) => { const clean = String(name).replace(/\s*\(.*?\)\s*/g, ' ').trim(); const t = matchTeam(teams, clean); return t ? { id: t.id, name: t.name, logo: t.logo || null } : { id: null, name: clean, logo: null }; };
+    const resolve = (name) => { const clean = String(name).replace(/\s*\(.*?\)\s*/g, ' ').trim(); const a = aliasOf(clean); const t = (a && teams.find((x) => String(x.id) === String(a.id))) || matchTeam(teams, clean); return t ? { id: t.id, name: t.name, logo: t.logo || null } : { id: null, name: clean, logo: null }; };
     [['nacompetitie', 'nacompetitie'], ['europa', 'europe-playoff']].forEach(([k, stage]) => {
       if (out[k].length) return;
       out[k] = all.filter((m) => m.stage === stage).map((m) => {

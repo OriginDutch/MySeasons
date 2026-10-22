@@ -83,11 +83,14 @@ async function load(teamKey, leagueId = null) {
   } else if (rs && rsDiv && team) {
     source = 'rsssf';
     const idOf = (name) => {
-      const row = rows.find((r) => sameName(r.team.name, name));
+      const row = rows.find((r) => sameName(r.team.rsName || r.team.name, name));
       return row ? row.team.id : `rs:${name}`;
     };
     matches = (rsDiv.matches || []).filter((m) => m.stage === 'regular' || m.stage === 'nacompetitie').map((m) => fromRsssf(m, idOf))
       .filter((m) => String(m.home.id) === teamKey || String(m.away.id) === teamKey);
+    // Weergave: je eigen clubnaam en het wapen uit de stand (RSSSF levert alleen tekst).
+    const byId = new Map(rows.map((r) => [String(r.team.id), r.team]));
+    matches.forEach((m) => [m.home, m.away].forEach((t) => { const r = byId.get(String(t.id)); if (r) { t.name = r.name; t.short = r.short; t.code = r.code; if (!t.logo && r.logo) t.logo = r.logo; } }));
   }
   // Duels tegen Cambuur uit je eigen data: altijd erbij, en doorklikbaar.
   const own = list.filter((m) => m.league && m.league.id === league.id && [m.homeTeam, m.awayTeam].some((t) => t && String(t.id) === teamKey));
@@ -133,7 +136,7 @@ export const clubViews = {
       const t = d.team;
       const marks = await getClubMarks().catch(() => ({}));
       const mark = marks[teamKey] || null;
-      const stadiumKey = t.id != null ? String(t.id) : teamKey;
+      const stadiumKey = t.hlId != null ? String(t.hlId) : t.id != null ? String(t.id) : teamKey;
       const stadiumGal = (marks[stadiumKey] || {}).stadiumGallery || null;
       CUR_PH = await loadPhotos('stadium', stadiumKey, stadiumGal);
       const stadiumHero = heroImg(CUR_PH.photos, stadiumGal, getSeason(), null, 'stadium-hero');
@@ -155,7 +158,7 @@ export const clubViews = {
           </div>
           ${mark && (mark.mark || mark.note) ? `<p class="muted" style="font-size:var(--fs-md);margin:0">${mark.mark === 'rivaal' ? '<strong class="accent-text">Rivaal</strong>' : mark.mark === 'interessant' ? '★ Interessant' : ''}${mark.note ? `${mark.mark ? ' · ' : ''}${esc(mark.note)}` : ''}</p>` : ''}
           ${d.me && d.me.deduction ? `<p class="warn-line">${d.me.deduction} punten in mindering gebracht</p>` : ''}
-          <p style="font-size:var(--fs-sm);margin:0"><a class="muted" href="#/clubnamen/${encodeURIComponent(String(t.id))}">Naam aanpassen${t.apiName && t.apiName !== t.name ? ` · Highlightly: ${esc(t.apiName)}` : ''}</a></p>
+          <p style="font-size:var(--fs-sm);margin:0">${t.hlId || /^\d+$/.test(String(t.id)) ? `<a class="muted" href="#/clubnamen/${encodeURIComponent(String(t.hlId || t.id))}">Naam aanpassen${t.apiName && t.apiName !== t.name ? ` · ${t.rsName ? 'RSSSF' : 'Highlightly'}: ${esc(t.apiName)}` : ''}</a>` : `<span class="muted">Nog niet gekoppeld aan een Highlightly-club${t.rsName ? ` (RSSSF: ${esc(t.rsName)})` : ''}</span>`}</p>
         </section>
         <section class="section"><div class="section__label"><span>Stadion</span><span>${CUR_PH.photos.length ? CUR_PH.photos.length : ''}</span></div>
           ${stadiumHero || '<p class="muted" style="font-size:var(--fs-md);margin:0">Nog geen stadionfoto.</p>'}

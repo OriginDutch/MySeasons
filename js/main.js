@@ -8,8 +8,8 @@ import { pastSeasonBar, openViewSheet } from './seasonsview.js';
 import { setSeason } from './seasonstate.js';
 import { CURRENT_SEASON } from './config.js';
 import { autoSync } from './nightshift.js';
-import { clubNamesLoaded, setClubOverrides } from './clubnames.js';
-import { getClubMarks } from './store.js';
+import { clubNamesLoaded, setClubOverrides, teamAliasesLoaded, setTeamAliases } from './clubnames.js';
+import { getClubMarks, getAllLeagueTeams } from './store.js';
 import { ensureLeagues } from './leagues.js';
 
 const appEl = document.getElementById('app');
@@ -127,6 +127,7 @@ async function route({ keepScroll = false } = {}) {
 
   if (!clubNamesLoaded()) await getClubMarks().then(setClubOverrides).catch(() => {}); // eigen clubnamen vóór het eerste scherm (offline: volgende keer opnieuw)
   await ensureLeagues(); // gevolgde competities (Meer → Competities)
+  if (!teamAliasesLoaded()) await getAllLeagueTeams().then(setTeamAliases).catch(() => {}); // RSSSF-namen → clubs (1 read, teamindex)
 
   let html;
   try {
