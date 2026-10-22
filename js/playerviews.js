@@ -1,7 +1,7 @@
 // Selectie en spelerspagina's.
 
 import { esc, toast } from './ui.js';
-import { savePlayer, deletePlayer, savePlayersBatch } from './store.js';
+import { savePlayer, deletePlayer, savePlayersBatch, getAllMatches } from './store.js';
 import { addMessageOnce } from './inbox.js';
 import { similarNames, siteSnapshot, compareSquad, siteBlock, ignoredKeys, ignoreKey } from './squadsite.js';
 import { clubField, clubCrest, knownTeams, matchTeam } from './clubpick.js';
@@ -140,7 +140,7 @@ async function knownPeople(profiles) {
   squad.forEach((p) => { seen.add(String(p.id)); out.push({ id: String(p.id), name: p.name, where: 'Highlightly' }); });
   Object.entries(profiles || {}).forEach(([id, pr]) => {
     if (seen.has(id) || pr.linkedTo) return;
-    const name = pr.fullName || pr.legacyName; if (name) out.push({ id, name, where: 'archief' });
+    const name = pr.fullName || pr.legacyName || pr.apiName; if (name) out.push({ id, name, where: 'archief' });
   });
   return out;
 }
@@ -228,7 +228,7 @@ async function removePlayer(ctx, id) {
   if (!String(id).startsWith('legacy-')) return; // Highlightly-spelers komen uit de opstellingen, die verwijderen we niet
   const { profiles } = await correctedList();
   const pr = profiles[String(id)]; if (!pr) return;
-  const name = pr.fullName || pr.legacyName || 'deze speler';
+  const name = pr.fullName || pr.legacyName || pr.apiName || 'deze speler';
   const ok = await openSheet({
     title: 'Speler verwijderen',
     body: `<p>${esc(name)} en alles wat je bij hem invulde (profiel, transfers, waarde, blessures) verdwijnt uit je archief.</p><p class="muted sheet__note">Je krijgt een paar seconden om het ongedaan te maken. Daarna staat hij alleen nog in je back-ups.</p>`,
@@ -248,7 +248,7 @@ async function linkPlayer(ctx, id) {
   const pr = profiles[String(id)] || {};
   const squad = await currentSquad().catch(() => []);
   if (!squad.length) { toast('Nog geen Highlightly-spelers: haal eerst wedstrijddetails op.'); return; }
-  const sugg = similarNames(pr.fullName || pr.legacyName, squad.map((p) => ({ id: String(p.id), name: p.name })))[0];
+  const sugg = similarNames(pr.fullName || pr.legacyName || pr.apiName, squad.map((p) => ({ id: String(p.id), name: p.name })))[0];
   const data = await openSheet({
     title: 'Koppelen aan Highlightly',
     body: `<label class="field"><span>Speler</span><select name="to"><option value="">Kies…</option>${squad.map((p) => `<option value="${p.id}" ${sugg && sugg.id === String(p.id) ? 'selected' : ''}>${esc(p.name)}${p.number != null ? ' #' + p.number : ''} · ${p.seasons.map((y) => `${y}`.slice(2)).join(', ')}</option>`).join('')}</select></label>
@@ -609,7 +609,7 @@ function seasonMembers(list, squadPlayers, profiles) {
     const st = statusIn(pr, win, ref);
     if (!st.member) return;
     members.push({
-      id, name: pr.fullName || pr.legacyName || '?', number: shirtFor(pr, getSeason()) ?? latestShirt(pr, getSeason()), position: pr.position || '',
+      id, name: profName(pr) || '?', number: shirtFor(pr, getSeason()) ?? latestShirt(pr, getSeason()), position: pr.position || '',
       photo: pr.photoUrl || null, nationality: pr.nationality || null,
       apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
       status: levelFor(pr, getSeason()) === 'o21' && st.status === 'active' ? 'youth' : st.status, labels: [...(injuryLabel(pr, ref, isCurrentSeason()) ? [injuryLabel(pr, ref, isCurrentSeason())] : []), ...(st.labels || [])], conflict: false, profileOnly: true,
@@ -621,6 +621,31 @@ function seasonMembers(list, squadPlayers, profiles) {
   return { members, groups };
 }
 
+/** Naam uit het profiel: jouw naam, de oude tracker, of de Highlightly-naam die we eerder vonden. */
+const profName = (pr) => (pr && (pr.fullName || pr.legacyName || pr.apiName)) || null;
+
+/**
+ * Profielen zonder naam (bijv. alleen een rugnummer of transfer ingevuld): zoek de naam op in alle
+ * opgehaalde wedstrijden (opstellingen en events) en zet hem eenmalig als apiName in het profiel.
+ * Vult alleen een leeg veld; fullName/legacyName blijven onaangeraakt. Muteert profiles voor deze render.
+ */
+async function backfillNames(profiles) {
+  const missing = Object.entries(profiles || {}).filter(([id, pr]) => pr && !profName(pr) && !String(id).startsWith('legacy-'));
+  if (!missing.length) return 0;
+  const names = new Map();
+  const put = (id, n) => { if (id != null && n && !names.has(String(id))) names.set(String(id), String(n)); };
+  (await getAllMatches().catch(() => [])).forEach((m) => {
+    const d = m.detail; if (!d) return;
+    Object.values(d.players || {}).forEach((side) => (side || []).forEach((pl) => put(pl.id, pl.name)));
+    (d.events || []).forEach((e) => { put(e.playerId, e.player); put(e.inId, e.inName); put(e.outId, e.outName); });
+  });
+  const writes = missing.filter(([id]) => names.has(String(id))).map(([id]) => [id, { apiName: names.get(String(id)) }]);
+  if (!writes.length) return 0;
+  await savePlayersBatch(writes).catch(() => {});
+  writes.forEach(([id, d]) => { profiles[id].apiName = d.apiName; });
+  return writes.length;
+}
+
 function periodText(pr) {
   const { spells: sp } = spells(pr);
   if (!sp.length) return null;
@@ -630,13 +655,13 @@ function periodText(pr) {
 
 /** Spelerspagina zonder Highlightly-stats dit seizoen: alleen het profiel uit je archief. */
 function profileOnlyPage(pr, id) {
-  const name = pr.fullName || pr.legacyName || '?';
+  const name = profName(pr) || '?';
   const per = periodText(pr);
   return `
     ${head({ kicker: `Archief · ${LINE_SHORT[pr.position] || '—'}`, title: name, back: 'selectie' })}
     <section class="section">
       <div class="player-hero">${pr.photoUrl ? photoImg(pr.photoUrl, 'player-hero__photo', '') : ''}<span class="player-hero__num">${shirtFor(pr, getSeason()) ?? latestShirt(pr) ?? '–'}</span><span class="muted">${esc(LINE_SHORT[pr.position] || '')}${per ? ' · ' + esc(per) : ''}</span></div>
-      <div><button class="btn btn--sm" type="button" data-action="edit-name" data-id="${esc(id)}" data-api="" data-full="${esc(pr.fullName || '')}" data-short="${esc(pr.shortName || '')}" data-photo="${esc(pr.photoUrl || '')}">Naam en foto</button></div>
+      <div><button class="btn btn--sm" type="button" data-action="edit-name" data-id="${esc(id)}" data-api="${esc(pr.apiName || '')}" data-full="${esc(pr.fullName || '')}" data-short="${esc(pr.shortName || '')}" data-photo="${esc(pr.photoUrl || '')}">Naam en foto</button></div>
       <p class="muted" style="font-size:var(--fs-md);margin:0">${pr.linkedTo === null || String(id).startsWith('legacy-')
         ? 'Nog niet gekoppeld aan Highlightly. Stats verschijnen zodra hij in een opgehaald seizoen voorkomt en je hem hieronder koppelt.'
         : 'Geen officiële duels in dit seizoen. Kies een ander seizoen via de clubnaam op Home.'}</p>
@@ -655,6 +680,7 @@ export const playerViews = {
     navKey: 'selectie',
     async render() {
       const { profiles } = await correctedList();
+      await backfillNames(profiles);
       const today = new Date().toISOString().slice(0, 10);
       const LO = { Goalkeeper: 1, Defender: 2, Midfielder: 3, Forward: 4 };
       const rows = Object.entries(profiles || {})
@@ -663,7 +689,7 @@ export const playerViews = {
           const { spells: sp } = spells(pr);
           const to = sp.length ? sp[sp.length - 1].to : null;
           const group = !sp.length ? 'unknown' : !to || to >= today ? 'now' : String(seasonOfDate(to));
-          return { id, pr, group, name: pr.fullName || pr.legacyName || '?' };
+          return { id, pr, group, name: profName(pr) || '?' };
         });
       // Groepen: nu bij de club, dan per seizoen van vertrek (nieuwste eerst), onbekend als laatste.
       const keys = [...new Set(rows.map((r) => r.group))].sort((a, b) => (a === 'now' ? -1 : b === 'now' ? 1 : a === 'unknown' ? 1 : b === 'unknown' ? -1 : Number(b) - Number(a)));
@@ -690,6 +716,7 @@ export const playerViews = {
     title: 'Selectie',
     async render() {
       const { list, profiles } = await correctedList();
+      await backfillNames(profiles);
       const built = buildSquad(list, TEAM, profiles);
       const { matches } = built;
       const { members, groups } = seasonMembers(list, built.players, profiles);
@@ -808,7 +835,7 @@ export const playerViews = {
       const { players } = buildSquad(list, TEAM, profiles);
       const p = players.find((x) => x.id === id);
       const prof = profiles[rawId];
-      if (!p && prof) return profileOnlyPage(prof, rawId);
+      if (!p && prof) { await backfillNames({ [rawId]: prof }); return profileOnlyPage(prof, rawId); }
       if (!p) {
         return `${head({ kicker: 'Selectie', title: 'Niet gevonden', back: 'selectie' })}
           <section class="section"><p class="muted">Deze speler staat (nog) niet in een opgehaalde wedstrijd.</p></section>`;

@@ -73,7 +73,7 @@ export function compareSquad(snap, members, profiles = {}) {
   const known = members.map((m) => ({ id: String(m.id), name: m.name }));
   Object.entries(profiles).forEach(([id, pr]) => {
     if (byId.has(id) || !pr || pr.linkedTo) return;
-    const name = pr.fullName || pr.legacyName; if (name) known.push({ id, name, archived: true });
+    const name = pr.fullName || pr.legacyName || pr.apiName; if (name) known.push({ id, name, archived: true });
   });
   const today = Date.now();
   const out = []; const matched = new Set();

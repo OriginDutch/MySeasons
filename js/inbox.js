@@ -84,7 +84,7 @@ function derived({ list, profiles, conflicts, backup, disc }) {
   // 5. Spelers: blessure voorbij de verwachte terugkeer, contract dat binnen 90 dagen afloopt
   Object.entries(profiles || {}).forEach(([id, pr]) => {
     if (!pr || pr.linkedTo) return;
-    const name = pr.fullName || pr.legacyName || 'Speler';
+    const name = pr.fullName || pr.legacyName || pr.apiName || 'Speler';
     const inj = injuredOn(pr, today);
     if (inj && inj.expected && inj.expected < today) {
       out.push({ id: `injury:${id}:${inj.startDate}`, kind: 'injury', at: `${inj.expected}T08:00:00Z`, title: `Is ${name} terug?`, text: `Verwacht terug op ${dayShort(inj.expected + 'T12:00:00')} (${(inj.type || 'blessure').toLowerCase()}). Vul "echt terug" in, of schuif de verwachting op.`, href: `#/speler/${encodeURIComponent(id)}` });
