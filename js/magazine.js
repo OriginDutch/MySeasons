@@ -164,7 +164,7 @@ const weeksAgo = (d) => `${Math.round(d / 7)} weken geleden`;
 function whenLabel(d, iso) {
   if (d <= 0) return 'Vandaag';
   if (d === 1) return 'Gisteren';
-  if (d < 7) return cap(weekdayName(iso));
+  if (d < 7) return `Afgelopen ${weekdayName(iso)}`;
   if (d < 14) return 'Vorige week';
   return weeksAgo(d);
 }
