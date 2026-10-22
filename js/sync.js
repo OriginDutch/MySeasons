@@ -91,7 +91,7 @@ export async function fetchMatch(id) {
 
 /** Gespeelde officiële wedstrijden (geen oefenduels) zonder details. */
 export function missingDetails(list) {
-  return list.filter((m) => m.status === 'finished' && !hasDetail(m) && m.league && !/friendl/i.test(m.league.name));
+  return list.filter((m) => m.status === 'finished' && !m.manual && !hasDetail(m) && m.league && !/friendl/i.test(m.league.name));
 }
 
 /**

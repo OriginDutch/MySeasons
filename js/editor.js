@@ -276,12 +276,19 @@ export const editorViews = {
       const onlyId = args && args[0];
       const groups = await collect(onlyId);
       const all = groups.flatMap((g) => g.items);
+      // Eigen details naast nieuwe Highlightly-details: eigen vergelijkscherm per wedstrijd.
+      const manualDiffs = await import('./manualview.js').then((x) => x.manualDiffSummary()).catch(() => []);
+      const shownManual = onlyId ? manualDiffs.filter((x) => String(x.match.id) === String(onlyId)) : manualDiffs;
+      const manualBlock = shownManual.length ? `<section class="section"><div class="section__label"><span>Zelf ingevuld vs Highlightly</span><span>${shownManual.length}</span></div>
+        <div class="list">${shownManual.map((x) => `<a class="list-row" href="#/vergelijk/${x.match.id}"><span class="list-row__main"><span class="list-row__title">${esc(x.match.homeTeam.name)} – ${esc(x.match.awayTeam.name)}</span>
+          <span class="list-row__sub">${esc(dayShort(x.match.date))} · ${x.open} ${x.open === 1 ? 'verschil' : 'verschillen'}</span></span><span aria-hidden="true">→</span></a>`).join('')}</div></section>` : '';
       const back = onlyId ? `wedstrijd/${onlyId}` : 'meer';
       const head = `<header class="page-head"><div class="page-head__titles">
         <a class="back-btn" href="#/${esc(back)}" aria-label="Terug">${icons.back}</a>
         <span class="page-head__kicker">${onlyId ? 'Wedstrijd / Afwijkingen' : 'Meer / Afwijkingen'}</span>
         <h1 class="page-head__title">Afwijkingen</h1></div></header>`;
       if (!all.length) {
+        if (manualBlock) return `${head}${manualBlock}`;
         return `${head}<section class="section"><div class="empty"><span class="empty__title">Alles klopt met Highlightly</span>
           <p class="muted">Pas je op een wedstrijdpagina een goal, kaart, wissel of uitslag aan, dan zie je dat hier terug. Bij een sync wordt jouw waarde nooit stil overschreven.</p></div></section>`;
       }
@@ -290,7 +297,7 @@ export const editorViews = {
         const n = v === 'all' ? all.length : all.filter((s) => (name === 'type' ? FILTER_OF[s.kind] : s.status) === v).length;
         return `<label class="chip"><input type="radio" name="f-${name}" value="${v}" ${i === 0 ? 'checked' : ''}><span>${esc(l)} <span class="mono">${n}</span></span></label>`;
       }).join('')}</div>`;
-      return `${head}
+      return `${head}${manualBlock}
         <section class="section">
           <p class="muted" style="font-size:var(--fs-md)">${all.length} ${all.length === 1 ? 'veld wijkt' : 'velden wijken'} af van Highlightly${conflicts ? `, waarvan <strong class="accent-text">${conflicts} met een conflict</strong>: Highlightly heeft die waarde sinds jouw aanpassing veranderd` : ''}. Tot je kiest, geldt jouw waarde.</p>
           ${chips('type', TYPE_FILTERS)}

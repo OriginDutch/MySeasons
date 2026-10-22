@@ -58,7 +58,7 @@ export async function buildQueue() {
     if (y === CURRENT_SEASON || !ci || !(ci.ids || []).length) bucket.push({ type: 'league', leagueId: CUP, season: y });
   });
   // Cambuur: volledige details van gespeelde officiële duels, nieuwste eerst.
-  const full = own.filter((m) => m.status === 'finished' && !hasDetail(m) && official(m))
+  const full = own.filter((m) => m.status === 'finished' && !m.manual && !hasDetail(m) && official(m))
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
     .map((m) => ({ type: 'full', id: m.id, season: seasonOf(m) }));
   // Andere clubs: alleen de events (schutters, assists, kaarten), 1 call per duel.

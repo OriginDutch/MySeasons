@@ -982,3 +982,6 @@ a.po-team:hover span { text-decoration: underline; }
 .mv-add { display: flex; gap: 8px; align-items: center; }
 .mv-add input { flex: 1; min-width: 0; min-height: 40px; padding: 0 10px; border: 1px solid var(--hairline); background: transparent; color: inherit; font: inherit; }
 .mv-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.mv-cmp { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; }
+.mv-cmp__vals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: var(--fs-md); }
+.mv-cmp__vals > div { background: var(--surface-hover); padding: 8px 10px; }

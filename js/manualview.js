@@ -2,18 +2,21 @@
 // Alleen de eigen club. Opslag en omzetting: manual.js. Een concept blijft per wedstrijd in deze sessie bewaard.
 
 import { esc, toast } from './ui.js';
-import { getMatch, getNotes, saveManual, saveCorrections } from './store.js';
+import { getMatch, getNotes, saveManual, saveCorrections, getAllMatches, getAllNotes, attachDetails, saveMatches, deleteMatch, saveNotesBatch } from './store.js';
 import { MAIN_CLUB } from './config.js';
 import { applyCorrections, buildChanges } from './corrections.js';
 import { correctedList, head } from './matchviews.js';
 import { buildSquad, LINES } from './players.js';
 import { statusIn, seasonWindow } from './membership.js';
-import { seasonOf, seasonLabel } from './seasonstate.js';
+import { seasonOf, seasonLabel, getSeason } from './seasonstate.js';
+import { clubField, knownTeams, matchTeam } from './clubpick.js';
+import { LEAGUES } from './leagues.js';
+import { seasonOfDate } from './shirts.js';
 import { levelFor, shirtFor } from './shirts.js';
 import { roleFor, lineOfRole } from './roles.js';
 import { opponentOf, dayShort } from './season.js';
 import { openSheet } from './editor.js';
-import { FORMATIONS, idv, manualScore, manualWarnings } from './manual.js';
+import { FORMATIONS, idv, manualScore, manualWarnings, compareManual } from './manual.js';
 
 const TEAM = MAIN_CLUB.id;
 const LINE_ORDER = Object.fromEntries(LINES.map(([k], i) => [k, i]));
@@ -213,10 +216,15 @@ async function save(root) {
   const manual = { ...S.draft, starters: S.draft.starters.slice().sort((a, b) => order.indexOf(String(a.id)) - order.indexOf(String(b.id))), at: new Date().toISOString() };
   const before = S.notes && S.notes.manual ? S.notes.manual : null;
   try {
-    // Uitslag: wijken de goals af van wat er staat, dan eerst vragen.
+    // Uitslag: wijken de goals af van wat er staat, dan eerst vragen. Zelf toegevoegd duel: geen Highlightly, dus direct.
     const shown = applyCorrections(S.match, S.notes).match;
     const mine = manualScore(manual, S.match, TEAM);
-    if (shown.score && (shown.score.home !== mine.home || shown.score.away !== mine.away)) {
+    if (S.match.manual) {
+      if (!S.match.score || S.match.score.home !== mine.home || S.match.score.away !== mine.away) {
+        const ok = !S.match.score || await openSheet({ title: 'Uitslag aanpassen?', body: `<p>Jouw goals maken <strong>${mine.home}–${mine.away}</strong>, je had <strong>${S.match.score.home}–${S.match.score.away}</strong> ingevuld.</p>`, submitLabel: `Ja, ${mine.home}–${mine.away}`, cancelLabel: 'Nee, laten staan' });
+        if (ok) await saveMatches([{ ...S.match, score: mine, status: 'finished' }]);
+      }
+    } else if (shown.score && (shown.score.home !== mine.home || shown.score.away !== mine.away)) {
       const ok = await openSheet({
         title: 'Uitslag aanpassen?',
         body: `<p>Jouw goals maken <strong>${mine.home}–${mine.away}</strong>, de uitslag is nu <strong>${shown.score.home}–${shown.score.away}</strong>${S.match.score && (S.match.score.home !== shown.score.home || S.match.score.away !== shown.score.away) ? ` (Highlightly: ${S.match.score.home}–${S.match.score.away})` : ' (Highlightly)'}.</p>
@@ -235,7 +243,80 @@ async function save(root) {
   } catch (err) { toast(`Opslaan lukte niet: ${err.message || err}`); if (btn) btn.disabled = false; }
 }
 
+/** Wedstrijden met eigen details én Highlightly-details, met het aantal open verschillen. */
+export async function manualDiffSummary() {
+  const [all, notes] = await Promise.all([getAllMatches(), getAllNotes()]);
+  const cand = all.filter((m) => notes[m.id] && notes[m.id].manual && m.hasDetail);
+  if (!cand.length) return [];
+  const withD = await attachDetails(cand);
+  return withD.map((m) => {
+    const shown = applyCorrections(m, notes[m.id]).match;
+    const items = compareManual(notes[m.id].manual, shown.apiDetail, shown, TEAM);
+    return { match: m, open: items.filter((i) => !i.kept).length, total: items.length };
+  }).filter((x) => x.open);
+}
+
+function compareHtml(m, items) {
+  const open = items.filter((i) => !i.kept); const kept = items.filter((i) => i.kept);
+  const row = (it) => `<div class="mv-cmp" data-key="${esc(it.key)}">
+      <div class="section__label"><span>${esc(it.what)}</span><span>${esc(it.note || it.kind)}</span></div>
+      <div class="mv-cmp__vals"><div><span class="muted">Jij</span><br>${esc(it.mine)}</div><div><span class="muted">Highlightly</span><br>${esc(it.api)}</div></div>
+      ${it.kept ? '<p class="muted" style="font-size:var(--fs-sm);margin:0">Jouw waarde gehouden.</p>' : `<div class="btn-row"><button class="btn btn--sm" type="button" data-keep="${esc(it.key)}">Mijne houden</button><button class="btn btn--sm" type="button" data-adopt="${esc(it.key)}">Highlightly</button></div>`}
+    </div>`;
+  return `<section class="section">
+      <p class="muted" style="font-size:var(--fs-md)">Highlightly heeft nu ook details voor dit duel. Jouw invoer blijft gelden; hieronder wat verschilt. ${open.length ? `${open.length} open` : 'Alles is bekeken.'}</p>
+      ${open.map(row).join('') || '<p class="muted">Geen open verschillen.</p>'}
+      ${kept.length ? `<details class="fold"><summary class="section__label"><span>Gehouden</span><span>${kept.length}</span></summary>${kept.map(row).join('')}</details>` : ''}
+      <div class="mv-foot"><button class="btn" type="button" data-all-api>Alles Highlightly</button><a class="btn btn--primary" href="#/wedstrijd/${m.id}">Klaar</a></div>
+      <p class="muted" style="font-size:var(--fs-sm)">Alles Highlightly = je eigen invoer voor dit duel gaat weg en de wedstrijd toont weer de Highlightly-details.</p>
+    </section>`;
+}
+
 export const manualViews = {
+  vergelijk: {
+    title: 'Vergelijken',
+    navKey: 'wedstrijden',
+    async render(ctx, args) {
+      const id = args[0];
+      const [m, notes] = await Promise.all([getMatch(id), getNotes(id)]);
+      const back = `wedstrijd/${id}`;
+      if (!m || !notes || !notes.manual) return `${head({ kicker: 'Wedstrijd', title: 'Vergelijken', back })}<section class="section"><p class="muted">Geen eigen details bij deze wedstrijd.</p></section>`;
+      const shown = applyCorrections(m, notes).match;
+      if (!shown.apiDetail) return `${head({ kicker: 'Wedstrijd', title: 'Vergelijken', back })}<section class="section"><p class="muted">Highlightly heeft (nog) geen details voor dit duel.</p></section>`;
+      this._ctx = { id, m, notes, items: compareManual(notes.manual, shown.apiDetail, shown, TEAM) };
+      return `${head({ kicker: `${m.homeTeam.name} – ${m.awayTeam.name} · ${dayShort(m.date)}`, title: 'Jij vs Highlightly', back })}${compareHtml(m, this._ctx.items)}`;
+    },
+    mount(root, ctx) {
+      const view = this;
+      root.addEventListener('click', async (e) => {
+        const c = view._ctx; if (!c) return;
+        const keep = e.target.closest('[data-keep]'); const adopt = e.target.closest('[data-adopt]');
+        try {
+          if (keep) {
+            const it = c.items.find((i) => i.key === keep.dataset.keep);
+            await saveManual(c.id, { ...c.notes.manual, kept: { ...(c.notes.manual.kept || {}), [it.key]: it.sig } });
+            ctx.refresh(); return;
+          }
+          if (adopt) {
+            const it = c.items.find((i) => i.key === adopt.dataset.adopt);
+            const before = c.notes.manual;
+            await saveManual(c.id, it.adopt(before));
+            toast('Highlightly overgenomen', { action: 'Ongedaan maken', onAction: async () => { await saveManual(c.id, before); ctx.refresh(); } });
+            ctx.refresh(); return;
+          }
+          if (e.target.closest('[data-all-api]')) {
+            const ok = await openSheet({ title: 'Alles van Highlightly?', body: '<p>Je eigen opstelling, wissels, goals en kaarten voor dit duel gaan weg. De wedstrijd toont dan de Highlightly-details.</p>', submitLabel: 'Ja, Highlightly' });
+            if (!ok) return;
+            const before = c.notes.manual;
+            await saveManual(c.id, null);
+            toast('Eigen details weg', { action: 'Ongedaan maken', onAction: async () => { await saveManual(c.id, before); location.hash = `#/vergelijk/${c.id}`; } });
+            location.hash = `#/wedstrijd/${c.id}`;
+          }
+        } catch (err) { toast(`Lukte niet: ${err.message || err}`); }
+      });
+    },
+  },
+
   invullen: {
     title: 'Details invullen',
     navKey: 'wedstrijden',
@@ -303,3 +384,83 @@ export const manualViews = {
     },
   },
 };
+
+// ---------- Zelf een wedstrijd toevoegen ----------
+const slug = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+async function competitions() {
+  const all = await getAllMatches().catch(() => []);
+  const seen = new Map();
+  all.forEach((m) => { if (m.league && m.league.id != null) { const k = String(m.league.id); const e = seen.get(k) || { id: m.league.id, name: m.league.name, n: 0 }; e.n++; seen.set(k, e); } });
+  LEAGUES.forEach((l) => { if (!seen.has(String(l.id))) seen.set(String(l.id), { id: l.id, name: l.name, n: 0 }); });
+  const list = [...seen.values()];
+  const friendly = list.filter((l) => /friendl/i.test(l.name)).sort((a, b) => b.n - a.n)[0] || { id: 568401, name: 'Friendlies Clubs' };
+  return { friendly, others: list.filter((l) => !/friendl/i.test(l.name)).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name)), all };
+}
+
+export async function addManualMatch(pre = {}) {
+  const { friendly, others, all } = await competitions();
+  const own = all.map((m) => [m.homeTeam, m.awayTeam]).flat().find((t) => t && t.id === TEAM) || { id: TEAM, name: MAIN_CLUB.name, logo: null };
+  const today = new Date().toISOString().slice(0, 10);
+  const data = await openSheet({
+    title: 'Wedstrijd toevoegen',
+    body: `<div class="field-row"><label class="field"><span>Datum</span><input name="date" type="date" required value="${esc(pre.date || today)}"></label>
+        <label class="field"><span>Aftrap</span><input name="time" type="time" value="${esc(pre.time || '14:30')}"></label></div>
+      ${clubField('opp', 'Tegenstander', {})}
+      <div class="field-row"><label class="field"><span>Waar</span><select name="where"><option value="home">Thuis</option><option value="away">Uit</option></select></label>
+        <label class="field"><span>Competitie</span><select name="league"><option value="${esc(String(friendly.id))}">Oefenduel</option>${others.map((l) => `<option value="${esc(String(l.id))}">${esc(l.name)}</option>`).join('')}</select></label></div>
+      <div class="field-row"><label class="field"><span>Goals ${esc(MAIN_CLUB.name)}</span><input name="us" type="number" inputmode="numeric" min="0" max="30" placeholder="leeg = uit de goals"></label>
+        <label class="field"><span>Goals tegenstander</span><input name="them" type="number" inputmode="numeric" min="0" max="30" placeholder="leeg = uit de goals"></label></div>
+      <p class="muted sheet__note">De app haalt voor deze wedstrijd niets bij Highlightly op. Daarna vul je de opstelling, wissels, goals en kaarten in.</p>`,
+    submitLabel: 'Toevoegen',
+    validate: (fd) => (!fd.get('date') ? 'Kies een datum.' : !String(fd.get('opp') || '').trim() ? 'Vul de tegenstander in.' : (fd.get('us') === '') !== (fd.get('them') === '') ? 'Vul beide goals in, of allebei leeg.' : null),
+  });
+  if (!data) return null;
+  const date = new Date(`${data.get('date')}T${data.get('time') || '14:30'}:00`).toISOString();
+  const name = String(data.get('opp')).trim();
+  let oppId = data.get('oppId') || null; let logo = data.get('oppLogo') || null; let oppName = name;
+  if (!oppId) { const hit = matchTeam(await knownTeams(), name); if (hit) { oppId = hit.id; logo = hit.logo || null; oppName = hit.name; } }
+  const opp = { id: oppId ? (/^\d+$/.test(String(oppId)) ? Number(oppId) : oppId) : `name:${slug(name)}`, name: oppName, logo };
+  const lg = [friendly, ...others].find((l) => String(l.id) === String(data.get('league'))) || friendly;
+  const season = seasonOfDate(data.get('date'));
+  const home = data.get('where') !== 'away';
+  const ownT = { id: own.id, name: own.name, logo: own.logo || null };
+  const sc = data.get('us') === '' ? null : { us: Number(data.get('us')), them: Number(data.get('them')) };
+  const m = {
+    id: `manual-${Date.now().toString(36)}`, manual: true, date, round: null,
+    league: { id: lg.id, name: lg.name, season }, homeTeam: home ? ownT : opp, awayTeam: home ? opp : ownT,
+    status: Date.parse(date) < Date.now() ? 'finished' : 'scheduled', stateText: null,
+    score: sc ? (home ? { home: sc.us, away: sc.them } : { home: sc.them, away: sc.us }) : null, penalties: null,
+    createdAt: new Date().toISOString(),
+  };
+  await saveMatches([m]);
+  if (season !== getSeason()) toast(`Toegevoegd aan ${seasonLabel(season)}. Kies dat seizoen op Home om hem in de lijst te zien.`, { duration: 6000 });
+  else toast('Wedstrijd toegevoegd');
+  location.hash = m.status === 'finished' ? `#/invullen/${m.id}` : `#/wedstrijd/${m.id}`;
+  return m;
+}
+
+export async function editManualScore(m) {
+  const sc = m.score || { home: '', away: '' };
+  const data = await openSheet({
+    title: 'Uitslag',
+    body: `<div class="field-row"><label class="field"><span>${esc(m.homeTeam.name)}</span><input name="home" type="number" inputmode="numeric" min="0" max="30" value="${sc.home}"></label>
+      <label class="field"><span>${esc(m.awayTeam.name)}</span><input name="away" type="number" inputmode="numeric" min="0" max="30" value="${sc.away}"></label></div>
+      <p class="muted sheet__note">Zelf toegevoegde wedstrijd: dit is de uitslag, er is geen Highlightly-waarde.</p>`,
+    validate: (fd) => (fd.get('home') === '' || fd.get('away') === '' ? 'Vul beide in.' : null),
+  });
+  if (!data) return false;
+  const before = m.score || null;
+  await saveMatches([{ ...m, score: { home: Number(data.get('home')), away: Number(data.get('away')) }, status: 'finished' }]);
+  toast('Uitslag opgeslagen', { action: 'Ongedaan maken', onAction: async () => { await saveMatches([{ ...m, score: before }]); } });
+  return true;
+}
+
+export async function deleteManualMatch(m, notes) {
+  const ok = await openSheet({ title: 'Wedstrijd verwijderen?', body: `<p>${esc(m.homeTeam.name)} – ${esc(m.awayTeam.name)} gaat weg, met alles wat je erbij invulde.</p>`, submitLabel: 'Verwijderen' });
+  if (!ok) return false;
+  await deleteMatch(m.id);
+  dropDraft(m.id);
+  toast('Wedstrijd verwijderd', { action: 'Ongedaan maken', onAction: async () => { await saveMatches([m]); if (notes) await saveNotesBatch([[m.id, notes]]); location.hash = `#/wedstrijd/${m.id}`; } });
+  return true;
+}

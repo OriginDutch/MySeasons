@@ -41,6 +41,12 @@ export function saveNotes(id, partial) {
   return setDoc(doc(db, 'matchNotes', String(id)), { ...partial, updatedAt: new Date().toISOString() }, { merge: true });
 }
 
+/** Een zelf toegevoegde wedstrijd weghalen (basis, details en handwerk). Alleen voor manual-wedstrijden. */
+export async function deleteMatch(id) {
+  if (!String(id).startsWith('manual-')) throw new Error('Alleen zelf toegevoegde wedstrijden');
+  await Promise.all([deleteDoc(doc(db, 'matches', String(id))), deleteDoc(doc(db, 'matchNotes', String(id)))]);
+}
+
 /** Handmatige details (manual.js) in één keer vervangen; null = weg. */
 export function saveManual(id, manual) {
   return setDoc(doc(db, 'matchNotes', String(id)), { manual: manual === null ? deleteField() : manual, updatedAt: new Date().toISOString() }, { mergeFields: ['manual', 'updatedAt'] });

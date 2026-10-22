@@ -112,3 +112,104 @@ export function manualWarnings(manual, { official }) {
   }
   return w;
 }
+
+// ---------- Vergelijken met Highlightly (als die later toch details levert) ----------
+// Elk verschil is een item { key, what, mine, api, sig, adopt(manual) → manual }. "Mijne houden" bewaart
+// manual.kept[key] = sig (de Highlightly-waarde van dat moment); verandert Highlightly later, dan komt het terug.
+
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z ]/g, '').trim();
+const surname = (s) => norm(s).split(' ').pop();
+function samePerson(aId, aName, bId, bName) {
+  if (aId != null && bId != null && String(aId) === String(bId)) return true;
+  return !!aName && !!bName && (norm(aName) === norm(bName) || (surname(aName).length > 2 && surname(aName) === surname(bName)));
+}
+const pname = (n) => n || '?';
+const mm = (e) => (e ? `${e.minute ?? '?'}${e.extra ? '+' + e.extra : ''}'` : '—');
+
+/** Highlightly-detail → dezelfde vorm als manual (alleen de eigen club, plus tegengoals). */
+export function apiAsManual(detail, match, teamId) {
+  const l = detail.lineups || {};
+  const side = ['home', 'away'].map((s) => l[s]).find((x) => x && x.teamId === teamId);
+  const ev = (detail.events || []).filter((e) => !e.shootout);
+  const isGoal = (t) => { const x = String(t || ''); return !/missed|var|cancel|disallow/i.test(x) && (/goal/i.test(x) || /^penalty( goal| scored)?$/i.test(x)); };
+  return {
+    formation: side ? side.formation : null,
+    starters: side ? side.starters.map((p) => ({ id: p.id, name: p.name, number: p.number ?? null })) : [],
+    subs: ev.filter((e) => e.type === 'Substitution' && e.teamId === teamId).map((e) => ({ minute: e.minute, extra: e.extra, inId: e.inId, inName: e.inName, outId: e.outId, outName: e.outName })),
+    goals: ev.filter((e) => isGoal(e.type)).map((e) => {
+      const own = /own/i.test(e.type);
+      return { minute: e.minute, extra: e.extra, for: (e.teamId === teamId) !== own ? 'us' : 'them', kind: own ? 'own' : /penalty/i.test(e.type) ? 'penalty' : 'goal', playerId: e.playerId ?? null, player: e.player || null, assistId: e.assistId ?? null, assist: e.assist || null };
+    }),
+    cards: ev.filter((e) => e.teamId === teamId && /card/i.test(e.type)).map((e) => ({ minute: e.minute, extra: e.extra, playerId: e.playerId ?? null, player: e.player || null, kind: /second yellow|yellow.?red/i.test(e.type) ? 'second' : /red/i.test(e.type) ? 'red' : 'yellow' })),
+  };
+}
+
+export function compareManual(manual, apiDetail, match, teamId) {
+  if (!manual || !apiDetail) return [];
+  const api = apiAsManual(apiDetail, match, teamId);
+  const items = [];
+  const clone = (m) => JSON.parse(JSON.stringify(m));
+
+  // Basiself: één item voor de hele opstelling.
+  if (api.starters.length) {
+    const onlyMine = manual.starters.filter((p) => !api.starters.some((q) => samePerson(p.id, p.name, q.id, q.name)));
+    const onlyApi = api.starters.filter((q) => !manual.starters.some((p) => samePerson(p.id, p.name, q.id, q.name)));
+    if (onlyMine.length || onlyApi.length) {
+      items.push({ key: 'xi', kind: 'opstelling', what: 'Basiself', mine: onlyMine.map((p) => p.name).join(', ') || '—', api: onlyApi.map((p) => p.name).join(', ') || '—',
+        note: 'alleen bij jou / alleen bij Highlightly', sig: api.starters.map((p) => p.id).join(','),
+        adopt: (m) => { const x = clone(m); x.starters = api.starters; if (api.formation) x.formation = api.formation; return x; } });
+    }
+  }
+
+  // Wissels: gekoppeld op de speler die erin komt.
+  const usedApiSubs = new Set();
+  manual.subs.forEach((s, i) => {
+    const j = api.subs.findIndex((a, k) => !usedApiSubs.has(k) && samePerson(s.inId, s.inName, a.inId, a.inName));
+    if (j < 0) { items.push({ key: `sub:${s.inId ?? s.inName}`, kind: 'wissels', what: `Wissel ${mm(s)} ${pname(s.inName)} erin`, mine: `${pname(s.inName)} voor ${pname(s.outName)}`, api: 'niet bij Highlightly', sig: 'none', adopt: (m) => { const x = clone(m); x.subs.splice(i, 1); return x; } }); return; }
+    usedApiSubs.add(j); const a = api.subs[j];
+    if (s.minute !== a.minute || (s.extra || null) !== (a.extra || null) || !samePerson(s.outId, s.outName, a.outId, a.outName)) {
+      items.push({ key: `sub:${s.inId ?? s.inName}`, kind: 'wissels', what: `Wissel ${pname(s.inName)} erin`, mine: `${mm(s)} voor ${pname(s.outName)}`, api: `${mm(a)} voor ${pname(a.outName)}`, sig: JSON.stringify(a),
+        adopt: (m) => { const x = clone(m); x.subs[i] = { ...x.subs[i], minute: a.minute, extra: a.extra, outId: a.outId, outName: a.outName }; return x; } });
+    }
+  });
+  api.subs.forEach((a, k) => { if (!usedApiSubs.has(k)) items.push({ key: `sub+:${a.inId ?? a.inName}`, kind: 'wissels', what: `Wissel ${mm(a)} ${pname(a.inName)} erin`, mine: 'niet bij jou', api: `${pname(a.inName)} voor ${pname(a.outName)}`, sig: JSON.stringify(a), adopt: (m) => { const x = clone(m); x.subs.push(a); return x; } }); });
+
+  // Goals: per kant op volgorde.
+  ['us', 'them'].forEach((side) => {
+    const mine = manual.goals.map((g, i) => ({ g, i })).filter(({ g }) => g.for === side).sort((a, b) => at(a.g) - at(b.g));
+    const theirs = api.goals.filter((g) => g.for === side).sort((a, b) => at(a) - at(b));
+    const label = side === 'us' ? 'Goal' : 'Tegengoal';
+    for (let n = 0; n < Math.max(mine.length, theirs.length); n++) {
+      const a = theirs[n]; const own = mine[n];
+      const key = `goal:${side}:${n + 1}`;
+      if (own && !a) { items.push({ key, kind: 'goals', what: `${label} ${n + 1} (${mm(own.g)})`, mine: pname(own.g.player), api: 'niet bij Highlightly', sig: 'none', adopt: (m) => { const x = clone(m); x.goals.splice(own.i, 1); return x; } }); continue; }
+      if (!own && a) { items.push({ key, kind: 'goals', what: `${label} ${n + 1} (${mm(a)})`, mine: 'niet bij jou', api: pname(a.player), sig: JSON.stringify(a), adopt: (m) => { const x = clone(m); x.goals.push(a); return x; } }); continue; }
+      const g = own.g;
+      const diffMin = g.minute !== a.minute || (g.extra || null) !== (a.extra || null);
+      const diffWho = side === 'us' ? !samePerson(g.playerId, g.player, a.playerId, a.player) : (g.player && a.player && !samePerson(null, g.player, null, a.player));
+      const diffAst = side === 'us' && (g.assist || a.assist) && !samePerson(g.assistId, g.assist, a.assistId, a.assist);
+      if (diffMin || diffWho || diffAst || g.kind !== a.kind) {
+        items.push({ key, kind: 'goals', what: `${label} ${n + 1}`, mine: `${mm(g)} ${pname(g.player)}${g.assist ? ` (assist ${g.assist})` : ''}${g.kind !== 'goal' ? ` · ${g.kind === 'own' ? 'eigen goal' : 'penalty'}` : ''}`,
+          api: `${mm(a)} ${pname(a.player)}${a.assist ? ` (assist ${a.assist})` : ''}${a.kind !== 'goal' ? ` · ${a.kind === 'own' ? 'eigen goal' : 'penalty'}` : ''}`, sig: JSON.stringify(a),
+          adopt: (m) => { const x = clone(m); x.goals[own.i] = { ...a }; return x; } });
+      }
+    }
+  });
+
+  // Kaarten: gekoppeld op speler + soort.
+  const usedCards = new Set();
+  manual.cards.forEach((c, i) => {
+    const j = api.cards.findIndex((a, k) => !usedCards.has(k) && a.kind === c.kind && samePerson(c.playerId, c.player, a.playerId, a.player));
+    const K = { yellow: 'Geel', second: '2× geel', red: 'Rood' };
+    if (j < 0) { items.push({ key: `card:${c.playerId ?? c.player}:${c.kind}`, kind: 'kaarten', what: `${K[c.kind]} ${pname(c.player)}`, mine: mm(c), api: 'niet bij Highlightly', sig: 'none', adopt: (m) => { const x = clone(m); x.cards.splice(i, 1); return x; } }); return; }
+    usedCards.add(j); const a = api.cards[j];
+    if (c.minute !== a.minute || (c.extra || null) !== (a.extra || null)) items.push({ key: `card:${c.playerId ?? c.player}:${c.kind}`, kind: 'kaarten', what: `${K[c.kind]} ${pname(c.player)}`, mine: mm(c), api: mm(a), sig: JSON.stringify(a), adopt: (m) => { const x = clone(m); x.cards[i] = { ...x.cards[i], minute: a.minute, extra: a.extra }; return x; } });
+  });
+  api.cards.forEach((a, k) => { if (!usedCards.has(k)) items.push({ key: `card+:${a.playerId ?? a.player}:${a.kind}`, kind: 'kaarten', what: `${{ yellow: 'Geel', second: '2× geel', red: 'Rood' }[a.kind]} ${pname(a.player)}`, mine: 'niet bij jou', api: mm(a), sig: JSON.stringify(a), adopt: (m) => { const x = clone(m); x.cards.push(a); return x; } }); });
+
+  const kept = manual.kept || {};
+  return items.map((it) => ({ ...it, kept: kept[it.key] === it.sig }));
+}
+
+/** Aantal open verschillen (niet bewust gehouden). */
+export const openDiffs = (manual, apiDetail, match, teamId) => compareManual(manual, apiDetail, match, teamId).filter((i) => !i.kept).length;

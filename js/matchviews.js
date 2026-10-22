@@ -13,6 +13,7 @@ import { coachOn, coachName } from './coaches.js';
 import { getCoaches, getClubMarks } from './store.js';
 import { getRsssf, rsssfStandings, mainDivision } from './rsssfimport.js';
 import { applyCorrections, correctionSummary, goalCheck, kindOf } from './corrections.js';
+import { openDiffs } from './manual.js';
 import { editEvent, editScore, editNotes } from './editor.js';
 import { syncSeason, fetchMatch, syncStandings, syncLeague, COST } from './sync.js';
 import { rowsFor, standTable, zoneLegend, miniStand, periodRows, formMap } from './standview.js';
@@ -644,7 +645,7 @@ export const matchViews = {
       if (!list.length) {
         return `${head({ kicker: `MySeasons / ${seasonLabel()}`, title: 'Wedstrijden' })}
           <section class="section"><div class="empty"><span class="empty__title">Nog leeg</span>
-          <p class="muted">Synchroniseer eerst het seizoen op Home.</p><div><a class="btn" href="#/home">Naar Home</a></div></div></section>`;
+          <p class="muted">Synchroniseer eerst het seizoen op Home, of voeg zelf een wedstrijd toe.</p><div class="btn-row"><a class="btn" href="#/home">Naar Home</a><button class="btn" type="button" data-add-match>+ Wedstrijd toevoegen</button></div></div></section>`;
       }
       const groups = new Map();
       list.forEach((m) => {
@@ -654,6 +655,7 @@ export const matchViews = {
       });
       return `
         ${head({ kicker: `MySeasons / ${seasonLabel()}`, title: 'Wedstrijden' })}
+        <section class="section"><div><button class="btn btn--sm" type="button" data-add-match>+ Wedstrijd toevoegen</button></div></section>
         ${[...groups].map(([month, games]) => `
           <section class="section">
             <div class="section__label"><span>${esc(month)}</span><span>${games.length}</span></div>
@@ -668,6 +670,11 @@ export const matchViews = {
               </a>`;
             }).join('')}</div>
           </section>`).join('')}`;
+    },
+    mount(root) {
+      root.addEventListener('click', (e) => {
+        if (e.target.closest('[data-add-match]')) import('./manualview.js').then((x) => x.addManualMatch());
+      });
     },
   },
 
@@ -717,8 +724,9 @@ export const matchViews = {
             ${n.awayFans != null ? `<dt>Uitvak</dt><dd><span class="mono">${nl(n.awayFans)}</span> <span class="muted">${esc(m.awayTeam.name)}</span></dd>` : ''}
           </dl>` : `<p class="muted">${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</p>`}
           ${m.manualDetail ? `<p><a class="ptag ptag--o21" href="#/invullen/${m.id}" style="text-decoration:none">handmatig ingevuld · ✎ aanpassen</a>${d.source ? ` <span class="muted" style="font-size:var(--fs-sm)">bron: ${esc(d.source)}</span>` : ''}</p>` : ''}
+          ${m.manualDetail && m.apiDetail ? (() => { const n = openDiffs(notes.manual, m.apiDetail, m, TEAM); return n ? `<a class="warn-line" href="#/vergelijk/${m.id}" style="display:block;text-decoration:none">Highlightly heeft nu ook details: ${n} ${n === 1 ? 'verschil' : 'verschillen'} met jouw invoer. Vergelijken →</a>` : ''; })() : ''}
           ${m.status === 'finished' || Date.parse(m.date) < Date.now() - 3 * 3600e3
-            ? `<div class="btn-row">${m.status === 'finished' ? `<button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${m.apiDetail || (d && !m.manualDetail) ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button>` : ''}${!d ? `<a class="btn ${m.status === 'finished' ? '' : 'btn--primary'}" href="#/invullen/${m.id}">Details invullen</a>` : ''}</div>`
+            ? `<div class="btn-row">${m.status === 'finished' && !m.manual ? `<button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${m.apiDetail || (d && !m.manualDetail) ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button>` : ''}${!d ? `<a class="btn ${m.status === 'finished' && !m.manual ? '' : 'btn--primary'}" href="#/invullen/${m.id}">Details invullen</a>` : ''}${m.manual ? '<button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button>' : ''}</div>`
             : '<p class="muted" style="font-size:var(--fs-sm)">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
         </section>
         ${m.status === 'finished' || (Date.parse(m.date) - Date.now() < 12 * 3600e3 && m.status !== 'postponed') ? notesBlock(n, m.status !== 'finished') : ''}
@@ -736,7 +744,9 @@ export const matchViews = {
         if (!apiM) return;
         let changed = false;
         try {
-          if (a === 'edit-score') changed = await editScore(apiM, notes, ctx.refresh);
+          if (a === 'edit-score' && apiM.manual) { changed = await import('./manualview.js').then((x) => x.editManualScore(apiM)); }
+          else if (a === 'edit-score') changed = await editScore(apiM, notes, ctx.refresh);
+          if (a === 'delete-match') { if (await import('./manualview.js').then((x) => x.deleteManualMatch(apiM, notes))) { location.hash = '#/wedstrijden'; return; } }
           if (a === 'edit-event') changed = await editEvent(apiM, notes, btn.dataset.sig, ctx.refresh);
           if (a === 'edit-notes') changed = await editNotes(apiM, notes);
         } catch (err) {
