@@ -55,9 +55,12 @@ export async function migrateShirts() {
 }
 
 // ---------- Selectie per seizoen: eerste elftal of O21 ----------
-// players/{id}.levels = { 2025: 'o21', 2026: 'first' }. Een keuze geldt ook voor de seizoenen erna,
-// tot je iets anders kiest of tot een transfer "Doorgestroomd uit de jeugd" (dan eerste elftal).
-// Oud formaat: squadLevel 'jeugd' uit je oude tracker hoort bij zijn laatste seizoen.
+// Regels (v0.47):
+// 1. Transfer "Doorgestroomd uit de jeugd" op datum X: seizoenen vóór het seizoen van X = O21, vanaf dat seizoen = eerste.
+// 2. Geen doorstroom, wel players/{id}.youth = true: alle seizoenen O21.
+// 3. Niets: eerste elftal.
+// Uitzondering: players/{id}.levels = { 2025: 'o21' } geldt alleen voor DAT seizoen (gaat voor 1–3).
+// Oud formaat: squadLevel 'jeugd' uit je oude tracker = uitzondering voor zijn laatste seizoen.
 
 export function levelsOf(pr) {
   if (!pr) return {};
@@ -67,8 +70,28 @@ export function levelsOf(pr) {
   return out;
 }
 
+/** Seizoen van de (eerste) doorstroom, of null. */
+export function promotedSeason(pr) {
+  const ys = ((pr && pr.transfers) || []).filter((t) => t && t.type === 'promotie' && t.date).map((t) => seasonOfDate(t.date));
+  return ys.length ? Math.min(...ys) : null;
+}
+
+/** Volgens de regels, zonder uitzondering. */
+export function ruleLevel(pr, year) {
+  const ps = promotedSeason(pr);
+  if (ps != null) return Number(year) < ps ? 'o21' : 'first';
+  return pr && pr.youth ? 'o21' : 'first';
+}
+
 /** 'o21' of 'first' voor dat seizoen. */
 export function levelFor(pr, year) {
+  if (!pr) return 'first';
+  const ex = levelsOf(pr)[Number(year)];
+  return ex || ruleLevel(pr, year);
+}
+
+/** Het oude gedrag (tot v0.46): een keuze gold ook voor de seizoenen erna. Alleen voor de omzetting. */
+export function oldLevelFor(pr, year) {
   const lv = levelsOf(pr);
   const set = Object.keys(lv).map(Number).filter((y) => y <= Number(year)).sort((a, b) => b - a)[0];
   if (set == null) return 'first';

@@ -18,8 +18,9 @@ import { correctedList, runWithButton, explain, head, crest } from './matchviews
 import { dayShort, opponentOf, isHome } from './season.js';
 import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './playerextra.js';
 import { currentSquad } from './importer.js';
-import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf } from './shirts.js';
+import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf, ruleLevel, promotedSeason } from './shirts.js';
 import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb, linkBanner } from './photos.js';
+import { youthPending } from './youthmigrate.js';
 import { ROLES, roleLabel, lineOfRole, rolesOf, roleFor, inferRoles, isGeneric, sidesOf, fitsRole } from './roles.js';
 
 let CUR_PH = null; // foto's van de geopende spelerspagina
@@ -83,7 +84,7 @@ function transfersBlock(pr, id) {
 async function editTransfer(ctx, id, index, profiles, preset = {}) {
   const pr = profiles[String(id)] || {};
   const all = (pr.transfers || []).slice();
-  const t = index != null ? all[index] : { type: preset.type || 'transfer-uit', date: new Date().toISOString().slice(0, 10) };
+  const t = index != null ? all[index] : { type: preset.type || 'transfer-uit', date: preset.date || new Date().toISOString().slice(0, 10) };
   const data = await openSheet({
     title: index != null ? 'Transfer aanpassen' : 'Transfer toevoegen',
     body: `<label class="field"><span>Soort</span><select name="type">${T_TYPES.map(([v, l]) => `<option value="${v}" ${t.type === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
@@ -156,8 +157,8 @@ async function addPlayer(ctx, pre = {}) {
   const sheet = openSheet({
     title: 'Speler toevoegen',
     body: `<label class="field"><span>Naam</span><input name="name" maxlength="60" autocomplete="off" required placeholder="Voor- en achternaam" value="${esc(pre.name || '')}"></label>
-      <label class="field"><span>Selectie</span><select name="level"><option value="first" ${pre.level === 'o21' ? '' : 'selected'}>Eerste elftal</option><option value="o21" ${pre.level === 'o21' ? 'selected' : ''}>O21 / jeugd</option></select></label>
-      <p class="muted sheet__note">O21 geldt vanaf het seizoen van de datum hieronder, en ook voor de seizoenen erna, tot je hem op zijn pagina naar het eerste zet of een transfer "Doorgestroomd uit de jeugd" toevoegt.</p>
+      <label class="field field--check"><input type="checkbox" name="youth" ${pre.level === 'o21' ? 'checked' : ''}> <span>Jeugdspeler (nog niet doorgestroomd)</span></label>
+      <p class="muted sheet__note">Jeugdspeler = O21 in elk seizoen, tot je een transfer "Doorgestroomd uit de jeugd" toevoegt. Vanaf het seizoen van die doorstroom is hij eerste elftal.</p>
       <div data-dup class="sheet__note" hidden></div>
       <div class="field-row"><label class="field"><span>Rol</span><select name="role">${roleOptions(null, { empty: '— onbekend' })}</select></label>
       <label class="field"><span>Rugnummer</span><input name="shirt" type="number" inputmode="numeric" min="1" max="99" value="${pre.shirt ?? ''}"></label></div>
@@ -201,7 +202,7 @@ async function addPlayer(ctx, pre = {}) {
     fullName: String(data.get('name')).trim(), position: lineOfRole(data.get('role')) || null, roles: data.get('role') ? { [seasonOfDate(data.get('date'))]: { role: data.get('role') } } : null, shirts: shirt != null ? { [seasonOfDate(data.get('date'))]: shirt } : null,
     nationality: data.get('nat1') || null, dob: data.get('dob') || null, manual: true, linkedTo: null,
     photoUrl: String(data.get('photo') || '').trim() || null,
-    levels: data.get('level') === 'o21' ? { [seasonOfDate(data.get('date'))]: 'o21' } : null,
+    youth: data.get('youth') ? true : null,
     transfers: [{ type: data.get('type'), date: data.get('date'), dateTo: data.get('dateTo') || null, club, clubId: clubId && !Number.isNaN(Number(clubId)) ? Number(clubId) : clubId, clubLogo: clubId ? clubLogo : null, amount: data.get('amount') === '' || data.get('amount') == null ? null : Number(data.get('amount')), note: String(data.get('tnote') || '').trim() || null }],
   };
   try {
@@ -221,7 +222,12 @@ async function siteFix(ctx, d, act) {
     if (act === 'out' || act === 'loan') { await editTransfer(ctx, d.id, null, profiles, { type: act === 'out' ? 'transfer-uit' : 'huur-uit' }); return; }
     if (d.kind === 'missing') { await addPlayer(ctx, { name: d.site.name, shirt: d.site.number, position: d.site.line, level: d.site.level }); return; }
     if (d.kind === 'number') await savePlayer(d.id, { shirts: { ...(pr.shirts || shirtsOf(pr)), [y]: d.site }, shirt: null });
-    else if (d.kind === 'to-o21' || d.kind === 'to-first') await savePlayer(d.id, { levels: { ...(pr.levels || levelsOf(pr)), [y]: d.kind === 'to-o21' ? 'o21' : 'first' }, squadLevel: null });
+    else if (d.kind === 'to-first') { await editTransfer(ctx, d.id, null, profiles, { type: 'promotie' }); return; }
+    else if (d.kind === 'to-o21') {
+      // Nog niet doorgestroomd: jeugdspeler. Wel al doorgestroomd: alleen dit seizoen als uitzondering.
+      if (promotedSeason(pr) == null) await savePlayer(d.id, { youth: true, levels: { ...(pr.levels || levelsOf(pr)), [y]: null }, squadLevel: null });
+      else await savePlayer(d.id, { levels: { ...(pr.levels || levelsOf(pr)), [y]: 'o21' }, squadLevel: null });
+    }
     else if (d.kind === 'line') await savePlayer(d.id, { position: d.site });
     else if (d.kind === 'fill') await savePlayer(d.id, { ...d.fill });
     else if (d.kind === 'dob') await savePlayer(d.id, { dob: d.site });
@@ -364,9 +370,9 @@ function mountTransfers(root, ctx) {
     if (del) { removePlayer(ctx, del.dataset.deletePlayer); return; }
     const pro = e.target.closest('[data-promote]');
     if (pro) {
-      const { profiles } = await correctedList(); const pr = profiles[pro.dataset.promote] || {};
-      await savePlayer(pro.dataset.promote, { levels: { ...(pr.levels || levelsOf(pr)), [getSeason()]: 'first' }, squadLevel: null });
-      toast('Naar het eerste elftal'); ctx.refresh(); return;
+      const { profiles } = await correctedList();
+      await editTransfer(ctx, pro.dataset.promote, null, profiles, { type: 'promotie', date: pro.dataset.promoteDate || undefined });
+      return;
     }
     const lk = e.target.closest('[data-link-player]');
     if (lk) { linkPlayer(ctx, lk.dataset.linkPlayer); return; }
@@ -435,9 +441,10 @@ async function editProfile(ctx, id, profiles) {
       <div class="field-row"><label class="field"><span>Lengte (cm)</span><input name="height" type="number" inputmode="numeric" min="140" max="220" value="${pr.height ?? ''}"></label>
       <label class="field"><span>Contract tot</span><input name="contract" type="date" value="${esc(pr.contractUntil || '')}"></label></div>
       <label class="field"><span>Bij de club sinds</span><input name="joined" type="date" value="${esc(String(pr.joined || '').slice(0, 10))}"></label>
-      <label class="field"><span>Selectie in ${esc(seasonLabel())}</span><select name="level"><option value="first" ${levelFor(pr, getSeason()) === 'first' ? 'selected' : ''}>Eerste elftal</option><option value="o21" ${levelFor(pr, getSeason()) === 'o21' ? 'selected' : ''}>O21</option></select></label>
+      <label class="field field--check"><input type="checkbox" name="youth" ${pr.youth ? 'checked' : ''}> <span>Jeugdspeler (nog niet doorgestroomd)</span></label>
+      <label class="field"><span>Uitzondering voor ${esc(seasonLabel())}</span><select name="level"><option value="">Geen: ${ruleLevel(pr, getSeason()) === 'o21' ? 'O21' : 'eerste elftal'} volgens de regels</option><option value="first" ${levelsOf(pr)[getSeason()] === 'first' ? 'selected' : ''}>Eerste elftal, alleen dit seizoen</option><option value="o21" ${levelsOf(pr)[getSeason()] === 'o21' ? 'selected' : ''}>O21, alleen dit seizoen</option></select></label>
       <label class="field"><span>Notitie</span><textarea name="note" rows="3" maxlength="500" placeholder="bijv. Clubopties +1 jaar">${esc(pr.note || '')}</textarea></label>
-      <p class="muted sheet__note">Het rugnummer geldt alleen voor ${esc(seasonLabel())}; leeg = het nummer uit de opstellingen. Ander seizoen? Kies dat eerst via de clubnaam op Home. "Bij de club sinds" telt voor de periode bij de club zolang er geen transfers zijn; staan die er wel, dan gaan die voor.</p>`,
+      <p class="muted sheet__note">Het rugnummer geldt alleen voor ${esc(seasonLabel())}; leeg = het nummer uit de opstellingen. Ander seizoen? Kies dat eerst via de clubnaam op Home. "Bij de club sinds" telt voor de periode bij de club zolang er geen transfers zijn, en bij een doorgestroomde speler als begin van zijn jeugdperiode. Eerste elftal of O21: een doorstroom-transfer bepaalt het (seizoenen ervoor = O21); zonder doorstroom telt het vinkje Jeugdspeler.</p>`,
     validate: (fd) => {
       if (fd.get('nat2') && fd.get('nat2') === fd.get('nat1')) return 'Twee keer dezelfde nationaliteit.';
       const h = fd.get('height'); if (h && (Number(h) < 140 || Number(h) > 220)) return 'Lengte tussen 140 en 220 cm.';
@@ -459,7 +466,8 @@ async function editProfile(ctx, id, profiles) {
     joined: data.get('joined') || null,
     note: String(data.get('note') || '').trim() || null,
   };
-  if (data.get('level') !== levelFor(pr, getSeason())) { next.levels = { ...(pr.levels || levelsOf(pr)), [getSeason()]: data.get('level') }; next.squadLevel = null; }
+  next.youth = data.get('youth') ? true : null;
+  if ((data.get('level') || null) !== (levelsOf(pr)[getSeason()] || null)) { next.levels = { ...(pr.levels || levelsOf(pr)), [getSeason()]: data.get('level') || null }; next.squadLevel = null; }
   const before = Object.fromEntries(Object.keys(next).map((k) => [k, pr[k] ?? null]));
   before.shirts = { ...(pr.shirts || {}), [getSeason()]: (pr.shirts || {})[getSeason()] ?? null }; // merge-veilig terugzetten
   if (next.levels && pr.levels) before.levels = { ...pr.levels, [getSeason()]: pr.levels[getSeason()] ?? null };
@@ -1026,6 +1034,7 @@ export const playerViews = {
       const hlOnly = players.filter((p) => !p.profileOnly);
       const hlDup = hlOnly.filter((p) => p.number != null && hlOnly.some((q) => q !== p && q.number === p.number && similarNames(q.name, [{ id: 'x', name: p.name }]).length)).length;
       const dupCount = members.filter((m) => m.profileOnly && similarNames(m.name, hlMembers).length).length + Math.ceil(hlDup / 2);
+      const youthN = await youthPending().catch(() => 0);
       const used = members.filter((p) => p.apps).length;
       const extra = [
         ['left', isCurrentSeason() ? 'Vertrokken dit seizoen' : 'Vertrokken tijdens het seizoen'],
@@ -1043,6 +1052,7 @@ export const playerViews = {
           </fieldset>
         </section>
         ${missingBlock(list)}
+        ${youthN ? `<section class="section"><a class="warn-line" href="#/jeugdregels" style="display:block;text-decoration:none">Nieuwe jeugdregels: bij ${youthN} ${youthN === 1 ? 'speler' : 'spelers'} verandert eerste elftal/O21. Bekijken →</a></section>` : ''}
         ${dupCount ? `<section class="section"><a class="warn-line" href="#/dubbelen" style="display:block;text-decoration:none">${dupCount} ${dupCount === 1 ? 'speler staat' : 'spelers staan'} dubbel. Samenvoegen →</a></section>` : ''}
         ${site}
         <div class="mob-only">${SORTS.map(([v], i) => `<div data-sq="${v}" ${i === 0 ? '' : 'hidden'}>${squadList(players, v)}</div>`).join('')}</div>
@@ -1147,7 +1157,7 @@ export const playerViews = {
       return `
         ${head({ kicker: `Selectie${levelFor(p.profile, getSeason()) === 'o21' ? ' · O21' : ''} · ${roleLabel(p.role) || LINE_SHORT[p.position] || '—'}`, title: p.name, back: 'selectie' })}
         <section class="section">
-          ${levelFor(p.profile, getSeason()) === 'o21' && p.apps >= PROMOTE_AT ? `<div class="promote-line"><span>Staat bij O21, maar speelde ${p.apps} duels in het eerste.</span><button class="btn btn--sm btn--primary" type="button" data-promote="${esc(String(p.id))}">Naar eerste elftal</button></div>` : ''}
+          ${levelFor(p.profile, getSeason()) === 'o21' && p.apps >= PROMOTE_AT ? `<div class="promote-line"><span>Staat bij O21, maar speelde ${p.apps} duels in het eerste.</span><button class="btn btn--sm btn--primary" type="button" data-promote="${esc(String(p.id))}" data-promote-date="${esc(((p.log.find((l) => l.minutes > 0) || {}).match || {}).date ? String(p.log.find((l) => l.minutes > 0).match.date).slice(0, 10) : '')}">Doorstroom toevoegen</button></div>` : ''}
           <div class="player-hero">${heroImg(CUR_PH.photos, gal, getSeason(), null) || (p.profile && p.profile.photoUrl ? photoImg(p.profile.photoUrl, 'player-hero__photo', '') : '')}<span class="player-hero__num">${p.number ?? '–'}</span>
             <span class="muted">${esc(roleLabel(p.role) || LINE_SHORT[p.position] || '')}${p.squads > p.apps ? ` · ${p.squads - p.apps}× op de bank zonder invalbeurt` : ''}</span></div>
           <p class="muted" style="font-size:var(--fs-sm);margin:0">Kort: ${esc(p.short)}${p.profile && (p.profile.fullName || p.profile.shortName) ? ` · Highlightly: ${esc(p.apiName)}` : ''}</p>

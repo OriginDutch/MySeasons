@@ -35,6 +35,13 @@ export function spells(profile) {
         else if (kind === 'huur') { open.kind = 'huur'; open.club = t.club || open.club; open.to = iso(t.dateTo) || null; if (open.to) { out.push(open); open = null; } }
         return;
       }
+      if (t.type === 'promotie' && !out.length) {
+        // Doorgestroomd zonder eerdere komst: daarvoor zat hij al in de jeugd. Zonder "bij de club sinds"
+        // is het begin onbekend (soft): dan telt die jeugdperiode alleen als hij op een formulier staat.
+        out.push({ from: iso(profile.joined) || null, to: d, kind: 'jeugd', club: null, soft: !profile.joined });
+        open = { from: d, to: null, kind: 'eigen', club: null, promoted: d };
+        return;
+      }
       open = { from: d, to: kind === 'huur' ? iso(t.dateTo) : null, kind, club: t.club || null };
       if (open.to) { out.push(open); open = null; }
     } else if (t.type === 'transfer-uit') {
@@ -75,8 +82,9 @@ export function statusIn(profile, win, ref, { onSheet = false, lastSheet = null 
     if (!onSheet) return { member: false };
     return { member: true, status: 'active', labels: ['geen transfer bekend'], conflict: false };
   }
-  const inSeason = sp.filter((s) => overlaps(s.from, s.to, win.start, win.end));
-  const current = sp.find((s) => within(ref, s.from, s.to));
+  const use = onSheet ? sp : sp.filter((s) => !s.soft);
+  const inSeason = use.filter((s) => overlaps(s.from, s.to, win.start, win.end));
+  const current = use.slice().reverse().find((s) => within(ref, s.from, s.to));
   const future = sp.find((s) => s.from && s.from > ref && s.from <= win.end);
   if (!inSeason.length && !onSheet) return { member: false };
 
@@ -88,7 +96,7 @@ export function statusIn(profile, win, ref, { onSheet = false, lastSheet = null 
 
   const s = current || inSeason[inSeason.length - 1] || null;
   if (s && s.kind === 'huur') labels.push(`huur${s.club ? ' · van ' + s.club : ''}`);
-  if (s && s.from && s.from > win.start) labels.push(`nieuw · sinds ${s.from}`);
+  if (s && s.from && s.from > win.start) labels.push(s.promoted === s.from ? `doorgestroomd · ${s.from}` : `nieuw · sinds ${s.from}`);
   const loan = loans.find((l) => within(ref, l.from, l.to));
   if (loan) return { member: true, status: 'loaned', labels: [`verhuurd${loan.club ? ' aan ' + loan.club : ''}${loan.to ? ' tot ' + loan.to : ''}`], conflict, loan };
   if (current) return { member: true, status: 'active', labels, conflict };
