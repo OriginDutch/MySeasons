@@ -6,7 +6,7 @@
 // Galerijsectie pas vanaf 2 foto's, inklapbaar; open/dicht geldt voor alle galerijen, per apparaat.
 
 import { esc, toast } from './ui.js';
-import { getPhotos, addPhoto, updatePhoto, deletePhoto, setOwnerGallery, setOwnerLinkCheck, setMeta, getMeta, getPlayers, getCoaches } from './store.js';
+import { getPhotos, addPhoto, updatePhoto, deletePhoto, setOwnerGallery, setOwnerLinkCheck, setMeta, getMeta, getPlayers, getCoaches, getClubMarks, dumpCollection } from './store.js';
 import { fetchImage } from './api.js';
 import { CURRENT_SEASON } from './config.js';
 
@@ -15,7 +15,7 @@ const yLabel = (y) => `${y}–${String(Number(y) + 1).slice(2)}`;
 const FIRST_YEAR = 2010;
 
 // ---------- Verkleinen ----------
-const SIZES = { thumb: 128, small: 360, large: 960 };
+const SIZES = { thumb: 96, small: 360, large: 960 }; // thumb klein houden: hij staat in elk profiel (lijsten)
 
 async function bitmapOf(blob) {
   try { return await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch { /* oudere browser */ }
@@ -47,7 +47,7 @@ export async function prepareImage(blob) {
   const bmp = await bitmapOf(blob);
   const large = encode(bmp, SIZES.large, 0.82);
   const small = encode(bmp, SIZES.small, 0.8);
-  const thumb = encode(bmp, SIZES.thumb, 0.72);
+  const thumb = encode(bmp, SIZES.thumb, 0.6);
   if (bmp.close) bmp.close();
   const hash = await sha(await blob.arrayBuffer());
   return { thumb: thumb.url, small: small.url, large: large.url, w: large.w, h: large.h, bytes: thumb.url.length + small.url.length + large.url.length, hash };
@@ -59,7 +59,8 @@ export async function prepareImage(blob) {
 export function shownRef(gallery, season) {
   if (!gallery) return null;
   const y = Number(season);
-  if (y && y !== CURRENT_SEASON && gallery.seasons && gallery.seasons[y]) return gallery.seasons[y];
+  const s = y && y !== CURRENT_SEASON && gallery.seasons ? gallery.seasons[y] : null;
+  if (s) return s.thumb || !gallery.main || gallery.main.id !== s.id ? s : gallery.main; // thumb niet dubbel opgeslagen
   return gallery.main || null;
 }
 export const shownThumb = (gallery, season) => (shownRef(gallery, season) || {}).thumb || null;
@@ -71,6 +72,8 @@ function buildGallery(photos, mainId) {
   const seasons = {};
   sorted.forEach((p) => { if (p.season != null && !seasons[p.season]) seasons[p.season] = { id: p.id, thumb: p.thumb }; });
   if (main && main.season != null) seasons[main.season] = { id: main.id, thumb: main.thumb }; // hoofdfoto wint in zijn eigen seizoen
+  // Zelfde foto als de hoofdfoto: alleen het id (het plaatje staat al bij main).
+  Object.values(seasons).forEach((r) => { if (main && r.id === main.id) r.thumb = null; });
   return { main: main ? { id: main.id, thumb: main.thumb } : null, seasons, count: photos.length, updatedAt: new Date().toISOString() };
 }
 
@@ -333,4 +336,36 @@ export async function checkLinks({ force = false, max = 80 } = {}) {
     await setMeta('linkCheckRun', { at: new Date().toISOString(), ...out });
     return out;
   } finally { checking = false; }
+}
+
+// ---------- Eenmalig: kleinere lijst-plaatjes (v0.43) ----------
+/** Bestaande thumbs opnieuw maken uit de middelste maat, en de verwijzingen bij de eigenaars herschrijven. */
+export async function shrinkThumbs() {
+  const done = await getMeta('thumbsV2').catch(() => null);
+  if (done) return null;
+  const all = (await dumpCollection('photos')).map((d) => ({ id: d.id, ...d.data }));
+  const [players, coaches] = await Promise.all([getPlayers().catch(() => ({})), getCoaches().catch(() => [])]);
+  const clubs = await getClubMarks().catch(() => ({}));
+  const mainOf = (kind, id) => {
+    const g = kind === 'player' ? (players[id] || {}).gallery : kind === 'coach' ? (coaches.find((c) => String(c.id) === String(id)) || {}).gallery : (clubs[id] || {}).stadiumGallery;
+    return g && g.main ? g.main.id : null;
+  };
+  let n = 0;
+  for (const p of all) {
+    if (!p.small) continue;
+    try {
+      const img = new Image(); img.src = p.small; await img.decode();
+      const t = encode(img, SIZES.thumb, 0.6);
+      await updatePhoto(p.id, { thumb: t.url });
+      p.thumb = t.url; n++;
+    } catch { /* deze laten */ }
+  }
+  const owners = new Map();
+  all.forEach((p) => { if (!owners.has(p.owner)) owners.set(p.owner, []); owners.get(p.owner).push(p); });
+  for (const [owner, photos] of owners) {
+    const [kind, ...rest] = owner.split(':'); const id = rest.join(':');
+    await setOwnerGallery(kind, id, buildGallery(photos, mainOf(kind, id))).catch(() => {});
+  }
+  await setMeta('thumbsV2', { at: new Date().toISOString(), photos: n });
+  return n;
 }

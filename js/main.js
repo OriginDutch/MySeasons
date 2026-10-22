@@ -9,7 +9,7 @@ import { setSeason } from './seasonstate.js';
 import { CURRENT_SEASON } from './config.js';
 import { autoSync } from './nightshift.js';
 import { clubNamesLoaded, setClubOverrides, teamAliasesLoaded, setTeamAliases } from './clubnames.js';
-import { getClubMarks, getAllLeagueTeams } from './store.js';
+import { getClubMarks, getAllLeagueTeams, setLiveChangeHandler } from './store.js';
 import { ensureLeagues } from './leagues.js';
 
 const appEl = document.getElementById('app');
@@ -155,6 +155,20 @@ let restoreScroll = 0;
 
 ctx.refresh = () => route({ keepScroll: true });
 
+// Live cache: komt er op de achtergrond iets nieuws binnen (andere telefoon/pc, nachtploeg), dan het scherm
+// stil verversen. Niet tijdens een open blad of terwijl je typt; hooguit eens per 5 seconden.
+let lastLive = 0; let liveWaiting = false;
+setLiveChangeHandler(() => {
+  const busy = () => document.querySelector('dialog[open]') || (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
+  const go = () => {
+    if (busy()) { setTimeout(go, 3000); return; }
+    liveWaiting = false; lastLive = Date.now(); route({ keepScroll: true });
+  };
+  if (liveWaiting) return;
+  liveWaiting = true;
+  setTimeout(go, Math.max(0, 5000 - (Date.now() - lastLive)));
+});
+
 window.addEventListener('hashchange', () => {
   document.querySelectorAll('dialog[open]').forEach((d) => d.close()); // geen sheet laten hangen bij navigeren
   restoreScroll = trackNavigation() || 0;
@@ -234,6 +248,7 @@ watchAuth((user) => {
     setTimeout(() => import('./clubpick.js').then((m) => m.linkTransferClubs()).catch(() => {}), 8000);
     // Wekelijkse back-up naar de Worker, rustig na het opstarten.
     setTimeout(() => import('./photos.js').then((m) => m.checkLinks()).catch(() => {}), 45000); // foto-links: hooguit eens per week
+    setTimeout(() => import('./photos.js').then((m) => m.shrinkThumbs()).catch(() => {}), 15000); // eenmalig: kleinere lijst-plaatjes
     setTimeout(() => import('./backup.js').then((m) => m.autoBackup()).then((r) => { if (r && r.ok) toast(`Wekelijkse back-up gemaakt · ${r.docs} documenten`); }).catch(() => {}), 20000);
   } else {
     renderLogin();

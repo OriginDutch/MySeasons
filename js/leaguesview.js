@@ -3,7 +3,7 @@
 
 import { esc, icons, toast } from './ui.js';
 import { hl } from './api.js';
-import { countCalls, getStandings, getLeagueIndexes } from './store.js';
+import { countCalls, getStandings, getLeagueIndexes, getMeta } from './store.js';
 import { openSheet } from './editor.js';
 import { CURRENT_SEASON, MAIN_CLUB } from './config.js';
 import { LEAGUES, ensureLeagues, saveLeagues, countriesOf, leagueInfo } from './leagues.js';
@@ -143,6 +143,8 @@ export const leaguesViews = {
       const idx = await getLeagueIndexes().catch(() => []);
       const info = new Map(LEAGUES.map((l) => [l.id, idx.find((i) => Number(i.leagueId) === l.id && Number(i.season) === CURRENT_SEASON) || {}]));
       const followed = LEAGUES.filter((l) => l.follow);
+      const q = await getMeta('quota').catch(() => null);
+      const LIMIT = (q && q.hl && q.hl.limit) || 100;
       let night = 0; let round = 0;
       await Promise.all(followed.map(async (l) => {
         const st = await getStandings(l.id, CURRENT_SEASON).catch(() => null);
@@ -153,7 +155,7 @@ export const leaguesViews = {
       return `${head()}
         <section class="section">
           <p class="muted" style="font-size:var(--fs-md)">${followed.length} gevolgd${LEAGUES.length > followed.length ? `, ${LEAGUES.length - followed.length} uit` : ''}. Gevolgd = de nachtploeg haalt stand en uitslagen op en hij staat in de competitiekiezer.</p>
-          <div class="lg-cost"><span class="mono">≈ ${night} calls per nacht</span><span class="muted">+ ≈ ${round} per speelronde voor schutters en kaarten van andere clubs · ${followed.length ? 'van je 100 per dag' : ''}</span></div>
+          <div class="lg-cost"><span class="mono">≈ ${night} calls per nacht</span><span class="muted">+ ≈ ${round} per speelronde voor schutters en kaarten van andere clubs · ${followed.length ? `van je ${LIMIT.toLocaleString('nl-NL')} per dag` : ''}</span></div>
         </section>
         <section class="section"><div class="list lg-admin-list">${list || '<p class="muted">Nog geen competities.</p>'}</div></section>
         <section class="section">

@@ -12,21 +12,27 @@ import { markShootout } from './shootout.js';
 // Bij elke gelezen wedstrijd: eigen clubnamen erop en de strafschoppenserie herkennen (telt niet als goals).
 const nameMatch = (m) => markShootout(nameOnly(m));
 import {
-  collection, doc, getDoc, getDocs, setDoc, deleteDoc, writeBatch, increment, deleteField, query, where, arrayUnion,
+  collection, doc, getDoc, getDocs, setDoc, deleteDoc, writeBatch, increment, deleteField, query, where, arrayUnion, onSnapshot,
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
+import { createLive } from './live.js';
+
+// Live cache: één listener per collectie/query, daarna alleen wijzigingen (zie live.js).
+const live = createLive({ onSnapshot });
+export const setLiveChangeHandler = (fn) => live.setHandler(fn);
+const coll = (name) => live.docs(name, collection(db, name));
+const one = async (name, id) => { const s = await live.doc(`${name}/${id}`, doc(db, name, String(id))); return s.exists() ? s.data() : null; };
+const byId = async (name, id) => { const d = (await coll(name)).find((x) => x.id === String(id)); return d ? d.data() : null; };
 
 // ---------- Handwerk per wedstrijd: matchNotes/{id} ----------
 // { attendance, note, corrections: { [key]: { api, mine, at } }, updatedAt }
 
 export async function getNotes(id) {
-  const snap = await getDoc(doc(db, 'matchNotes', String(id)));
-  return snap.exists() ? snap.data() : null;
+  return byId('matchNotes', id);
 }
 
 export async function getAllNotes() {
-  const snap = await getDocs(collection(db, 'matchNotes'));
   const out = {};
-  snap.docs.forEach((d) => { out[d.id] = d.data(); });
+  (await coll('matchNotes')).forEach((d) => { out[d.id] = d.data(); });
   return out;
 }
 
@@ -42,13 +48,12 @@ export function saveCorrections(id, changes) {
 }
 
 export async function getAllMatches() {
-  const snap = await getDocs(collection(db, 'matches'));
-  return snap.docs.map((d) => nameMatch(d.data()));
+  return (await coll('matches')).map((d) => nameMatch(d.data()));
 }
 
 export async function getMatch(id) {
-  const snap = await getDoc(doc(db, 'matches', String(id)));
-  return snap.exists() ? nameMatch(snap.data()) : null;
+  const m = await byId('matches', id);
+  return m ? nameMatch(m) : null;
 }
 
 /** Programma opslaan. merge: een al opgehaald `detail` blijft staan. */
@@ -71,8 +76,8 @@ export async function saveMatchDetail(id, base, detail, raw) {
 const standingsId = (leagueId, season) => `${leagueId}_${season}`;
 
 export async function getStandings(leagueId, season) {
-  const snap = await getDoc(doc(db, 'standings', standingsId(leagueId, season)));
-  return snap.exists() ? nameStandings(snap.data()) : null;
+  const st = await one('standings', standingsId(leagueId, season));
+  return st ? nameStandings(st) : null;
 }
 
 export function saveStandings(leagueId, season, data) {
@@ -80,8 +85,7 @@ export function saveStandings(leagueId, season, data) {
 }
 
 export async function getMeta(name) {
-  const snap = await getDoc(doc(db, 'meta', name));
-  return snap.exists() ? snap.data() : null;
+  return byId('meta', name);
 }
 
 /** Meta-document in zijn geheel vervangen (geen merge). */
@@ -133,9 +137,8 @@ export async function getCallsToday() {
 // { fullName, shortName, updatedAt }. Later ook contract, marktwaarde, blessures.
 
 export async function getPlayers() {
-  const snap = await getDocs(collection(db, 'players'));
   const out = {};
-  snap.docs.forEach((d) => { out[d.id] = d.data(); });
+  (await coll('players')).forEach((d) => { out[d.id] = d.data(); });
   return out;
 }
 
@@ -152,8 +155,7 @@ export function savePlayer(id, partial) {
 // Alleen kop, teaser, link, datum en clubs. Zo blijft clubnieuws bewaard als de feed doorschuift.
 
 export async function getNews() {
-  const snap = await getDocs(collection(db, 'news'));
-  return snap.docs.map((d) => d.data());
+  return (await coll('news')).map((d) => d.data());
 }
 
 export async function saveNews(items) {
@@ -167,8 +169,7 @@ export async function saveNews(items) {
 // { year, source: 'highlightly' | 'manual', follows: [leagueId], createdAt }
 
 export async function getSeasons() {
-  const snap = await getDocs(collection(db, 'seasons'));
-  return snap.docs.map((d) => d.data());
+  return (await coll('seasons')).map((d) => d.data());
 }
 
 export function saveSeason(year, data) {
@@ -179,8 +180,7 @@ export function saveSeason(year, data) {
 // Gelezen seizoenspagina: eindstanden, uitslagen, nacompetitie, beker en de zelfcontrole.
 
 export async function getRsssf(year) {
-  const snap = await getDoc(doc(db, 'rsssf', String(year)));
-  return snap.exists() ? snap.data() : null;
+  return one('rsssf', year);
 }
 
 export async function getAllRsssf() {
@@ -209,8 +209,7 @@ export async function savePlayersBatch(writes) {
 
 export async function getLeagueMatches(leagueId, season) {
   const q = query(collection(db, 'leagueMatches'), where('league.id', '==', Number(leagueId)), where('league.season', '==', Number(season)));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => nameMatch(d.data()));
+  return (await live.docs(`lm:${Number(leagueId)}:${Number(season)}`, q)).map((d) => nameMatch(d.data()));
 }
 
 export async function saveLeagueMatches(list) {
@@ -235,8 +234,7 @@ export async function saveNotesBatch(entries) {
 
 // ---------- Trainers: coaches/{id} ----------
 export async function getCoaches() {
-  const snap = await getDocs(collection(db, 'coaches'));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return (await coll('coaches')).map((d) => ({ id: d.id, ...d.data() }));
 }
 export async function saveCoachesBatch(list) {
   const batch = writeBatch(db);
@@ -246,9 +244,8 @@ export async function saveCoachesBatch(list) {
 
 // ---------- Clubmarkeringen: clubs/{teamId} (rivaal, interessant, notitie) ----------
 export async function getClubMarks() {
-  const snap = await getDocs(collection(db, 'clubs'));
   const out = {};
-  snap.docs.forEach((d) => { out[d.id] = d.data(); });
+  (await coll('clubs')).forEach((d) => { out[d.id] = d.data(); });
   return out;
 }
 export async function saveClubMarksBatch(entries) {
@@ -282,8 +279,7 @@ export async function rebuildTeamIndex() {
 }
 
 export async function getAllLeagueTeams() {
-  const snap = await getDoc(doc(db, 'meta', 'teamIndex'));
-  const d = snap.exists() ? snap.data() : null;
+  const d = await getMeta('teamIndex');
   const fresh = d && d.builtAt && Date.now() - Date.parse(d.builtAt) < TEAM_INDEX_DAYS * 864e5;
   if (d && d.teams && Object.keys(d.teams).length && fresh) return fromIndex(d.teams);
   return fromIndex(await rebuildTeamIndex());
@@ -294,8 +290,7 @@ export async function getAllLeagueTeams() {
 // { ids: [...], finished: [...], withEvents: [...] }
 
 export async function getLeagueIndexes() {
-  const snap = await getDocs(collection(db, 'leagueIndex'));
-  return snap.docs.map((d) => ({ key: d.id, ...d.data() }));
+  return (await coll('leagueIndex')).map((d) => ({ key: d.id, ...d.data() }));
 }
 
 export function addToLeagueIndex(leagueId, season, { ids = [], finished = [], withEvents = [] }) {
@@ -334,8 +329,7 @@ export async function restoreCollection(name, docs, onProgress) {
 // (players/coaches.gallery, clubs.stadiumGallery), met een klein plaatje voor lijsten.
 
 export async function getPhotos(owner) {
-  const snap = await getDocs(query(collection(db, 'photos'), where('owner', '==', owner)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return (await live.docs(`ph:${owner}`, query(collection(db, 'photos'), where('owner', '==', owner)))).map((d) => ({ id: d.id, ...d.data() }));
 }
 export async function addPhoto(data) {
   const ref = doc(collection(db, 'photos'));
