@@ -1,5 +1,6 @@
 // Schermen met wedstrijddata: Home, Wedstrijden en de wedstrijdpagina.
 
+import { shootoutKicks } from './shootout.js';
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
 import { getSeason, seasonLabel, inSeason, isCurrentSeason } from './seasonstate.js';
@@ -773,10 +774,12 @@ function notesBlock(n, early = false) {
 }
 
 function timeline(m) {
-  const ev = m.detail.events || [];
+  const all = m.detail.events || [];
+  const ev = all.filter((e) => !e.shootout);
   if (!ev.length) return '';
   const names = nameIndex(m);
   const homeId = m.homeTeam.id;
+  const kicks = shootoutKicks(all, homeId);
   const label = (e) => {
     if (e.type === 'Substitution') return `${esc(e.inName || names.get(e.inId) || '?')} <span class="muted">voor ${esc(e.outName || names.get(e.outId) || '?')}</span>`;
     const assist = e.assist || (e.assistId && names.get(e.assistId));
@@ -803,7 +806,14 @@ function timeline(m) {
           ? `<button type="button" class="tl__btn" data-action="edit-event" data-sig="${esc(e._sig)}">${inner}</button>`
           : inner}</li>`;
       }).join('')}</ol>
-    </section>`;
+    </section>
+    ${kicks.length ? `<section class="section">
+      <div class="section__label"><span>Strafschoppenserie</span><span>${m.penalties ? `${m.penalties.home}–${m.penalties.away}` : ''}</span></div>
+      <ol class="timeline">${kicks.map((k) => `<li class="tl tl--${k.home ? 'home' : 'away'} tl--${k.raak ? 'goal' : 'other'}">
+        <span class="tl__min mono">${k.stand}</span>
+        <span class="tl__body"><span class="tl__badge tl__badge--${k.raak ? 'goal' : 'other'}">${k.raak ? 'Raak' : 'Mis'}</span> ${esc(k.player || '?')}</span></li>`).join('')}</ol>
+      <p class="muted" style="font-size:var(--fs-sm);margin:0">Schoppen uit de serie tellen niet als goal of in de spelersstats.</p>
+    </section>` : ''}`;
 }
 
 const STAT_ROWS = [

@@ -6,7 +6,11 @@
 // meta/quota       aantal API-calls per dag (eigen telling)
 
 import { db } from './firebase.js';
-import { nameMatch, nameStandings, nameTeam, rawMatch, rawStandings } from './clubnames.js';
+import { nameMatch as nameOnly, nameStandings, nameTeam, rawMatch, rawStandings } from './clubnames.js';
+import { markShootout } from './shootout.js';
+
+// Bij elke gelezen wedstrijd: eigen clubnamen erop en de strafschoppenserie herkennen (telt niet als goals).
+const nameMatch = (m) => markShootout(nameOnly(m));
 import {
   collection, doc, getDoc, getDocs, setDoc, deleteDoc, writeBatch, increment, deleteField, query, where, arrayUnion,
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
