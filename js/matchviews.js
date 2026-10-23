@@ -401,7 +401,7 @@ function lastBlock(m) {
     <div class="section__label"><span>${esc(dayShort(m.date))} · ${esc(compName(m))}</span><span class="result result--${r}">${r === 'W' ? 'Winst' : r === 'V' ? 'Verlies' : 'Gelijk'}</span></div>
     ${scorers(m)}
     ${best ? `<div class="kv-line"><span>Beste speler: ${esc(best.name)}</span><span class="mono">${best.rating.toFixed(2)}</span></div>` : ''}
-    ${m.detail ? '' : `<button class="btn btn--primary" type="button" data-action="fetch-match" data-id="${m.id}">Details ophalen · ${COST.match} calls</button>`}`;
+    ${m.detail ? '' : m.manual ? `<a class="btn btn--primary" href="#/invullen/${m.id}">Details invullen</a>` : `<button class="btn btn--primary" type="button" data-action="fetch-match" data-id="${m.id}">Details ophalen · ${COST.match} calls</button>`}`;
 }
 
 function seasonBlock(list, league, standings) {
@@ -725,10 +725,11 @@ export const matchViews = {
           ${d ? `<dl class="kv">
             ${d.venue && d.venue.name ? `<dt>Stadion</dt><dd>${esc(d.venue.name)}${d.venue.city ? ', ' + esc(d.venue.city) : ''}</dd>` : ''}
             ${d.referee ? `<dt>Scheidsrechter</dt><dd>${esc(d.referee)}</dd>` : ''}
-            <dt>Aftrap</dt><dd>${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</dd>
+            <dt>Aftrap</dt><dd>${esc(dayLong(m.date))}${m.dateOnly ? '' : `, ${esc(timeOf(m.date))}`}</dd>
             ${n.attendance != null ? `<dt>Toeschouwers</dt><dd class="mono">${nl(n.attendance)}</dd>` : ''}
             ${n.awayFans != null ? `<dt>Uitvak</dt><dd><span class="mono">${nl(n.awayFans)}</span> <span class="muted">${esc(m.awayTeam.name)}</span></dd>` : ''}
-          </dl>` : `<p class="muted">${esc(dayLong(m.date))}, ${esc(timeOf(m.date))}</p>`}
+          </dl>` : `<p class="muted">${esc(dayLong(m.date))}${m.dateOnly ? '' : `, ${esc(timeOf(m.date))}`}</p>`}
+          ${m.source === 'rsssf' ? `<p class="muted" style="font-size:var(--fs-sm)">Uitslag uit RSSSF (Karel Stokkermans)${m.rsNote ? ` · ${esc(m.rsNote)}` : ''}.</p>` : ''}
           ${m.manualDetail ? `<p><a class="ptag ptag--o21" href="#/invullen/${m.id}" style="text-decoration:none">handmatig ingevuld · ✎ aanpassen</a>${d.source ? ` <span class="muted" style="font-size:var(--fs-sm)">bron: ${esc(d.source)}</span>` : ''}</p>` : ''}
           ${twin ? `<a class="warn-line" href="#/wedstrijd/${twin.id}" style="display:block;text-decoration:none">Deze wedstrijd staat er dubbel in (${esc(m.stateText || 'niet gespeeld')}). De gespeelde versie: ${esc(twin.homeTeam.name)} – ${esc(twin.awayTeam.name)}, ${esc(dayShort(twin.date))} →</a>` : ''}
           ${m.playedByManual ? '<p class="muted" style="font-size:var(--fs-sm)">Gespeeld volgens jouw invoer. Highlightly: nog niet bekend.</p>' : ''}

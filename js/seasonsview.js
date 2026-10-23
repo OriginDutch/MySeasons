@@ -10,6 +10,7 @@ import { mainLeague } from './season.js';
 import { openSheet } from './editor.js';
 import { explain, runWithButton } from './matchviews.js';
 import { importRsssf } from './rsssfimport.js';
+import { convertRsssf, removeConverted } from './rsssfconvert.js';
 import { getAllRsssf } from './store.js';
 
 const FIRST_YEAR = 2018;
@@ -36,6 +37,7 @@ export async function seasonRows() {
       count: own.length,
       played: own.filter((m) => m.status === 'finished').length,
       detailed: own.filter(hasDetail).length,
+      converted: own.filter((m) => String(m.id).startsWith('manual-rs')).length,
       source: r.saved ? r.saved.source : own.length ? 'highlightly' : null,
     };
   });
@@ -117,6 +119,9 @@ export const seasonViews = {
               <span class="season-row__actions">
                 <button class="btn btn--sm" type="button" data-view-season="${r.year}">Bekijken</button>
                 ${r.year < CURRENT_SEASON ? `<button class="btn btn--sm" type="button" data-rsssf="${r.year}">${r.rsssf ? 'RSSSF opnieuw' : 'RSSSF-basis'} · 0</button>` : ''}
+                ${r.rsssf && r.year < CURRENT_SEASON && (r.converted || r.played === 0) ? (r.converted
+                  ? `<button class="btn btn--sm" type="button" data-rs-remove="${r.year}">RSSSF-duels weghalen (${r.converted})</button>`
+                  : `<button class="btn btn--sm" type="button" data-rs-convert="${r.year}">RSSSF-duels in je lijst · 0</button>`) : ''}
                 ${r.source !== 'manual' ? `<button class="btn btn--sm" type="button" data-fetch-season="${r.year}">${r.count ? 'Bijwerken' : 'Ophalen'} · ${COST.season}</button>` : ''}
               </span>
             </div>`).join('')}</div>
@@ -147,6 +152,24 @@ export const seasonViews = {
           } catch (err) {
             toast(err.status === 404 ? `RSSSF heeft (nog) geen pagina voor ${seasonLabel(year)}, of de Worker kent /rsssf nog niet` : explain(err));
           }
+          return;
+        }
+        const conv = e.target.closest('[data-rs-convert]');
+        if (conv) {
+          const year = Number(conv.dataset.rsConvert);
+          try {
+            const r = await runWithButton(conv, 'Omzetten…', () => convertRsssf(year));
+            toast(r.added ? `${seasonLabel(year)}: ${r.added} duels uit RSSSF in je lijst${r.skipped ? ` (${r.skipped} had Highlightly al)` : ''}. Details vul je per duel in.` : r.reason || 'Niets om om te zetten', { duration: 7000 });
+            ctx.refresh();
+          } catch (err) { toast(explain(err)); }
+          return;
+        }
+        const rem = e.target.closest('[data-rs-remove]');
+        if (rem) {
+          const year = Number(rem.dataset.rsRemove);
+          const ok = await openSheet({ title: 'RSSSF-duels weghalen?', body: `<p>De omgezette duels van ${esc(seasonLabel(year))} gaan uit je lijst, met alles wat je erbij invulde (opstellingen, goals). De RSSSF-basis zelf blijft staan.</p>`, submitLabel: 'Weghalen' });
+          if (!ok) return;
+          try { const n = await runWithButton(rem, 'Weghalen…', () => removeConverted(year)); toast(`${n} duels weggehaald`); ctx.refresh(); } catch (err) { toast(explain(err)); }
           return;
         }
         const view = e.target.closest('[data-view-season]');

@@ -66,6 +66,8 @@ export async function syncSeason(season = getSeason()) {
 
 /** Volledige wedstrijd: detail, opstellingen en box score. Kost 3 calls. */
 export async function fetchMatch(id) {
+  // Zelf toegevoegd (of uit RSSSF omgezet): Highlightly kent dit id niet; niet ophalen, geen calls verspillen.
+  if (String(id).startsWith('manual-')) throw new Error('Zelf toegevoegde wedstrijd: details vul je zelf in.');
   let calls = 0;
   try {
     const detail = await hl(`/matches/${id}`);

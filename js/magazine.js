@@ -195,7 +195,7 @@ function reportCard(m, rep, dayTag) {
           <span class="mono report__score">${esc(rep.scoreLine)} ${resultChip(m)}</span>
         </div>
       </a>
-      ${rep.needsDetail ? `<div><button class="btn" type="button" data-action="fetch-match" data-id="${m.id}">Details ophalen voor het verhaal · ${COST.match} calls</button></div>` : ''}
+      ${rep.needsDetail ? (m.manual ? `<div><a class="btn" href="#/invullen/${m.id}">Details invullen voor het verhaal</a></div>` : `<div><button class="btn" type="button" data-action="fetch-match" data-id="${m.id}">Details ophalen voor het verhaal · ${COST.match} calls</button></div>`) : ''}
     </div>`;
 }
 
