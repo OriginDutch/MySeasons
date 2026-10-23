@@ -27,12 +27,17 @@ export function toLines(input) {
 }
 
 const DATE_RE = /^\[([A-Z][a-z]{2})\s+(\d{1,2})(?:[^\]]*)\]/;
-const ROUND_RE = /^Round\s+(\d+)\b(?:\s*\[([A-Z][a-z]{2})\s+(\d{1,2})[^\]]*\])?/;
+// 'Roun 5': tikfout in ned2019 (2018/19).
+const ROUND_RE = /^Round?\s+(\d+)\b(?:\s*\[([A-Z][a-z]{2})\s+(\d{1,2})[^\]]*\])?/;
 // "Final Table:", of bij een afgebroken seizoen (2019/20) "Table at abandonment:".
 const TABLE_LABEL = /^\s*(Final Table|Table at (?:time of )?abandonment):?\s*$/i;
 const TABLE_RE = /^\s*(\d{1,2})\.(.+?)\s{2,}(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,3})-(\d{1,3})\s+(-?\d{1,3})\b(.*)$/;
 // "Groningen        4-1 NAC   [aet, 5-4 pen]" of "Heracles      abd Groningen     [abandoned ...]"
 const MATCH_RE = /^\s*(\S.*?)\s{2,}(\d{1,2})-(\d{1,2})\s+(\S.*?)(?:\s{2,}\[(.*)\]?)?\s*$|^\s*(\S.*?)\s{2,}(abd|awd|ann|postp|canc|n\/p)\.?\s+(\S.*?)(?:\s{2,}\[(.*)\]?)?\s*$/;
+
+// Een clubnaam die de hele kolom vult ("Fortuna Sittard 1-4 Feyenoord", ned2019): maar één spatie voor de uitslag.
+// Alleen als de naam minstens 15 tekens is, zodat gewone tekst ("won 2-1 against") niet als uitslag telt.
+const MATCH_FULL_COL = /^\s*([A-Za-z][^[\]]{14,}?)\s(\d{1,2})-(\d{1,2})\s+(\S.*?)(?:\s{2,}\[(.*)\]?)?\s*$/;
 
 function isoDate(seasonStart, mon, day) {
   const m = MONTHS[String(mon).toLowerCase()];
@@ -116,7 +121,8 @@ function parseMatches(lines, seasonStart, stage) {
       continue;
     }
     if (TABLE_RE.test(raw)) continue; // standregel (bijv. "Halfway Table:" tussen de rondes), geen uitslag
-    const m = l.match(MATCH_RE);
+    let m = l.match(MATCH_RE);
+    if (!m) { const f = l.match(MATCH_FULL_COL); if (f && !/^NB:/i.test(l)) m = [f[0], f[1], f[2], f[3], f[4], f[5]]; }
     if (!m) continue;
     if (m[1]) {
       // Een notitie die doorloopt van de regel erboven ("[annulled; Jong AZ fielded suspended" / "... Excelsior   player]")
