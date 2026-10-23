@@ -41,9 +41,37 @@ async function sha(bytes) {
   return [...new Uint8Array(buf)].slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Sommige browsers (privacy-instellingen tegen 'canvas fingerprinting', bijv. Firefox met resistFingerprinting,
+// LibreWolf, Tor, sommige extensies) geven bij het uitlezen van een canvas een leeg plaatje terug. Dan zou je een
+// lege (blauwe) foto opslaan. Eén keer testen: rood vlakje tekenen en teruglezen.
+let CANVAS_OK = null;
+function canvasReadable() {
+  if (CANVAS_OK !== null) return CANVAS_OK;
+  try {
+    const c = document.createElement('canvas'); c.width = 4; c.height = 4;
+    const g = c.getContext('2d'); g.fillStyle = '#ff0000'; g.fillRect(0, 0, 4, 4);
+    const d = g.getImageData(1, 1, 1, 1).data;
+    const near = (v, t) => Math.abs(v - t) <= 12; // kleine ruis (Brave) is prima
+    const url = c.toDataURL('image/png');
+    CANVAS_OK = near(d[0], 255) && near(d[1], 0) && near(d[2], 0) && near(d[3], 255) && url.length > 60;
+  } catch { CANVAS_OK = false; }
+  return CANVAS_OK;
+}
+
+const asDataUrl = (blob) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(r.error); r.readAsDataURL(blob); });
+
 /** Afbeelding (File/Blob) → drie formaten + vingerafdruk van het origineel. */
 export async function prepareImage(blob) {
   if (!blob || !/^image\//.test(blob.type || 'image/')) throw new Error('Dit is geen afbeelding');
+  if (!canvasReadable()) {
+    // Verkleinen lukt niet in deze browser. Klein bestand: het origineel ongewijzigd bewaren. Groot: liever niets dan een lege foto.
+    if (blob.size > 300 * 1024) throw new Error('Deze browser blokkeert het verkleinen van foto\'s (privacy-instelling tegen canvas-fingerprinting). Sta het toe voor deze site, gebruik een andere browser, of kies een kleiner bestand (onder 300 kB).');
+    const bmp0 = await bitmapOf(blob);
+    const w = bmp0.width; const h = bmp0.height; if (bmp0.close) bmp0.close();
+    const url = await asDataUrl(blob);
+    const hash0 = await sha(await blob.arrayBuffer());
+    return { thumb: url.length <= 40 * 1024 ? url : null, small: url, large: url, w, h, bytes: url.length * 2, hash: hash0, unscaled: true };
+  }
   const bmp = await bitmapOf(blob);
   const large = encode(bmp, SIZES.large, 0.82);
   const small = encode(bmp, SIZES.small, 0.8);
