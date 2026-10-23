@@ -36,6 +36,24 @@ function encode(src, max, quality) {
   return { url, w, h };
 }
 
+async function imageOf(blob) {
+  const url = URL.createObjectURL(blob);
+  try { const img = new Image(); img.src = url; await img.decode(); return img; } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+}
+
+/** Is dit plaatje (data-URL) leeg/egaal? Inlezen, op 16×16 tekenen en kijken of er variatie in zit. */
+async function looksBlank(url) {
+  try {
+    const img = new Image(); img.src = url; await img.decode();
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0, 16, 16);
+    const d = g.getImageData(0, 0, 16, 16).data;
+    let min = 255; let max = 0; let alpha = 0;
+    for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 3; if (l < min) min = l; if (l > max) max = l; alpha += d[i + 3]; }
+    return alpha < 16 * 16 * 10 || max - min < 6; // (bijna) doorzichtig of één egale kleur
+  } catch { return false; } // kunnen we niet nakijken: niet tegenhouden
+}
+
 async function sha(bytes) {
   const buf = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(buf)].slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -79,10 +97,23 @@ export async function prepareImage(blob) {
     return { thumb: url.length <= 40 * 1024 ? url : null, small: url, large: url, w, h, bytes: url.length * 2, hash: hash0, unscaled: true };
   }
   const bmp = await bitmapOf(blob);
-  const large = encode(bmp, SIZES.large, 0.82);
-  const small = encode(bmp, SIZES.small, 0.8);
+  let large = encode(bmp, SIZES.large, 0.82);
+  let small = encode(bmp, SIZES.small, 0.8);
   const thumb = encode(bmp, SIZES.thumb, 0.6);
   if (bmp.close) bmp.close();
+  // Firefox gaf bij een foto die niet verkleind hoefde (kleiner dan het formaat) een leeg plaatje terug, terwijl de
+  // verkleinde miniatuur wel goed was. Daarom elk formaat nakijken; leeg = opnieuw via een <img>, en anders het origineel.
+  if (await looksBlank(large.url) || await looksBlank(small.url)) {
+    const img = await imageOf(blob);
+    if (await looksBlank(large.url)) large = encode(img, SIZES.large, 0.82);
+    if (await looksBlank(small.url)) small = encode(img, SIZES.small, 0.8);
+    if (await looksBlank(large.url) || await looksBlank(small.url)) {
+      if (blob.size > 300 * 1024) throw new Error('Het verkleinen van deze foto gaf een leeg plaatje in deze browser. Probeer een kleiner bestand (onder 300 kB) of een andere browser.');
+      const orig = { url: await asDataUrl(blob), w: large.w, h: large.h };
+      if (await looksBlank(large.url)) large = orig;
+      if (await looksBlank(small.url)) small = orig;
+    }
+  }
   const hash = await sha(await blob.arrayBuffer());
   return { thumb: thumb.url, small: small.url, large: large.url, w: large.w, h: large.h, bytes: thumb.url.length + small.url.length + large.url.length, hash };
 }
@@ -126,10 +157,14 @@ document.addEventListener('toggle', (e) => {
 }, true);
 
 /** Grote foto bovenaan: opgeslagen foto (small), anders de link, anders niets. */
+/** Opgeslagen 'small'/'large' die leeg is (een foto van honderden pixels in een paar honderd tekens kan niet). */
+export const brokenSize = (p) => !!p && typeof p.small === 'string' && p.small.length < 700 && (p.w || 0) * (p.h || 0) > 20000;
+
 export function heroImg(photos, gallery, season, linkUrl, cls = 'player-hero__photo') {
   const ref = shownRef(gallery, season);
   const p = ref && photos.find((x) => x.id === ref.id);
-  if (p) return `<img class="${cls}" src="${p.small}" alt="" data-photo-open="${esc(p.id)}">`;
+  // Foto's die in Firefox leeg zijn opgeslagen (v0.50.3 en eerder): 'small' is dan een paar honderd tekens. Toon de miniatuur.
+  if (p) return `<img class="${cls}" src="${brokenSize(p) ? p.thumb || ref.thumb || p.small : p.small}" alt="" data-photo-open="${esc(p.id)}">`;
   if (linkUrl) return `<img class="${cls}" src="${esc(linkUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`;
   return '';
 }
@@ -216,7 +251,8 @@ function viewSheet(ctx, o, photoId) {
   const p = o.photos.find((x) => x.id === photoId);
   if (!p) return;
   const isMain = o.gallery && o.gallery.main && o.gallery.main.id === p.id;
-  const dlg = dialog(`<img class="ph-big" src="${p.large}" alt="">
+  const dlg = dialog(`<img class="ph-big" src="${brokenSize(p) ? p.thumb || p.large : p.large}" alt="">
+    ${brokenSize(p) ? '<p class="warn-line">Deze foto is leeg opgeslagen (browserfout bij het verkleinen). Je ziet de miniatuur. Verwijder hem en voeg hem opnieuw toe voor de volle grootte.</p>' : ''}
     <p class="muted sheet__note">${p.source === 'link' ? 'Binnengehaald van een link' : 'Zelf toegevoegd'} · ${esc(new Date(p.addedAt).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }))} · ${p.w}×${p.h}${isMain ? ' · ★ hoofdfoto' : ''}</p>
     <div class="field-row"><label class="field"><span>Seizoen</span><select data-ph-season>${seasonOptions(p.season)}</select></label></div>
     <div class="btn-row">${isMain ? '' : '<button class="btn btn--primary btn--sm" type="button" data-ph="main">★ Hoofdfoto maken</button>'}
