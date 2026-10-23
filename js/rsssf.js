@@ -28,6 +28,8 @@ export function toLines(input) {
 
 const DATE_RE = /^\[([A-Z][a-z]{2})\s+(\d{1,2})(?:[^\]]*)\]/;
 const ROUND_RE = /^Round\s+(\d+)\b(?:\s*\[([A-Z][a-z]{2})\s+(\d{1,2})[^\]]*\])?/;
+// "Final Table:", of bij een afgebroken seizoen (2019/20) "Table at abandonment:".
+const TABLE_LABEL = /^\s*(Final Table|Table at (?:time of )?abandonment):?\s*$/i;
 const TABLE_RE = /^\s*(\d{1,2})\.(.+?)\s{2,}(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,2})\s+(\d{1,3})-(\d{1,3})\s+(-?\d{1,3})\b(.*)$/;
 // "Groningen        4-1 NAC   [aet, 5-4 pen]" of "Heracles      abd Groningen     [abandoned ...]"
 const MATCH_RE = /^\s*(\S.*?)\s{2,}(\d{1,2})-(\d{1,2})\s+(\S.*?)(?:\s{2,}\[(.*)\]?)?\s*$|^\s*(\S.*?)\s{2,}(abd|awd|ann|postp|canc|n\/p)\.?\s+(\S.*?)(?:\s{2,}\[(.*)\]?)?\s*$/;
@@ -51,19 +53,17 @@ function parseNote(raw) {
 
 /** Splitst de pagina in secties per divisie (op de kopregel, na de inhoudsopgave). */
 function sections(lines) {
-  const heads = [];
-  lines.forEach((l, i) => {
-    const t = l.trim();
-    if (!DIVISIONS.includes(t)) return;
-    // De inhoudsopgave bovenaan noemt de divisies achter elkaar; een echte kop wordt gevolgd door inhoud.
-    const next = lines.slice(i + 1, i + 4).map((x) => x.trim()).filter(Boolean)[0] || '';
-    if (DIVISIONS.includes(next)) return;
-    heads.push({ name: t, start: i });
-  });
-  // Elke divisie één keer: de eerste echte kop.
-  const seen = new Set();
-  const uniq = heads.filter((h) => (seen.has(h.name) ? false : seen.add(h.name)));
-  return uniq.map((h, k) => ({ name: h.name, lines: lines.slice(h.start + 1, k + 1 < uniq.length ? uniq[k + 1].start : lines.length) }));
+  // Elke regel met alleen een divisienaam is een kandidaat-kop: in de inhoudsopgave bovenaan, of de echte kop.
+  // De inhoudsopgave eindigt niet altijd met een divisie (2019/20: "Amateur Level"), dus kiezen we per divisie
+  // de kandidaat met de meeste inhoud (speelrondes, standregels, uitslagen) tot de volgende kandidaat.
+  const cands = [];
+  lines.forEach((l, i) => { const t = l.trim(); if (DIVISIONS.includes(t)) cands.push({ name: t, start: i }); });
+  const score = (from, to) => lines.slice(from + 1, to).filter((x) => { const t = x.trim(); return ROUND_RE.test(t) || TABLE_RE.test(x) || MATCH_RE.test(x); }).length;
+  cands.forEach((c, k) => { c.end = k + 1 < cands.length ? cands[k + 1].start : lines.length; c.score = score(c.start, c.end); });
+  const best = new Map();
+  cands.forEach((c) => { const b = best.get(c.name); if (c.score > 0 && (!b || c.score > b.score)) best.set(c.name, c); });
+  const heads = [...best.values()].sort((a, b) => a.start - b.start);
+  return heads.map((h, k) => ({ name: h.name, lines: lines.slice(h.start + 1, k + 1 < heads.length ? heads[k + 1].start : lines.length) }));
 }
 
 function parseTable(lines, from) {
@@ -114,6 +114,7 @@ function parseMatches(lines, seasonStart, stage) {
       if (head[2]) date = isoDate(seasonStart, head[2], head[3]);
       continue;
     }
+    if (TABLE_RE.test(raw)) continue; // standregel (bijv. "Halfway Table:" tussen de rondes), geen uitslag
     const m = l.match(MATCH_RE);
     if (!m) continue;
     if (m[1]) {
@@ -190,13 +191,13 @@ export function parseRsssf(input, seasonStart) {
       return;
     }
     const L = sec.lines;
-    const ti = L.findIndex((l) => /^\s*Final Table:?\s*$/.test(l));
+    const ti = L.findIndex((l) => TABLE_LABEL.test(l));
     const { rows } = ti >= 0 ? parseTable(L, ti + 1) : { rows: [] };
     const nacStart = L.findIndex((l, i) => i > ti && /^\s*Nacompetitie\s*$/.test(l) && !/\|/.test(l));
     const firstRound = L.findIndex((l) => ROUND_RE.test(l.trim()));
     // Reguliere rondes: van de eerste 'Round' tot de tweede 'Final Table' of de playoffs.
     let regEnd = L.length;
-    const secondTable = L.findIndex((l, i) => i > firstRound && /^\s*Final Table:?\s*$/.test(l));
+    const secondTable = L.findIndex((l, i) => i > firstRound && TABLE_LABEL.test(l));
     if (secondTable > 0) regEnd = secondTable;
     else if (nacStart > 0) regEnd = nacStart;
     const regular = firstRound >= 0 ? parseMatches(L.slice(firstRound, regEnd), seasonStart, 'regular') : [];
