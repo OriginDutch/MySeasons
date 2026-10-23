@@ -96,6 +96,7 @@ function parseMatches(lines, seasonStart, stage) {
   const out = [];
   let date = null; let round = null; let label = null;
   let pending = null; // gestaakt/uitgesteld duel, wacht op het vervolg
+  let openNote = null; // notitie zonder ']' die op de volgende regel doorloopt
   for (const raw of lines) {
     const l = raw.trim();
     if (!l) continue;
@@ -118,8 +119,15 @@ function parseMatches(lines, seasonStart, stage) {
     const m = l.match(MATCH_RE);
     if (!m) continue;
     if (m[1]) {
+      // Een notitie die doorloopt van de regel erboven ("[annulled; Jong AZ fielded suspended" / "... Excelsior   player]")
+      // staat achter de uitslag zonder '[': die hoort niet bij de clubnaam.
+      const [away, ...rest] = m[4].trim().split(/\s{2,}/);
       const n = parseNote(m[5]);
-      out.push({ stage, round, label, date, home: m[1].trim(), away: m[4].trim(), hs: Number(m[2]), as: Number(m[3]), ...n, status: 'played' });
+      if (rest.length && openNote) { openNote.note = `${openNote.note} ${rest.join(' ').replace(/\]$/, '')}`; openNote = null; }
+      // Geannuleerd (bijv. ongerechtigde speler, opnieuw gespeeld): telt niet.
+      const annulled = /annul/i.test(n.note || '');
+      out.push({ stage, round, label, date, home: m[1].trim(), away, hs: Number(m[2]), as: Number(m[3]), ...n, status: annulled ? 'annulled' : 'played' });
+      openNote = n.note && !/\]\s*$/.test(m[0]) ? out[out.length - 1] : null;
     } else {
       const n = parseNote(m[9]);
       out.push({ stage, round, label, date, home: m[6].trim(), away: m[8].trim(), hs: null, as: null, ...n, status: m[7] });
