@@ -45,15 +45,21 @@ async function sha(bytes) {
 // LibreWolf, Tor, sommige extensies) geven bij het uitlezen van een canvas een leeg plaatje terug. Dan zou je een
 // lege (blauwe) foto opslaan. Eén keer testen: rood vlakje tekenen en teruglezen.
 let CANVAS_OK = null;
-function canvasReadable() {
+// Rondje: rood/blauw vlak tekenen → toDataURL (webp, zoals bij echt opslaan) → weer inlezen → pixels vergelijken.
+// Zo vangen we zowel een geblokkeerde getImageData als een toDataURL die een leeg plaatje geeft.
+async function canvasReadable() {
   if (CANVAS_OK !== null) return CANVAS_OK;
   try {
-    const c = document.createElement('canvas'); c.width = 4; c.height = 4;
-    const g = c.getContext('2d'); g.fillStyle = '#ff0000'; g.fillRect(0, 0, 4, 4);
-    const d = g.getImageData(1, 1, 1, 1).data;
-    const near = (v, t) => Math.abs(v - t) <= 12; // kleine ruis (Brave) is prima
-    const url = c.toDataURL('image/png');
-    CANVAS_OK = near(d[0], 255) && near(d[1], 0) && near(d[2], 0) && near(d[3], 255) && url.length > 60;
+    const c = document.createElement('canvas'); c.width = 8; c.height = 8;
+    const g = c.getContext('2d'); g.fillStyle = '#ff0000'; g.fillRect(0, 0, 8, 4); g.fillStyle = '#0000ff'; g.fillRect(0, 4, 8, 4);
+    let url = c.toDataURL('image/webp', 0.9);
+    if (!url.startsWith('data:image/webp')) url = c.toDataURL('image/jpeg', 0.9);
+    const img = new Image(); img.src = url; await img.decode();
+    const c2 = document.createElement('canvas'); c2.width = 8; c2.height = 8;
+    const g2 = c2.getContext('2d'); g2.drawImage(img, 0, 0);
+    const top = g2.getImageData(4, 1, 1, 1).data; const bot = g2.getImageData(4, 6, 1, 1).data;
+    const near = (v, t) => Math.abs(v - t) <= 40; // ruis en jpeg/webp-afwijking zijn prima
+    CANVAS_OK = near(top[0], 255) && near(top[2], 0) && near(bot[0], 0) && near(bot[2], 255) && near(top[3], 255);
   } catch { CANVAS_OK = false; }
   return CANVAS_OK;
 }
@@ -63,7 +69,7 @@ const asDataUrl = (blob) => new Promise((resolve, reject) => { const r = new Fil
 /** Afbeelding (File/Blob) → drie formaten + vingerafdruk van het origineel. */
 export async function prepareImage(blob) {
   if (!blob || !/^image\//.test(blob.type || 'image/')) throw new Error('Dit is geen afbeelding');
-  if (!canvasReadable()) {
+  if (!(await canvasReadable())) {
     // Verkleinen lukt niet in deze browser. Klein bestand: het origineel ongewijzigd bewaren. Groot: liever niets dan een lege foto.
     if (blob.size > 300 * 1024) throw new Error('Deze browser blokkeert het verkleinen van foto\'s (privacy-instelling tegen canvas-fingerprinting). Sta het toe voor deze site, gebruik een andere browser, of kies een kleiner bestand (onder 300 kB).');
     const bmp0 = await bitmapOf(blob);
