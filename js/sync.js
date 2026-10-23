@@ -136,3 +136,22 @@ export async function syncLeague(leagueId, season = getSeason()) {
     if (calls) await countCalls(calls);
   }
 }
+
+/**
+ * Zoekt een zelf toegevoegd duel (bijv. uit RSSSF) bij Highlightly op datum + Cambuur thuis/uit. Kost 1 call.
+ * Geeft de gespeelde Highlightly-wedstrijd (genormaliseerd) of null, plus wat er wel gevonden is.
+ */
+export async function searchOnHighlightly(m) {
+  const teamId = MAIN_CLUB.id;
+  const home = m.homeTeam && m.homeTeam.id === teamId;
+  let calls = 0;
+  try {
+    const res = await hl('/matches', { date: String(m.date).slice(0, 10), [home ? 'homeTeamId' : 'awayTeamId']: teamId, limit: 10 });
+    calls++;
+    const list = ((res && res.data) || []).map(normalizeListMatch);
+    const played = list.find((x) => x.status === 'finished') || null;
+    return { match: played, seen: list };
+  } finally {
+    if (calls) await countCalls(calls);
+  }
+}

@@ -737,7 +737,8 @@ export const matchViews = {
           ${twin || m.status === 'postponed'
             ? (m.manual ? '<div class="btn-row"><button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button></div>' : `<p class="muted" style="font-size:var(--fs-sm)">${twin ? 'Vul de details in bij de gespeelde versie.' : `Deze wedstrijd is ${esc(word)}: geen details.`}</p>`)
             : m.status === 'finished' || Date.parse(m.date) < Date.now() - 3 * 3600e3
-            ? `<div class="btn-row">${m.status === 'finished' && !m.manual ? `<button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${m.apiDetail || (d && !m.manualDetail) ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button>` : ''}${!d ? `<a class="btn ${m.status === 'finished' && !m.manual ? '' : 'btn--primary'}" href="#/invullen/${m.id}">Details invullen</a>` : ''}${m.manual ? '<button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button>' : ''}</div>`
+            ? `<div class="btn-row">${m.status === 'finished' && !m.manual ? `<button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${m.apiDetail || (d && !m.manualDetail) ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button>` : ''}${!d ? `<a class="btn ${m.status === 'finished' && !m.manual ? '' : 'btn--primary'}" href="#/invullen/${m.id}">Details invullen</a>` : ''}${m.manual && m.status === 'finished' && !(m.hlSearch && m.hlSearch.found === false) ? `<button class="btn" type="button" data-action="hl-search">Zoeken bij Highlightly · 1</button>` : ''}${m.manual ? '<button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button>' : ''}</div>
+              ${m.hlSearch && m.hlSearch.found === false ? `<p class="muted" style="font-size:var(--fs-sm)">Gezocht bij Highlightly op ${esc(dayShort(m.hlSearch.at))}: niet gevonden. <button class="link-btn" type="button" data-action="hl-search">Nog eens · 1</button></p>` : ''}`
             : '<p class="muted" style="font-size:var(--fs-sm)">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
         </section>
         ${m.status === 'finished' || (Date.parse(m.date) - Date.now() < 12 * 3600e3 && m.status !== 'postponed' && !twin && !word) ? notesBlock(n, m.status !== 'finished') : ''}
@@ -757,6 +758,12 @@ export const matchViews = {
         try {
           if (a === 'edit-score' && apiM.manual) { changed = await import('./manualview.js').then((x) => x.editManualScore(apiM)); }
           else if (a === 'edit-score') changed = await editScore(apiM, notes, ctx.refresh);
+          if (a === 'hl-search') {
+            btn.disabled = true;
+            const found = await import('./manualview.js').then((x) => x.searchManualOnHighlightly(apiM, notes)).catch((err) => { toast(explain(err)); return undefined; });
+            if (found) { location.hash = `#/wedstrijd/${found.id}`; return; }
+            changed = true;
+          }
           if (a === 'delete-match') { if (await import('./manualview.js').then((x) => x.deleteManualMatch(apiM, notes))) { location.hash = '#/wedstrijden'; return; } }
           if (a === 'edit-event') changed = await editEvent(apiM, notes, btn.dataset.sig, ctx.refresh);
           if (a === 'edit-notes') changed = await editNotes(apiM, notes);

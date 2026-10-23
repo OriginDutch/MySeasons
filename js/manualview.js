@@ -482,3 +482,24 @@ export async function deleteManualMatch(m, notes) {
   toast('Wedstrijd verwijderd', { action: 'Ongedaan maken', onAction: async () => { await saveMatches([m]); if (notes) await saveNotesBatch([[m.id, notes]]); location.hash = `#/wedstrijd/${m.id}`; } });
   return true;
 }
+
+// ---------- Zelf toegevoegd duel bij Highlightly zoeken ----------
+/** Zoekt het duel bij Highlightly (1 call). Gevonden: de Highlightly-wedstrijd vervangt deze, met je invoer erbij. */
+export async function searchManualOnHighlightly(m, notes) {
+  const { searchOnHighlightly } = await import('./sync.js');
+  const { match: found, seen } = await searchOnHighlightly(m);
+  const at = new Date().toISOString();
+  if (!found) {
+    await saveMatches([{ ...m, hlSearch: { at, found: false, seen: seen.length } }]);
+    toast(seen.length ? `Highlightly kent op die dag wel ${seen.length} duel(s) van ${MAIN_CLUB.name}, maar niet als gespeeld (${seen.map((x) => x.stateText || x.status).join(", ")}).` : `Highlightly kent dit duel niet (gezocht op ${dayShort(m.date)} + ${MAIN_CLUB.name}). Details vul je zelf in.`, { duration: 7000 });
+    return null;
+  }
+  // Gevonden: Highlightly-versie opslaan, je eigen invoer (notities, details) meeverhuizen, dit duel weg.
+  await saveMatches([found]);
+  if (notes) await saveNotesBatch([[found.id, notes]]);
+  await deleteMatch(m.id);
+  dropDraft(m.id);
+  const same = found.score && m.score && found.score.home === m.score.home && found.score.away === m.score.away;
+  toast(`Gevonden bij Highlightly${same ? '' : ` (uitslag daar: ${found.score ? `${found.score.home}–${found.score.away}` : 'onbekend'}, RSSSF: ${m.score ? `${m.score.home}–${m.score.away}` : '?'})`}. Je kunt nu de details ophalen.`, { duration: 7000 });
+  return found;
+}
