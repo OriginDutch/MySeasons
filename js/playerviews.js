@@ -18,7 +18,7 @@ import { correctedList, runWithButton, explain, head, crest } from './matchviews
 import { dayShort, opponentOf, isHome } from './season.js';
 import { valueBlock, injuryBlock, mountExtra, injuryLabel, euro } from './playerextra.js';
 import { currentSquad } from './importer.js';
-import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf, ruleLevel, promotedSeason } from './shirts.js';
+import { shirtFor, latestShirt, seasonOfDate, shirtsOf, levelFor, levelsOf, ruleLevel, promotedSeason, demotedIn } from './shirts.js';
 import { loadPhotos, heroImg, galleryHtml, mountPhotos, shownThumb, linkBanner } from './photos.js';
 import { youthPending } from './youthmigrate.js';
 import { ROLES, roleLabel, lineOfRole, rolesOf, roleFor, inferRoles, isGeneric, sidesOf, fitsRole } from './roles.js';
@@ -61,9 +61,9 @@ function ageOf(dob) {
   const b = new Date(dob + 'T12:00:00'); const n = new Date();
   return n.getFullYear() - b.getFullYear() - (n < new Date(n.getFullYear(), b.getMonth(), b.getDate()) ? 1 : 0);
 }
-const T_LABEL = { 'transfer-in': 'Gekomen', 'transfer-uit': 'Vertrokken', 'huur-in': 'Gehuurd', 'huur-uit': 'Verhuurd', promotie: 'Doorgestroomd', verlenging: 'Verlengd' };
+const T_LABEL = { 'transfer-in': 'Gekomen', 'transfer-uit': 'Vertrokken', 'huur-in': 'Gehuurd', 'huur-uit': 'Verhuurd', promotie: 'Doorgestroomd', demotie: 'Naar O21', verlenging: 'Verlengd' };
 
-const T_TYPES = [['transfer-in', 'Gekomen'], ['transfer-uit', 'Vertrokken'], ['huur-in', 'Gehuurd'], ['huur-uit', 'Verhuurd'], ['promotie', 'Doorgestroomd uit de jeugd'], ['verlenging', 'Contract verlengd']];
+const T_TYPES = [['transfer-in', 'Gekomen'], ['transfer-uit', 'Vertrokken'], ['huur-in', 'Gehuurd'], ['huur-uit', 'Verhuurd'], ['promotie', 'Doorgestroomd uit de jeugd'], ['demotie', 'Naar O21 (blijft bij de club)'], ['verlenging', 'Contract verlengd']];
 
 /** Transfers met toevoegen/aanpassen/verwijderen. id = het spelersprofiel (Highlightly-id of legacy-…). */
 function transfersBlock(pr, id) {
@@ -224,7 +224,8 @@ async function siteFix(ctx, d, act) {
     if (d.kind === 'number') await savePlayer(d.id, { shirts: { ...(pr.shirts || shirtsOf(pr)), [y]: d.site }, shirt: null });
     else if (d.kind === 'to-first') { await editTransfer(ctx, d.id, null, profiles, { type: 'promotie' }); return; }
     else if (d.kind === 'to-o21') {
-      // Nog niet doorgestroomd: jeugdspeler. Wel al doorgestroomd: alleen dit seizoen als uitzondering.
+      // Nog niet doorgestroomd en nooit gekomen: jeugdspeler. Wel doorgestroomd of gekocht: "Naar O21" (blijft bij de club).
+      if (promotedSeason(pr) != null || (pr.transfers || []).some((t) => t.type === 'transfer-in' || t.type === 'huur-in')) { await editTransfer(ctx, d.id, null, profiles, { type: 'demotie' }); return; }
       if (promotedSeason(pr) == null) await savePlayer(d.id, { youth: true, levels: { ...(pr.levels || levelsOf(pr)), [y]: null }, squadLevel: null });
       else await savePlayer(d.id, { levels: { ...(pr.levels || levelsOf(pr)), [y]: 'o21' }, squadLevel: null });
     }
@@ -678,8 +679,10 @@ function seasonMembers(list, squadPlayers, profiles) {
     const st = statusIn(p.profile, win, ref, { onSheet: true, lastSheet: last });
     seen.add(String(p.id));
     const inj = injuryLabel(p.profile, ref, isCurrentSeason());
-    const lvl = levelFor(p.profile || profiles[String(p.id)], getSeason());
-    members.push({ ...p, status: lvl === 'o21' && (st.status || 'active') === 'active' ? 'youth' : (st.status || 'active'), labels: [...(inj ? [inj] : []), ...(st.labels || [])], conflict: st.conflict || false, injured: !!inj });
+    const prof = p.profile || profiles[String(p.id)];
+    const lvl = levelFor(prof, getSeason(), ref);
+    const dem = demotedIn(prof, getSeason(), ref);
+    members.push({ ...p, status: lvl === 'o21' && (st.status || 'active') === 'active' ? 'youth' : (st.status || 'active'), labels: [...(inj ? [inj] : []), ...(dem ? [`naar O21 · ${dem}`] : []), ...(st.labels || [])], conflict: st.conflict || false, injured: !!inj });
   });
   Object.entries(profiles || {}).forEach(([id, pr]) => {
     if (seen.has(id) || pr.linkedTo) return; // gekoppelde oud-profielen staan al onder hun Highlightly-id
@@ -690,7 +693,7 @@ function seasonMembers(list, squadPlayers, profiles) {
       id, name: profName(pr) || '?', number: shirtFor(pr, getSeason()) ?? latestShirt(pr, getSeason()), role: roleFor(pr, getSeason()), position: lineOfRole(roleFor(pr, getSeason())) || pr.position || '',
       photo: shownThumb(pr.gallery, getSeason()) || pr.photoUrl || null, nationality: pr.nationality || null,
       apps: 0, subIns: 0, minutes: 0, squads: 0, goals: 0, assists: 0, rating: null, rated: 0, log: [],
-      status: levelFor(pr, getSeason()) === 'o21' && st.status === 'active' ? 'youth' : st.status, labels: [...(injuryLabel(pr, ref, isCurrentSeason()) ? [injuryLabel(pr, ref, isCurrentSeason())] : []), ...(st.labels || [])], conflict: false, profileOnly: true,
+      status: levelFor(pr, getSeason(), ref) === 'o21' && st.status === 'active' ? 'youth' : st.status, labels: [...(injuryLabel(pr, ref, isCurrentSeason()) ? [injuryLabel(pr, ref, isCurrentSeason())] : []), ...(demotedIn(pr, getSeason(), ref) ? [`naar O21 · ${demotedIn(pr, getSeason(), ref)}`] : []), ...(st.labels || [])], conflict: false, profileOnly: true,
       injured: !!injuryLabel(pr, ref, isCurrentSeason()),
     });
   });

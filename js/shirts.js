@@ -76,18 +76,39 @@ export function promotedSeason(pr) {
   return ys.length ? Math.min(...ys) : null;
 }
 
-/** Volgens de regels, zonder uitzondering. */
-export function ruleLevel(pr, year) {
-  const ps = promotedSeason(pr);
-  if (ps != null) return Number(year) < ps ? 'o21' : 'first';
-  return pr && pr.youth ? 'o21' : 'first';
+// Tijdlijn (v0.51): "Doorgestroomd uit de jeugd" (promotie) en "Naar O21" (demotie) wisselen elkaar af; de laatste telt.
+// Een doorstroom geldt vanaf het begin van zijn seizoen (dat seizoen = eerste elftal); terugzetten geldt vanaf de datum.
+// Peildatum: lopend seizoen = vandaag, oud seizoen = einde seizoen (zoals bij vertrekken in de Selectie).
+const iso10 = (d) => String(d).slice(0, 10);
+export function levelEvents(pr) {
+  return ((pr && pr.transfers) || []).filter((t) => t && t.date && (t.type === 'promotie' || t.type === 'demotie'))
+    .map((t) => ({ type: t.type, date: iso10(t.date), from: t.type === 'promotie' ? `${seasonOfDate(t.date)}-07-01` : iso10(t.date) }))
+    .sort((a, b) => a.from.localeCompare(b.from));
+}
+const refOf = (year) => (Number(year) === CURRENT_SEASON ? new Date().toISOString().slice(0, 10) : `${Number(year) + 1}-06-30`);
+
+/** Volgens de regels, zonder uitzondering. ref = peildatum (standaard: vandaag of het einde van dat seizoen). */
+export function ruleLevel(pr, year, ref = refOf(year)) {
+  const ev = levelEvents(pr);
+  if (!ev.length) return pr && pr.youth ? 'o21' : 'first';
+  // Vóór de eerste gebeurtenis: het tegenovergestelde ervan (doorstroom = eerst jeugd; naar O21 = eerst eerste elftal).
+  let level = ev[0].type === 'promotie' ? 'o21' : 'first';
+  ev.forEach((e) => { if (e.from <= ref) level = e.type === 'promotie' ? 'first' : 'o21'; });
+  return level;
 }
 
-/** 'o21' of 'first' voor dat seizoen. */
-export function levelFor(pr, year) {
+/** Teruggezet naar O21 binnen dit seizoen (vóór de peildatum)? Geeft de datum, of null. */
+export function demotedIn(pr, year, ref = refOf(year)) {
+  const y = Number(year);
+  const e = levelEvents(pr).filter((x) => x.type === 'demotie' && seasonOfDate(x.date) === y && x.date <= ref).pop();
+  return e ? e.date : null;
+}
+
+/** 'o21' of 'first' voor dat seizoen (op de peildatum). */
+export function levelFor(pr, year, ref) {
   if (!pr) return 'first';
   const ex = levelsOf(pr)[Number(year)];
-  return ex || ruleLevel(pr, year);
+  return ex || ruleLevel(pr, year, ref);
 }
 
 /** Het oude gedrag (tot v0.46): een keuze gold ook voor de seizoenen erna. Alleen voor de omzetting. */
