@@ -99,7 +99,7 @@ function eventsLine(x) {
     return t === away ? 'away' : 'home';
   };
   const item = (e, side) => {
-    const min = `<b class="mono">${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'</b>`;
+    const min = `<b>${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'</b>`;
     const name = `${e.kind === 'goal' ? '⚽' : '🟥'} ${esc(e.player || '?')}${e.kind === 'goal' && /own/i.test(e.type || '') ? ' (e.d.)' : ''}${e.kind === 'goal' && /penalty/i.test(e.type || '') ? ' (pen.)' : ''}`;
     return `<span>${side === 'home' ? `${min} ${name}` : `${name} ${min}`}</span>`;
   };
@@ -113,7 +113,7 @@ function row(x) {
   return `<${tag} class="lb-row${isOwn(x) ? ' is-us' : ''}${isLive(x) ? ' is-live' : ''}"${isOwn(x) ? ` href="#/wedstrijd/${esc(x.id)}"` : ''}>
     <span class="lb-min mono">${esc(clockOf(x))}</span>
     <span class="lb-teams"><span>${esc(x.home ? x.home.name : '?')}</span><span>${esc(x.away ? x.away.name : '?')}</span></span>
-    <span class="lb-sc mono">${sc}</span>
+    <span class="lb-sc">${sc}</span>
     ${eventsLine(x)}
   </${tag}>`;
 }

@@ -107,25 +107,67 @@ export function intervalFor(remaining, now, ko, mode) {
 const line = (s) => `${s.home ? s.home.name : '?'} ${s.score ? `${s.score.home}–${s.score.away}` : '–'} ${s.away ? s.away.name : '?'}`;
 const mm = (e) => `${e.minute ?? '?'}${e.extra ? '+' + e.extra : ''}'`;
 
-/** Welke meldingen horen bij de overgang van prev naar cur? [{ kind: 'goalUs'|'goalThem'|'red'|'status', msg }] */
-export function messagesFor(prev, cur, m) {
+/** Voor welke kant telt deze goal? Een eigen goal telt voor de andere club. */
+function goalSide(e, cur) {
+  const home = cur.home && cur.home.id; const away = cur.away && cur.away.id;
+  let t = e.teamId;
+  if (/own/i.test(e.type || '')) t = t === home ? away : t === away ? home : t;
+  return t === away ? 'away' : 'home';
+}
+
+const PEND = 60e3; // stand gestegen maar nog geen goal-event: na een minuut toch melden, zonder naam
+
+/**
+ * Welke meldingen horen bij de overgang van prev naar cur? [{ kind: 'goalUs'|'goalThem'|'red'|'yellow'|'status', msg }]
+ * Goals per kant geteld (cur.sent = { home, away, keys, pend }): Highlightly werkt de stand en de events niet altijd
+ * in dezelfde vraag bij. Een goal wordt gemeld zodra de stand hoger is dan wat al gemeld is EN er een nieuw
+ * goal-event voor die kant is; komt er binnen een minuut geen event, dan zonder naam. Een gecorrigeerde
+ * schutter of een event dat later binnenkomt levert geen tweede melding op.
+ */
+export function messagesFor(prev, cur, m, now = Date.now()) {
   const out = [];
   const url = `#/wedstrijd/${m.id}`;
+  const goals = (x) => ((x && x.events) || []).filter((e) => e.kind === 'goal');
+  const sent = prev && prev.sent ? { home: prev.sent.home, away: prev.sent.away, keys: [...(prev.sent.keys || [])], pend: { ...(prev.sent.pend || {}) } }
+    : { home: (prev && prev.score && prev.score.home) || 0, away: (prev && prev.score && prev.score.away) || 0, keys: goals(prev).map((e) => e.key), pend: {} };
+  const sc = cur.score || { home: 0, away: 0 };
+  for (const side of ['home', 'away']) {
+    if (sc[side] < sent[side]) sent[side] = sc[side]; // afgekeurd: terugtellen
+    let owed = sc[side] - sent[side];
+    const fresh = goals(cur).filter((e) => goalSide(e, cur) === side && !sent.keys.includes(e.key));
+    for (const e of fresh) {
+      if (owed <= 0) break;
+      const own = /own/i.test(e.type || '');
+      const forUs = (e.teamId === TEAM) !== own;
+      out.push({ kind: forUs ? 'goalUs' : 'goalThem', msg: { title: `${forUs ? '⚽' : '🥅'} ${line(cur)}`, body: `${mm(e)} ${e.player || 'onbekend'}${own ? ' (eigen goal)' : ''}${/penalty/i.test(e.type || '') ? ' (penalty)' : ''}${e.assist ? ` · assist ${e.assist}` : ''}`, url, tag: `live-${m.id}-${e.key}` } });
+      sent.keys.push(e.key); sent[side]++; owed--;
+    }
+    if (owed > 0) {
+      if (!sent.pend[side]) sent.pend[side] = now;
+      else if (now - sent.pend[side] >= PEND) {
+        const club = side === 'home' ? cur.home : cur.away;
+        const forUs = !!(club && club.id === TEAM);
+        while (owed > 0) {
+          out.push({ kind: forUs ? 'goalUs' : 'goalThem', msg: { title: `${forUs ? '⚽' : '🥅'} ${line(cur)}`, body: `${club ? club.name : 'Goal'} scoort · schutter nog onbekend`, url, tag: `live-${m.id}-${side}-${sent[side] + 1}` } });
+          sent[side]++; owed--;
+        }
+        delete sent.pend[side];
+      }
+    } else delete sent.pend[side];
+  }
+  // Goals die al geteld zijn (ook zonder naam gemeld): hun event later niet nog eens melden.
+  // Alleen als er niet meer goal-events voor die kant zijn dan al gemeld (anders wacht dit event nog op de stand).
+  for (const side of ['home', 'away']) {
+    const all = goals(cur).filter((e) => goalSide(e, cur) === side);
+    if (all.length <= sent[side]) all.forEach((e) => { if (!sent.keys.includes(e.key)) sent.keys.push(e.key); });
+  }
+  sent.keys = sent.keys.slice(-30);
+  cur.sent = sent;
+
   if (prev && prev.events) {
     const seen = new Set(prev.events.map((e) => e.key));
-    const fresh = cur.events.filter((e) => !seen.has(e.key) && e.kind !== 'sub');
-    // Alleen zoveel goals melden als de stand gestegen is: een gecorrigeerde schutter is geen nieuwe goal.
-    const tot = (x) => (x && x.score ? x.score.home + x.score.away : 0);
-    const rise = Math.max(0, tot(cur) - tot(prev));
-    const newGoals = fresh.filter((e) => e.kind === 'goal');
-    const goals = new Set(rise ? newGoals.slice(-rise) : []);
-    fresh.forEach((e) => {
-      if (e.kind === 'goal') {
-        if (!goals.has(e)) return;
-        const own = /own/i.test(e.type);
-        const forUs = (e.teamId === TEAM) !== own;
-        out.push({ kind: forUs ? 'goalUs' : 'goalThem', msg: { title: `${forUs ? '⚽' : '🥅'} ${line(cur)}`, body: `${mm(e)} ${e.player || 'onbekend'}${own ? ' (eigen goal)' : ''}${/penalty/i.test(e.type) ? ' (penalty)' : ''}${e.assist ? ` · assist ${e.assist}` : ''}`, url, tag: `live-${m.id}-${e.key}` } });
-      } else if (e.kind === 'red') {
+    cur.events.filter((e) => !seen.has(e.key)).forEach((e) => {
+      if (e.kind === 'red') {
         out.push({ kind: 'red', msg: { title: `🟥 ${e.player || 'Rode kaart'} (${mm(e)})`, body: `${e.teamId === TEAM ? 'Cambuur' : 'Tegenstander'} met tien · ${line(cur)}`, url, tag: `live-${m.id}-${e.key}` } });
       } else if (e.kind === 'yellow') {
         out.push({ kind: 'yellow', msg: { title: `🟨 ${e.player || 'Gele kaart'} (${mm(e)})`, body: `${e.teamId === TEAM ? 'Cambuur' : 'Tegenstander'} · ${line(cur)}`, url, tag: `live-${m.id}-${e.key}` } });
@@ -190,9 +232,10 @@ export async function liveScheduled(env, time, deps) {
       const sig = JSON.stringify([cur.status, cur.score, cur.events.map((e) => e.key)]);
       const prevSig = prev ? JSON.stringify([prev.status, prev.score, (prev.events || []).map((e) => e.key)]) : null;
       // Eerste keer dat we hem zien terwijl hij al bezig is: oude goals niet alsnog melden.
-      const base = prev || (cur.status === 'pre' ? { status: 'pre', events: [] } : { status: cur.status, events: cur.events });
-      const msgs = messagesFor(base, cur, m);
-      const changed = !prev || sig !== prevSig || prev.clock !== cur.clock && minute % 5 === 0 && !k;
+      const base = prev || (cur.status === 'pre' ? { status: 'pre', events: [], score: { home: 0, away: 0 } } : { status: cur.status, events: cur.events, score: cur.score });
+      const msgs = messagesFor(base, cur, m, t);
+      const sentSig = JSON.stringify(prev && prev.sent); 
+      const changed = !prev || sig !== prevSig || sentSig !== JSON.stringify(cur.sent) || prev.clock !== cur.clock && minute % 5 === 0 && !k;
       const next = { ...cur, at: new Date(t).toISOString(), every, ko: m.date, comp: m.comp || null, ftSent: cur.status === 'ft' || !!(prev && prev.ftSent) };
       if (changed) await kv.put(LIVE + m.id, JSON.stringify(next), { expirationTtl: 2 * 86400 });
       await deliver(kv, msgs, m.id, m.date);

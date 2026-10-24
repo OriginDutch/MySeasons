@@ -1024,12 +1024,12 @@ a.po-team:hover span { text-decoration: underline; }
 .lb-league { font-family: var(--font-mono, monospace); font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 2px; }
 .lb-row { display: grid; grid-template-columns: 46px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--hairline); text-decoration: none; color: inherit; font-size: var(--fs-md); }
 .lb-row.is-us { font-weight: 600; }
-.lb-min { font-size: var(--fs-sm); color: var(--muted); }
+.lb-min { font-size: var(--fs-md); color: var(--muted); }
 .lb-row.is-live .lb-min { color: var(--accent-text); font-weight: 600; }
 .lb-teams { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
 .lb-teams span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-sc { font-weight: 600; text-align: right; line-height: 1.35; }
+.lb-sc { font-family: var(--font-sans); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; line-height: 1.25; }
 .lb-ev { grid-column: 2 / 4; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: var(--fs-sm); color: var(--muted); font-weight: 400; }
 .lb-ev > span { display: flex; flex-direction: column; gap: 2px; }
 .lb-ev__away { text-align: right; }
-.lb-ev b { color: var(--ink); font-weight: 500; }
+.lb-ev b { color: var(--ink); font-family: var(--font-sans); font-weight: 600; font-variant-numeric: tabular-nums; }
