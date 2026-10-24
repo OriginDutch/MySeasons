@@ -151,7 +151,7 @@ export async function pushApi(request, env, url, json) {
     const all = (await kv.get(SUBS, 'json')) || [];
     const old = all.find((x) => x.endpoint === s.endpoint) || {};
     const subs = all.filter((x) => x.endpoint !== s.endpoint);
-    subs.push({ endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth }, label: String(body.label || '').slice(0, 60), at: new Date().toISOString(), ...(old.live ? { live: old.live } : {}), ...(old.mute ? { mute: old.mute } : {}) });
+    subs.push({ endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth }, label: String(body.label || '').slice(0, 60), at: new Date().toISOString(), ...(old.live ? { live: old.live } : {}), ...(old.mute ? { mute: old.mute } : {}), ...(old.optin ? { optin: old.optin } : {}) });
     await kv.put(SUBS, JSON.stringify(subs.slice(-10)));
     return json({ ok: true, devices: Math.min(subs.length, 10) }, 200);
   }

@@ -1000,3 +1000,27 @@ a.po-team:hover span { text-decoration: underline; }
 .live-ev li.is-us { font-weight: 600; }
 .live-ev .mono { display: inline-block; min-width: 40px; color: var(--accent-text); }
 .live-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: var(--fs-sm); flex-wrap: wrap; }
+
+/* ---------- Speelronde / live-bord ---------- */
+.page-tabs { display: flex; gap: 6px; margin: 0 0 12px; }
+.page-tabs a { position: relative; padding: 6px 14px; border: 1px solid var(--hairline); border-radius: 999px; text-decoration: none; color: inherit; font-size: var(--fs-md); }
+.page-tabs a[aria-current="page"] { border-color: var(--ink); font-weight: 600; }
+.page-tabs__dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: 2px; }
+.page-tabs__dot[hidden] { display: none; }
+.nav__item { position: relative; }
+.nav__item.has-live::after { content: ''; position: absolute; top: 8px; left: calc(50% + 8px); width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.lb-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--hairline); border-left: 3px solid var(--hairline); padding: 10px 12px; margin: 10px 0; text-decoration: none; color: inherit; font-size: var(--fs-md); }
+.lb-bar.is-live { border-left-color: var(--accent); }
+@media (min-width: 1100px) { .mag > .lb-bar, .mag > .live-card { grid-column: 1 / -1; } }
+.mag > .lb-bar { margin: 0; }
+.lb { display: flex; flex-direction: column; }
+.lb-league { font-family: var(--font-mono, monospace); font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 2px; }
+.lb-row { display: grid; grid-template-columns: 46px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--hairline); text-decoration: none; color: inherit; font-size: var(--fs-md); }
+.lb-row.is-us { font-weight: 600; }
+.lb-min { font-size: var(--fs-sm); color: var(--muted); }
+.lb-row.is-live .lb-min { color: var(--accent-text); font-weight: 600; }
+.lb-teams { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
+.lb-teams span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-sc { font-weight: 600; text-align: right; line-height: 1.35; }
+.lb-ev { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: var(--fs-sm); color: var(--muted); font-weight: 400; }
+.lb-ev b { color: var(--ink); font-weight: 500; }

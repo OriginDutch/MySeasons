@@ -1,5 +1,6 @@
 // Schermen met wedstrijddata: Home, Wedstrijden en de wedstrijdpagina.
 
+import { tabsHtml } from './liveboard.js';
 import { shootoutKicks } from './shootout.js';
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
@@ -646,6 +647,7 @@ export const matchViews = {
       const list = sortByDate(raw);
       if (!list.length) {
         return `${head({ kicker: `MySeasons / ${seasonLabel()}`, title: 'Wedstrijden' })}
+          ${tabsHtml('cambuur')}
           <section class="section"><div class="empty"><span class="empty__title">Nog leeg</span>
           <p class="muted">Synchroniseer eerst het seizoen op Home, of voeg zelf een wedstrijd toe.</p><div class="btn-row"><a class="btn" href="#/home">Naar Home</a><button class="btn" type="button" data-add-match>+ Wedstrijd toevoegen</button></div></div></section>`;
       }
@@ -657,6 +659,7 @@ export const matchViews = {
       });
       return `
         ${head({ kicker: `MySeasons / ${seasonLabel()}`, title: 'Wedstrijden' })}
+        ${tabsHtml('cambuur')}
         <section class="section"><div><button class="btn btn--sm" type="button" data-add-match>+ Wedstrijd toevoegen</button></div></section>
         ${[...groups].map(([month, games]) => `
           <section class="section">

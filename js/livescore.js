@@ -1,5 +1,6 @@
 // Live tijdens de Cambuur-wedstrijd. De Worker vraagt Highlightly elke minuut (of zuiniger bij weinig budget)
-// en bewaart de stand; de app leest die bij de Worker (/live), elke 30 seconden zolang het scherm open is.
+// en bewaart de stand; de app leest die bij de Worker (/live), elke 15 seconden zolang het scherm open is.
+// Daarnaast het live-bord van de hele speelronde (liveboard.js): de Home-balk, het nav-bolletje en #/speelronde.
 // Kost de app dus geen Highlightly-calls. Meldingen per apparaat: Meer → Meldingen, en per wedstrijd het belletje.
 
 import { esc, toast } from './ui.js';
@@ -7,6 +8,7 @@ import { live, push } from './api.js';
 import { MAIN_CLUB } from './config.js';
 import { getAllMatches } from './store.js';
 import { pushSupported } from './meldingen.js';
+import { loadProgram, boardWindow, todayRows, homeBarHtml, liveCount } from './liveboard.js';
 
 const TEAM = MAIN_CLUB.id;
 const POLL = 15e3; // de Worker ververst elke 30 s (meting) of elke minuut
@@ -22,10 +24,36 @@ async function candidates() {
   return (await getAllMatches().catch(() => [])).filter((m) => [m.homeTeam, m.awayTeam].some((t) => t && t.id === TEAM) && !m.manual && inWindow(m, now));
 }
 
+export const liveState = () => STATE;
+
 async function poll() {
   if (document.hidden) return;
-  if (!(await candidates()).length) { if (STATE.matches.length) { STATE = { matches: [], at: Date.now() }; paint(); } return; }
-  try { STATE = { ...(await live()), at: Date.now() }; paint(); } catch { /* offline of Worker nog oud: volgende keer */ }
+  await loadProgram().catch(() => []);
+  const own = (await candidates()).length;
+  const today = todayRows(STATE).length;
+  // Alleen de Worker vragen als er iets in het venster zit, of eens per 5 minuten op een speeldag (uitslagen).
+  if (!own && !boardWindow() && !(today && Date.now() - STATE.at > 5 * 60e3)) { paint(); return; }
+  try {
+    STATE = { ...(await live()), at: Date.now() };
+    paint();
+    window.dispatchEvent(new CustomEvent('live:update'));
+    takeResults();
+  } catch { /* offline of Worker nog oud: volgende keer */ }
+}
+
+// Eindstanden van het live-bord liggen in de brievenbus: meteen verwerken als de app open is.
+let lastInbox = null;
+try { lastInbox = localStorage.getItem('ms-live-inbox'); } catch { /* niet erg */ }
+async function takeResults() {
+  const at = STATE.board && STATE.board.inboxAt;
+  if (!at || at === lastInbox) return;
+  lastInbox = at;
+  try { localStorage.setItem('ms-live-inbox', at); } catch { /* niet erg */ }
+  try {
+    const { emptyInbox } = await import('./nightshift.js');
+    const s = await emptyInbox();
+    if (s && s.items) { await loadProgram(true); window.dispatchEvent(new CustomEvent('live:update')); }
+  } catch { /* de nachtploeg pakt het later op */ }
 }
 
 export function startLive() {
@@ -43,7 +71,7 @@ async function loadDevice() {
     const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
     if (!sub) { DEVICE = null; return; }
     const r = await push.device(sub.endpoint);
-    DEVICE = { endpoint: sub.endpoint, live: r.live, mute: r.mute || [] };
+    DEVICE = { endpoint: sub.endpoint, live: r.live, mute: r.mute || [], optin: r.optin || [] };
   } catch { DEVICE = null; }
 }
 export const deviceLive = async () => { await loadDevice(); return DEVICE; };
@@ -52,7 +80,7 @@ export async function setDeviceLive(patch) {
   if (!DEVICE) await loadDevice();
   if (!DEVICE) throw new Error('Zet eerst meldingen aan op dit apparaat (Meer → Meldingen).');
   const r = await push.device(DEVICE.endpoint, patch);
-  DEVICE = { ...DEVICE, live: r.live, mute: r.mute || [] };
+  DEVICE = { ...DEVICE, live: r.live, mute: r.mute || [], optin: r.optin || [] };
   return DEVICE;
 }
 
@@ -79,11 +107,18 @@ function eventsHtml(s) {
   }).join('')}</ol>`;
 }
 
-function bell(id) {
+// Vanaf de duels na 24 oktober 2026: alleen meldingen als je Ja zegt (de vraag een uur vooraf, of dit belletje).
+export const ASK_FROM = Date.parse('2026-10-24T22:00:00Z');
+const askMode = (ko) => Date.parse(ko) >= ASK_FROM;
+const KO = new Map(); // id → aftrap, voor het belletje
+
+function bell(id, ko = KO.get(String(id))) {
   if (!DEVICE) return '';
-  const muted = (DEVICE.mute || []).includes(String(id));
+  if (ko) KO.set(String(id), ko);
+  const ask = ko && askMode(ko);
+  const muted = ask ? !(DEVICE.optin || []).includes(String(id)) : (DEVICE.mute || []).includes(String(id));
   const off = DEVICE.live && DEVICE.live.on === false;
-  return `<button class="btn btn--sm live-bell" type="button" data-live-mute="${esc(String(id))}" data-muted="${muted ? '1' : ''}" ${off ? 'disabled title="Live meldingen staan uit (Meer → Meldingen)"' : ''}>${muted || off ? '🔕 Meldingen uit' : '🔔 Meldingen aan'}</button>`;
+  return `<button class="btn btn--sm live-bell" type="button" data-live-mute="${esc(String(id))}" data-ask="${ask ? '1' : ''}" data-muted="${muted ? '1' : ''}" ${off ? 'disabled title="Live meldingen staan uit (Meer → Meldingen)"' : ''}>${muted || off ? '🔕 Meldingen uit' : '🔔 Meldingen aan'}</button>`;
 }
 
 /** Meting (tijdelijk): hoe vaak veranderde er iets bij Highlightly, en kwam dat bij de 30-secondenvraag binnen? */
@@ -109,7 +144,7 @@ function card(x, { full = false } = {}) {
     <a class="live-score" href="#/wedstrijd/${esc(x.id)}"><span>${esc(x.homeName)}</span><b class="mono">${sc}</b><span>${esc(x.awayName)}</span></a>
     ${s ? eventsHtml(s) : '<p class="muted" style="margin:0;font-size:var(--fs-sm)">De Worker begint 10 minuten voor de aftrap met volgen.</p>'}
     ${full ? measureHtml(x.log) : ''}
-    <div class="live-foot"><span class="muted">${s ? `bijgewerkt ${ago(s.at)}${s.every > 1 ? ` · elke ${s.every} min (zuinig budget)` : ''}` : ''}</span>${full || isLive || (s && s.status === 'pre') || !s ? bell(x.id) : ''}</div>
+    <div class="live-foot"><span class="muted">${s ? `bijgewerkt ${ago(s.at)}${s.every > 1 ? ` · elke ${s.every} min (zuinig budget)` : ''}` : ''}</span>${full || isLive || (s && s.status === 'pre') || !s ? bell(x.id, x.ko) : ''}</div>
   </section>`;
 }
 
@@ -120,19 +155,30 @@ export function paint() {
   view.querySelectorAll('[data-live-card]').forEach((el) => el.remove());
   const key = view.dataset.view;
   const id = (location.hash.match(/^#\/wedstrijd\/([^/?]+)/) || [])[1];
+  // Bolletje op het Wedstrijden-icoon (en de Speelronde-tab) zolang er iets bezig is.
+  const n = liveCount(STATE);
+  document.querySelectorAll('[data-nav="wedstrijden"]').forEach((a) => a.classList.toggle('has-live', n > 0));
+  document.querySelectorAll('[data-live-dot]').forEach((d) => { d.hidden = !n; });
   const list = (STATE.matches || []).filter((x) => x.state || inWindow(x));
-  if (!list.length) return;
   const head = view.querySelector('.page-head, .mast');
-  const put = (html) => { const t = document.createElement('div'); t.innerHTML = html; const el = t.firstElementChild; if (head) head.after(el); else view.prepend(el); };
-  if (key === 'home') list.slice(0, 2).reverse().forEach((x) => put(card(x)));
-  else if (key === 'wedstrijd' && id) { const x = list.find((y) => String(y.id) === String(id)); if (x) put(card(x, { full: true })); }
+  const put = (html) => { if (!html) return; const t = document.createElement('div'); t.innerHTML = html; const el = t.firstElementChild; if (head) head.after(el); else view.prepend(el); };
+  if (key === 'home') {
+    // Cambuur bezig of net klaar: de live-kaart neemt de plek van de voorbeschouwing in.
+    const started = list.filter((x) => x.state && x.state.status !== 'pre');
+    started.slice(0, 2).reverse().forEach((x) => put(card(x)));
+    const cover = view.querySelector('.cover');
+    if (cover) cover.style.display = started.length ? 'none' : '';
+    put(homeBarHtml(STATE, { ownCard: started.length > 0 }));
+  } else if (key === 'speelronde') {
+    list.filter((x) => x.state && x.state.status !== 'pre').slice(0, 2).reverse().forEach((x) => put(card(x)));
+  } else if (key === 'wedstrijd' && id) { const x = list.find((y) => String(y.id) === String(id)); if (x) put(card(x, { full: true })); }
 }
 
 /** Belletje op de wedstrijdpagina van een komende Cambuur-wedstrijd (buiten het live-venster). */
 export function bellHtml(m) {
   if (!m || m.status === 'finished' || m.manual || !DEVICE) return '';
   if (![m.homeTeam, m.awayTeam].some((t) => t && t.id === TEAM)) return '';
-  return `<div class="btn-row">${bell(m.id)}<span class="muted" style="font-size:var(--fs-sm)">live meldingen voor dit duel op dit apparaat</span></div>`;
+  return `<div class="btn-row">${bell(m.id, m.date)}<span class="muted" style="font-size:var(--fs-sm)">${askMode(m.date) ? 'live meldingen voor dit duel op dit apparaat · zonder Ja geen meldingen' : 'live meldingen voor dit duel op dit apparaat'}</span></div>`;
 }
 
 document.addEventListener('click', async (e) => {
@@ -142,7 +188,7 @@ document.addEventListener('click', async (e) => {
   const id = b.dataset.liveMute; const muted = !!b.dataset.muted;
   b.disabled = true;
   try {
-    await setDeviceLive({ mute: { [id]: !muted } });
+    await setDeviceLive(b.dataset.ask ? { optin: { [id]: muted } } : { mute: { [id]: !muted } });
     toast(muted ? 'Live meldingen voor dit duel staan aan' : 'Geen live meldingen voor dit duel');
     document.querySelectorAll(`[data-live-mute="${CSS.escape(id)}"]`).forEach((x) => { x.outerHTML = bell(id); });
   } catch (err) { toast(err.message || String(err)); b.disabled = false; }

@@ -23,7 +23,8 @@ import { backupApi } from './backup.js';
 import { followUp } from './followup.js';
 import { squadApi, squadScheduled } from './squadpage.js';
 import { imgApi } from './imgproxy.js';
-import { liveScheduled, liveApi } from './live.js';
+import { liveScheduled, liveApi, askScheduled, optinApi } from './live.js';
+import { boardScheduled, boardBusy, boardActive, BOARD } from './board.js';
 
 const PROJECT_ID = 'myseasons-c1dd9';
 const HIGHLIGHTLY_BASE = 'https://soccer.highlightly.net';
@@ -222,6 +223,8 @@ const MAX_CALLS = 40;
 const RESERVE = 15; // in de gratis stand blijven er altijd zoveel calls over voor de app zelf
 const RESERVE_LATE = 3; // laatste half uur voor de reset (00:00 UTC): de 15 zouden anders ongebruikt verlopen
 const RESERVE_TURBO = 200; // turbo: ~7.300 van de 7.500; de rest blijft voor uitslagen op wedstrijddag en de app
+const RESERVE_MATCHDAY = 1200; // turbo op een dag met ED/KKD-duels: genoeg voor het live-bord (~400-600 per dag)
+const MAX_CALLS_LIVE = 20; // per run tijdens duels
 /** Reserve op dit moment: 15, behalve 23:30–00:00 UTC (dan 3). */
 export function reserveAt(time = Date.now()) {
   const d = new Date(time);
@@ -260,17 +263,22 @@ function remainingOf(res) {
 
 /** Eén run: werk de wachtrij af tot het budget op is. Geeft een samenvatting terug. */
 async function nsRun(env, why) {
-  const [queue, state] = await Promise.all([nsGet(env, NS_QUEUE, []), nsGet(env, NS_STATE, {})]);
+  const [queue, state, board] = await Promise.all([nsGet(env, NS_QUEUE, []), nsGet(env, NS_STATE, {}), nsGet(env, BOARD, null)]);
   const mode = state.mode || 'free';
   const results = [];
   const reserve = reserveAt();
+  // Wedstrijddag: turbo laat genoeg over voor het live-bord, en houdt de runs klein tijdens de duels
+  // (subrequests per run worden gedeeld met live, het bord en de meldingen).
+  const now = Date.now();
+  const reserveTurbo = boardBusy(board, now) ? RESERVE_MATCHDAY : RESERVE_TURBO;
+  const maxCalls = boardActive(board, now) ? MAX_CALLS_LIVE : MAX_CALLS;
   let calls = 0; let stop = null; let remaining = state.remaining ?? null; let limit = state.limit ?? null;
   while (queue.length && !stop) {
     const item = queue[0];
     const paths = pathsFor(item);
     if (!paths) { queue.shift(); continue; }
-    if (calls + paths.length > MAX_CALLS) break;
-    if (remaining != null && remaining - paths.length < (mode === 'turbo' ? RESERVE_TURBO : reserve)) { stop = 'reserve'; break; }
+    if (calls + paths.length > maxCalls) break;
+    if (remaining != null && remaining - paths.length < (mode === 'turbo' ? reserveTurbo : reserve)) { stop = 'reserve'; break; }
     const bodies = []; let status = 200;
     for (const p of paths) {
       const res = await fetch(`${HIGHLIGHTLY_BASE}${p}`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });
@@ -369,6 +377,12 @@ export default {
         saveRemaining: async (n) => { const s = await nsGet(env, NS_STATE, {}); await env.MS_KV.put(NS_STATE, JSON.stringify({ ...s, remaining: n })); },
         saveLimit: async (n) => { const s = await nsGet(env, NS_STATE, {}); await env.MS_KV.put(NS_STATE, JSON.stringify({ ...s, limit: n })); },
       }).catch(() => {}),
+      askScheduled(env, event.scheduledTime, { state: () => nsGet(env, NS_STATE, {}) }).catch(() => {}),
+      boardScheduled(env, event.scheduledTime, {
+        base: HIGHLIGHTLY_BASE, remainingOf, inboxPrefix: NS_INBOX,
+        state: () => nsGet(env, NS_STATE, {}),
+        saveRemaining: async (n) => { const s = await nsGet(env, NS_STATE, {}); await env.MS_KV.put(NS_STATE, JSON.stringify({ ...s, remaining: n })); },
+      }).catch(() => {}),
       followUp(env, event.scheduledTime, {
         base: HIGHLIGHTLY_BASE, inboxPrefix: NS_INBOX, remainingOf,
         state: () => nsGet(env, NS_STATE, {}),
@@ -383,6 +397,12 @@ export default {
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
+    // Ja/Nee uit de melding "Live meldingen voor dit duel?": geen login (service worker), wel een token per apparaat en duel.
+    if (url.pathname === '/live/optin' && request.method === 'POST') {
+      if (!env.MS_KV) return json({ error: 'KV ontbreekt' }, 501, origin);
+      let body = null; try { body = await request.json(); } catch { /* leeg */ }
+      return optinApi(env.MS_KV, body, (b, st) => json(b, st, origin));
     }
     const isNs = url.pathname.startsWith('/ns/');
     const isPush = url.pathname.startsWith('/push/');

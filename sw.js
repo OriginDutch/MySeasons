@@ -1,7 +1,7 @@
 // MySeasons service worker: cachet de app-schil zodat de app offline opent.
 // Data komt niet via deze cache maar via de Firestore offline-cache.
 // Ophogen bij elke release, samen met APP_VERSION in js/version.js.
-const CACHE_VERSION = 'ms-shell-v0.52.2';
+const CACHE_VERSION = 'ms-shell-v0.53.0';
 const RUNTIME = 'ms-runtime-v1';
 
 const SHELL = [
@@ -62,6 +62,7 @@ const SHELL = [
   'js/manualview.js',
   'js/rsssfconvert.js',
   'js/livescore.js',
+  'js/liveboard.js',
   'js/shootout.js',
   'js/live.js',
   'js/reconcile.js',
@@ -132,17 +133,33 @@ async function networkFirstPage(request) {
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'MySeasons', body: event.data ? event.data.text() : '' }; }
+  // Vraag vooraf ("Live meldingen voor dit duel?"): knoppen als het apparaat ze kan tonen (Android),
+  // anders opent een tik de wedstrijdpagina met het belletje (Firefox op de pc).
+  const canAct = data.actions && self.Notification && Notification.maxActions > 0;
   event.waitUntil(self.registration.showNotification(data.title || 'MySeasons', {
-    body: data.body || '',
+    body: data.optin && !canAct ? 'Tik voor live meldingen bij dit duel. Geen antwoord = geen meldingen.' : data.body || '',
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
     tag: data.tag || 'myseasons',
-    data: { url: data.url || '#/home' },
+    data: { url: data.url || '#/home', optin: data.optin || null },
+    ...(canAct ? { actions: data.actions.slice(0, 2) } : {}),
   }));
 });
 
+async function answerOptin(o, on) {
+  try {
+    const res = await fetch(o.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: o.endpoint, id: o.id, token: o.token, on }) });
+    if (!res.ok) throw new Error(String(res.status));
+    if (on) await self.registration.showNotification('Live meldingen aan', { body: o.name || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: `ask-${o.id}` });
+  } catch {
+    await self.registration.showNotification('Dat lukte niet', { body: 'Zet de meldingen voor dit duel aan met het belletje op de wedstrijdpagina.', icon: 'icons/icon-192.png', tag: `ask-${o.id}`, data: { url: `#/wedstrijd/${o.id}` } });
+  }
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const o = event.notification.data && event.notification.data.optin;
+  if (o && (event.action === 'live-yes' || event.action === 'live-no')) { event.waitUntil(answerOptin(o, event.action === 'live-yes')); return; }
   const target = new URL('./' + (event.notification.data && event.notification.data.url || '#/home'), self.registration.scope).href;
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
