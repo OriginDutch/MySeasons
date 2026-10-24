@@ -62,7 +62,7 @@ export function todayRows(state, now = Date.now()) {
   const cam = new Map(((state && state.matches) || []).filter((x) => x.state).map((x) => [String(x.id), x.state]));
   return rows.map((x) => {
     const s = cam.get(String(x.id));
-    return s ? { ...x, status: s.status, score: s.score || x.score, clock: s.clock, clockAt: s.at, events: (s.events || []).filter((e) => e.kind !== 'sub') } : x;
+    return s ? { ...x, status: s.status, score: s.score || x.score, clock: s.clock, clockAt: s.at, events: (s.events || []).filter((e) => e.kind === 'goal' || e.kind === 'red') } : x;
   }).sort((a, b2) => Date.parse(a.ko) - Date.parse(b2.ko) || a.lid - b2.lid);
 }
 
@@ -88,10 +88,23 @@ function clockOf(x, now = Date.now()) {
   return timeOf(x.ko);
 }
 
+/** Schutters en rood onder het duel: thuis links, uit rechts (geen geel: de lijst blijft overzichtelijk). */
 function eventsLine(x) {
-  const ev = (x.events || []).filter((e) => e.kind === 'goal' || e.kind === 'red').slice().sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
+  const ev = (x.events || []).filter((e) => e.kind === 'goal' || e.kind === 'red').slice().sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0) || (a.extra ?? 0) - (b.extra ?? 0));
   if (!ev.length) return '';
-  return `<div class="lb-ev">${ev.map((e) => `<span><b class="mono">${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'</b> ${e.kind === 'goal' ? '⚽' : '🟥'} ${esc(e.player || '?')}${/own/i.test(e.type || '') ? ' (e.d.)' : ''}${/penalty/i.test(e.type || '') ? ' (pen.)' : ''}</span>`).join('')}</div>`;
+  const home = x.home && x.home.id; const away = x.away && x.away.id;
+  const sideOf = (e) => {
+    let t = e.teamId;
+    if (e.kind === 'goal' && /own/i.test(e.type || '')) t = t === home ? away : t === away ? home : t;
+    return t === away ? 'away' : 'home';
+  };
+  const item = (e, side) => {
+    const min = `<b class="mono">${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'</b>`;
+    const name = `${e.kind === 'goal' ? '⚽' : '🟥'} ${esc(e.player || '?')}${e.kind === 'goal' && /own/i.test(e.type || '') ? ' (e.d.)' : ''}${e.kind === 'goal' && /penalty/i.test(e.type || '') ? ' (pen.)' : ''}`;
+    return `<span>${side === 'home' ? `${min} ${name}` : `${name} ${min}`}</span>`;
+  };
+  const col = (side) => `<span class="lb-ev__${side}">${ev.filter((e) => sideOf(e) === side).map((e) => item(e, side)).join('')}</span>`;
+  return `<div class="lb-ev">${col('home')}${col('away')}</div>`;
 }
 
 function row(x) {

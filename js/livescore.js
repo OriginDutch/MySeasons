@@ -98,19 +98,30 @@ const clockOf = (s) => {
 const timeOf = (iso) => new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 const ago = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60e3); return m <= 0 ? 'net' : `${m} min geleden`; };
 
-function eventsHtml(s) {
-  const ev = (s.events || []).filter((e) => e.kind !== 'sub').slice().sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
-  if (!ev.length) return '';
-  return `<ol class="live-ev">${ev.map((e) => {
-    const own = /own/i.test(e.type); const us = (e.teamId === TEAM) !== (e.kind === 'goal' && own);
-    return `<li class="${us ? 'is-us' : ''}"><span class="mono">${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'</span> ${e.kind === 'goal' ? '⚽' : '🟥'} ${esc(e.player || '?')}${own ? ' <span class="muted">(e.d.)</span>' : ''}${/penalty/i.test(e.type) ? ' <span class="muted">(pen.)</span>' : ''}</li>`;
-  }).join('')}</ol>`;
+/** Aan welke kant hoort een event? Een eigen goal telt voor de andere club. */
+function sideOf(e, s) {
+  const home = s.home && s.home.id; const away = s.away && s.away.id;
+  let t = e.teamId;
+  if (e.kind === 'goal' && /own/i.test(e.type || '')) t = t === home ? away : t === away ? home : t;
+  return t === away ? 'away' : 'home';
 }
 
-// Vanaf de duels na 24 oktober 2026: alleen meldingen als je Ja zegt (de vraag een uur vooraf, of dit belletje).
-export const ASK_FROM = Date.parse('2026-10-24T22:00:00Z');
-const askMode = (ko) => Date.parse(ko) >= ASK_FROM;
-const KO = new Map(); // id → aftrap, voor het belletje
+/** Goals en kaarten per kant: thuis links, uit rechts. Cambuur geel en vet, de tegenstander grijs. */
+function eventsHtml(s) {
+  const ev = (s.events || []).filter((e) => e.kind === 'goal' || e.kind === 'red' || e.kind === 'yellow').slice().sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0) || (a.extra ?? 0) - (b.extra ?? 0));
+  if (!ev.length) return '';
+  const icon = { goal: '⚽', red: '🟥', yellow: '🟨' };
+  const item = (e, side) => {
+    const club = side === 'home' ? s.home : s.away;
+    const us = club && club.id === TEAM;
+    const min = `<span class="mono live-ev__min">${e.minute ?? ''}${e.extra ? '+' + e.extra : ''}'</span>`;
+    const tag = `${/own/i.test(e.type || '') && e.kind === 'goal' ? ' <span class="live-ev__tag">(e.d.)</span>' : ''}${/penalty/i.test(e.type || '') && e.kind === 'goal' ? ' <span class="live-ev__tag">(pen.)</span>' : ''}`;
+    const name = `${icon[e.kind]} ${esc(e.player || '?')}${tag}`;
+    return `<li class="live-ev__${e.kind}${us ? ' is-us' : ' is-them'}">${side === 'home' ? `${min} ${name}` : `${name} ${min}`}</li>`;
+  };
+  const col = (side) => `<ol class="live-ev live-ev--${side}">${ev.filter((e) => sideOf(e, s) === side).map((e) => item(e, side)).join('')}</ol>`;
+  return `<div class="live-evs">${col('home')}${col('away')}</div>`;
+}
 
 function bell(id, ko = KO.get(String(id))) {
   if (!DEVICE) return '';
@@ -121,20 +132,6 @@ function bell(id, ko = KO.get(String(id))) {
   return `<button class="btn btn--sm live-bell" type="button" data-live-mute="${esc(String(id))}" data-ask="${ask ? '1' : ''}" data-muted="${muted ? '1' : ''}" ${off ? 'disabled title="Live meldingen staan uit (Meer → Meldingen)"' : ''}>${muted || off ? '🔕 Meldingen uit' : '🔔 Meldingen aan'}</button>`;
 }
 
-/** Meting (tijdelijk): hoe vaak veranderde er iets bij Highlightly, en kwam dat bij de 30-secondenvraag binnen? */
-function measureHtml(log) {
-  if (!log || !log.length) return '';
-  const polls = log.filter((l) => !l.http);
-  const ch = polls.filter((l) => l.ch);
-  const clk = polls.filter((l) => l.clk);
-  const half = polls.filter((l, i) => i > 0 && Math.abs(Date.parse(l.t) - Date.parse(polls[i - 1].t)) < 45e3);
-  const halfNew = half.filter((l) => l.ch || l.clk).length;
-  const t = (iso) => new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  return `<details class="fold" style="margin-top:6px"><summary class="section__label"><span>Meting (tijdelijk)</span><span>${polls.length} vragen</span></summary>
-    <p class="muted" style="font-size:var(--fs-sm);margin:4px 0">${ch.length} keer nieuwe stand of events · klok ${clk.length} keer verder · bij de vraag na 30 s was ${halfNew} van de ${half.length} keer iets nieuws${polls.some((l) => l.age) ? ' · Highlightly stuurt een cache-leeftijd mee' : ''}.</p>
-    <ol class="live-ev" style="max-height:260px;overflow:auto">${polls.slice(-80).reverse().map((l) => `<li class="${l.ch ? 'is-us' : ''}"><span class="mono">${t(l.t)}</span> ${l.st} ${l.clock ?? '–'}' ${esc(l.sc || '')} · ${l.ev} ev${l.ch ? ' · <b>nieuw</b>' : l.clk ? ' · klok' : ''}${l.age ? ` · age ${esc(l.age)}` : ''}</li>`).join('')}</ol></details>`;
-}
-
 function card(x, { full = false } = {}) {
   const s = x.state;
   const sc = s && s.score ? `${s.score.home}<span class="muted">–</span>${s.score.away}` : '<span class="muted">vs</span>';
@@ -143,7 +140,6 @@ function card(x, { full = false } = {}) {
     <div class="section__label"><span>${isLive ? '<span class="live-dot"></span>LIVE' : s && s.status === 'ft' ? 'Afgelopen' : 'Vandaag'} · ${esc(clockOf(s) || `aftrap ${timeOf(x.ko)}`)}</span><span>${esc(x.comp || '')}</span></div>
     <a class="live-score" href="#/wedstrijd/${esc(x.id)}"><span>${esc(x.homeName)}</span><b class="mono">${sc}</b><span>${esc(x.awayName)}</span></a>
     ${s ? eventsHtml(s) : '<p class="muted" style="margin:0;font-size:var(--fs-sm)">De Worker begint 10 minuten voor de aftrap met volgen.</p>'}
-    ${full ? measureHtml(x.log) : ''}
     <div class="live-foot"><span class="muted">${s ? `bijgewerkt ${ago(s.at)}${s.every > 1 ? ` · elke ${s.every} min (zuinig budget)` : ''}` : ''}</span>${full || isLive || (s && s.status === 'pre') || !s ? bell(x.id, x.ko) : ''}</div>
   </section>`;
 }
@@ -160,7 +156,7 @@ export function paint() {
   document.querySelectorAll('[data-nav="wedstrijden"]').forEach((a) => a.classList.toggle('has-live', n > 0));
   document.querySelectorAll('[data-live-dot]').forEach((d) => { d.hidden = !n; });
   const list = (STATE.matches || []).filter((x) => x.state || inWindow(x));
-  const head = view.querySelector('.page-head, .mast');
+  const head = (key === 'speelronde' && view.querySelector('.page-tabs')) || view.querySelector('.page-head, .mast');
   const put = (html) => { if (!html) return; const t = document.createElement('div'); t.innerHTML = html; const el = t.firstElementChild; if (head) head.after(el); else view.prepend(el); };
   if (key === 'home') {
     // Cambuur bezig of net klaar: de live-kaart neemt de plek van de voorbeschouwing in.

@@ -125,7 +125,7 @@ export async function boardScheduled(env, time, deps) {
             const dt = await get(`/matches/${Number(cur.id)}`); details++;
             if (dt) {
               const p = parseLive(dt);
-              if (p) next.events = p.events.filter((e) => e.kind !== 'sub').map((e) => ({ key: e.key, kind: e.kind, type: e.type, minute: e.minute, extra: e.extra, teamId: e.teamId, player: e.player }));
+              if (p) next.events = p.events.filter((e) => e.kind === 'goal' || e.kind === 'red').map((e) => ({ key: e.key, kind: e.kind, type: e.type, minute: e.minute, extra: e.extra, teamId: e.teamId, player: e.player }));
               if (ended) results.push({ item: { type: 'events', id: Number(cur.id), leagueId: lid, season: cur.season, why: 'live' }, status: 200, bodies: [dt] });
             }
           } catch (err) { if (err.message === 'quota') break; }

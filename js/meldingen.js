@@ -79,7 +79,7 @@ export async function pushSchedule({ force = false } = {}) {
   return r;
 }
 
-const LIVE_KINDS = [['goalUs', `Goals ${MAIN_CLUB.name}`], ['goalThem', 'Goals tegenstander'], ['red', 'Rode kaarten'], ['status', 'Aftrap, rust en einde']];
+const LIVE_KINDS = [['goalUs', `Goals ${MAIN_CLUB.name}`], ['goalThem', 'Goals tegenstander'], ['red', 'Rode kaarten'], ['yellow', 'Gele kaarten (standaard uit)'], ['status', 'Aftrap, rust en einde']];
 async function liveSection() {
   const { deviceLive } = await import('./livescore.js');
   const d = await deviceLive().catch(() => null);
@@ -89,7 +89,7 @@ async function liveSection() {
     <div class="section__label"><span>Live tijdens de wedstrijd</span><span>dit apparaat</span></div>
     <p class="muted" style="font-size:var(--fs-md)">Van 10 minuten voor de aftrap tot het eindsignaal volgt de Worker de wedstrijd bij Highlightly, elke minuut als het budget het toelaat (anders zo vaak als het tot het einde reikt). Een uur voor de aftrap vraagt de app of je live meldingen wilt voor dat duel: <b>geen antwoord = geen meldingen</b>. Op Android met Ja/Nee in de melding, elders met het belletje op de wedstrijdpagina of de live-kaart.</p>
     <label class="field field--check"><input type="checkbox" data-live-pref="on" ${L.on === false ? '' : 'checked'}> <span>Live meldingen</span></label>
-    ${LIVE_KINDS.map(([k, l]) => `<label class="field field--check" style="padding-left:24px"><input type="checkbox" data-live-pref="${k}" ${L[k] === false ? '' : 'checked'} ${L.on === false ? 'disabled' : ''}> <span>${esc(l)}</span></label>`).join('')}
+    ${LIVE_KINDS.map(([k, l]) => `<label class="field field--check" style="padding-left:24px"><input type="checkbox" data-live-pref="${k}" ${(k === 'yellow' ? L[k] === true : L[k] !== false) ? 'checked' : ''} ${L.on === false ? 'disabled' : ''}> <span>${esc(l)}</span></label>`).join('')}
     ${(d.optin || []).length ? `<p class="muted" style="font-size:var(--fs-sm)">Ja gezegd voor ${d.optin.length} ${d.optin.length === 1 ? 'wedstrijd' : 'wedstrijden'}.</p>` : ''}
   </section>`;
 }
