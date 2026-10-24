@@ -106,7 +106,7 @@ function sideOf(e, s) {
   return t === away ? 'away' : 'home';
 }
 
-/** Goals en kaarten per kant: thuis links, uit rechts. Cambuur geel en vet, de tegenstander grijs. */
+/** Goals en kaarten op volgorde: thuis links uitgelijnd, uit rechts. Cambuur in de accentkleur, de tegenstander grijs. */
 function eventsHtml(s) {
   const ev = (s.events || []).filter((e) => e.kind === 'goal' || e.kind === 'red' || e.kind === 'yellow').slice().sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0) || (a.extra ?? 0) - (b.extra ?? 0));
   if (!ev.length) return '';
@@ -119,8 +119,8 @@ function eventsHtml(s) {
     const name = `${icon[e.kind]} ${esc(e.player || '?')}${tag}`;
     return `<li class="live-ev__${e.kind}${us ? ' is-us' : ' is-them'}">${side === 'home' ? `${min} ${name}` : `${name} ${min}`}</li>`;
   };
-  const col = (side) => `<ol class="live-ev live-ev--${side}">${ev.filter((e) => sideOf(e, s) === side).map((e) => item(e, side)).join('')}</ol>`;
-  return `<div class="live-evs">${col('home')}${col('away')}</div>`;
+  // Eén lijst op volgorde van de minuut; elke regel lijnt uit naar de kant van zijn club.
+  return `<ol class="live-ev">${ev.map((e) => { const side = sideOf(e, s); return item(e, side).replace('<li class="', `<li class="live-ev--${side} `); }).join('')}</ol>`;
 }
 
 function bell(id, ko = KO.get(String(id))) {

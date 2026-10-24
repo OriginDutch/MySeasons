@@ -998,8 +998,7 @@ a.po-team:hover span { text-decoration: underline; }
 .live-score b { font-size: 32px; letter-spacing: -0.03em; }
 .live-ev { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-md); }
 /* Goals en kaarten per kant: thuis links, uit rechts; Cambuur in de accentkleur, de tegenstander grijs */
-.live-evs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.live-ev--away { text-align: right; }
+.live-ev li.live-ev--away { text-align: right; }
 .live-ev li { line-height: 1.3; }
 .live-ev li.is-us { font-weight: 600; color: var(--accent-text); }
 .live-ev li.is-them { color: var(--muted); }
