@@ -95,6 +95,21 @@ export function parseLive(text) {
   };
 }
 
+/**
+ * Ankerpunten om zelf de minuut te tellen: aftrap (k1) en start tweede helft (k2), in ms.
+ * Elke waarneming "klok c op tijdstip t" zegt: de wedstrijd liep op t minstens c-1 minuten (Highlightly ijlt na).
+ * Dus aftrap <= t - (c-1) min. Het vroegste zo'n tijdstip is de beste schatting. Tweede helft pas na rust.
+ */
+export function anchorsOf(prev, status, clock, t) {
+  const a = { ...(prev || {}) };
+  if (status === 'ht' && !a.ht) a.ht = t;
+  if (status === 'live' && clock != null) {
+    if (!a.ht && clock <= 45) { const k = t - (Math.max(1, clock) - 1) * 60e3; if (!a.k1 || k < a.k1) a.k1 = k; }
+    if (a.ht && clock >= 46) { const k = t - (clock - 46) * 60e3; if (!a.k2 || k < a.k2) a.k2 = k; }
+  }
+  return a;
+}
+
 /** Om de hoeveel minuten mag er gevraagd worden? Ruim budget: elke minuut. */
 export function intervalFor(remaining, now, ko, mode) {
   if (mode === 'turbo' || remaining == null || remaining >= 400) return 1;
@@ -234,8 +249,9 @@ export async function liveScheduled(env, time, deps) {
       // Eerste keer dat we hem zien terwijl hij al bezig is: oude goals niet alsnog melden.
       const base = prev || (cur.status === 'pre' ? { status: 'pre', events: [], score: { home: 0, away: 0 } } : { status: cur.status, events: cur.events, score: cur.score });
       const msgs = messagesFor(base, cur, m, t);
-      const sentSig = JSON.stringify(prev && prev.sent); 
-      const changed = !prev || sig !== prevSig || sentSig !== JSON.stringify(cur.sent) || prev.clock !== cur.clock && minute % 5 === 0 && !k;
+      const sentSig = JSON.stringify([prev && prev.sent, prev && prev.anch]);
+      cur.anch = anchorsOf(prev && prev.anch, cur.status, cur.clock, t);
+      const changed = !prev || sig !== prevSig || sentSig !== JSON.stringify([cur.sent, cur.anch]) || prev.clock !== cur.clock && minute % 5 === 0 && !k;
       const next = { ...cur, at: new Date(t).toISOString(), every, ko: m.date, comp: m.comp || null, ftSent: cur.status === 'ft' || !!(prev && prev.ftSent) };
       if (changed) await kv.put(LIVE + m.id, JSON.stringify(next), { expirationTtl: 2 * 86400 });
       await deliver(kv, msgs, m.id, m.date);

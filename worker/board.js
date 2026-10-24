@@ -9,7 +9,7 @@
 // (stand, status, schutters, aftraptijd), niet voor de klok. De app rekent de minuut zelf door.
 // Cambuur zelf heeft een eigen, snellere lus (live.js); hier geen extra detail-calls voor dat duel.
 
-import { parseLive, liveEnabled } from './live.js';
+import { parseLive, liveEnabled, anchorsOf } from './live.js';
 
 export const BOARD = 'lv:board';
 export const LEAGUES = [75672, 76523]; // Eredivisie, KKD
@@ -65,7 +65,7 @@ export function boardActive(board, now) {
   return (board.matches || []).some((x) => { const ko = Date.parse(x.ko); return !done(x) && now >= ko + START && now <= ko + END; });
 }
 
-const sigOf = (x) => JSON.stringify([x.status, x.score, x.ko, (x.events || []).map((e) => e.key)]);
+const sigOf = (x) => JSON.stringify([x.status, x.score, x.ko, (x.events || []).map((e) => e.key), x.anch || null]);
 
 /**
  * Eén cron-tik. deps: { base, remainingOf, state(), saveRemaining(n), inboxPrefix, fetch? }
@@ -116,7 +116,7 @@ export async function boardScheduled(env, time, deps) {
         const old = board.matches.find((x) => x.id === cur.id);
         const prev = old ? { ...old } : { events: [] };
         const before = old ? sigOf(old) : null;
-        const next = { ...prev, ...cur, events: prev.events || [], clockAt: new Date(now).toISOString() };
+        const next = { ...prev, ...cur, events: prev.events || [], clockAt: new Date(now).toISOString(), anch: anchorsOf(prev.anch, cur.status, cur.clock, now) };
         const rose = total(cur.score) > total(prev.score);
         const ended = cur.status === 'ft' && prev.status !== 'ft';
         // Schutters: bij een hogere stand, en bij het eindsignaal (dan is de lijst definitief).

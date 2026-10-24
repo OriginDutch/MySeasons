@@ -62,7 +62,7 @@ export function todayRows(state, now = Date.now()) {
   const cam = new Map(((state && state.matches) || []).filter((x) => x.state).map((x) => [String(x.id), x.state]));
   return rows.map((x) => {
     const s = cam.get(String(x.id));
-    return s ? { ...x, status: s.status, score: s.score || x.score, clock: s.clock, clockAt: s.at, events: (s.events || []).filter((e) => e.kind === 'goal' || e.kind === 'red') } : x;
+    return s ? { ...x, status: s.status, score: s.score || x.score, clock: s.clock, clockAt: s.at, anch: s.anch, events: (s.events || []).filter((e) => e.kind === 'goal' || e.kind === 'red') } : x;
   }).sort((a, b2) => Date.parse(a.ko) - Date.parse(b2.ko) || a.lid - b2.lid);
 }
 
@@ -76,15 +76,28 @@ export function liveCount(state) {
 }
 
 // ---------- Weergave ----------
+/**
+ * De minuut zelf tellen vanaf de ankerpunten van de Worker (aftrap, start tweede helft); zonder anker de klok van
+ * Highlightly plus de tijd sinds die waarneming. Van beide de hoogste: allebei lopen ze eerder achter dan voor.
+ * Geeft bijv. "23'", "45+2'", "90+4'", of null als er niets te tellen valt.
+ */
+export function liveMinute(status, anch, clock, clockAt, now = Date.now()) {
+  if (status !== 'live') return null;
+  const a = anch || {};
+  const second = !!a.ht || (clock != null && clock > 45); // rust gezien, of Highlightly zit al voorbij de 45
+  let m = clock != null ? clock + (clockAt ? Math.max(0, Math.floor((now - Date.parse(clockAt)) / 60e3)) : 0) : null;
+  const own = second ? (a.k2 ? 46 + Math.floor((now - a.k2) / 60e3) : null) : (a.k1 ? 1 + Math.floor((now - a.k1) / 60e3) : null);
+  if (own != null && (m == null || own > m)) m = own;
+  if (m == null) return null;
+  const end = second ? 90 : 45;
+  return m > end ? `${end}+${m - end}'` : `${Math.max(1, m)}'`;
+}
+
 function clockOf(x, now = Date.now()) {
   if (x.status === 'ht') return 'rust';
   if (x.status === 'ft') return 'einde';
   if (x.status === 'off') return 'afgelast';
-  if (x.status === 'live') {
-    if (x.clock == null) return 'live';
-    const c = x.clock + (x.clockAt ? Math.max(0, Math.floor((now - Date.parse(x.clockAt)) / 60e3)) : 0);
-    return `${c > 90 ? '90+' : c}'`;
-  }
+  if (x.status === 'live') return liveMinute('live', x.anch, x.clock, x.clockAt, now) || 'live';
   return timeOf(x.ko);
 }
 
@@ -204,7 +217,7 @@ export const boardViews = {
         if (open) box.querySelectorAll('details').forEach((d) => { d.open = true; });
       };
       window.addEventListener('live:update', redraw);
-      const tick = setInterval(redraw, 30e3); // de minuut doortellen tussen twee standen
+      const tick = setInterval(redraw, 15e3); // de minuut doortellen tussen twee standen
     },
   },
 };

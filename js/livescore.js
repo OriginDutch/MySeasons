@@ -8,7 +8,7 @@ import { live, push } from './api.js';
 import { MAIN_CLUB } from './config.js';
 import { getAllMatches } from './store.js';
 import { pushSupported } from './meldingen.js';
-import { loadProgram, boardWindow, todayRows, homeBarHtml, liveCount } from './liveboard.js';
+import { loadProgram, boardWindow, todayRows, homeBarHtml, liveCount, liveMinute } from './liveboard.js';
 
 const TEAM = MAIN_CLUB.id;
 const POLL = 15e3; // de Worker ververst elke 30 s (meting) of elke minuut
@@ -91,9 +91,7 @@ const clockOf = (s) => {
   if (s.status === 'ft') return 'Einde';
   if (s.status === 'pre') return 'Zo meteen';
   if (s.status === 'off') return 'Gestaakt / uitgesteld';
-  const since = s.at ? Math.floor((Date.now() - Date.parse(s.at)) / 60e3) : 0;
-  const c = s.clock != null ? s.clock + since : null;
-  return c != null ? `${c > 90 ? '90+' : c}'` : 'Live';
+  return liveMinute(s.status, s.anch, s.clock, s.at) || 'Live';
 };
 const timeOf = (iso) => new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
 const ago = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60e3); return m <= 0 ? 'net' : `${m} min geleden`; };
