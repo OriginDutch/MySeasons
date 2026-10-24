@@ -11,6 +11,7 @@ import { autoSync } from './nightshift.js';
 import { clubNamesLoaded, setClubOverrides, teamAliasesLoaded, setTeamAliases } from './clubnames.js';
 import { getClubMarks, getAllLeagueTeams, setLiveChangeHandler, getAllMatches, migrateDetails } from './store.js';
 import { ensureLeagues } from './leagues.js';
+import { startLive, paint as paintLive } from './livescore.js';
 
 const appEl = document.getElementById('app');
 
@@ -145,6 +146,7 @@ async function route({ keepScroll = false } = {}) {
   fresh.innerHTML = pastSeasonBar() + html;
   old.replaceWith(fresh);
   if (view.mount) view.mount(fresh, ctx, args);
+  paintLive(); // live-kaart (Home, wedstrijdpagina) als er een Cambuur-wedstrijd bezig is
 
   document.title = key === 'home' ? 'MySeasons' : `${view.title} · MySeasons`;
   if (!keepScroll) window.scrollTo(0, restoreScroll || 0);
@@ -238,6 +240,8 @@ watchAuth((user) => {
     autoSync().then((s) => {
       if (s && s.items) { toast(`Nachtploeg: ${s.items} items binnengehaald`); route({ keepScroll: true }); }
     });
+    // Live-stand tijdens een Cambuur-wedstrijd (leest de Worker, kost geen Highlightly-calls).
+    setTimeout(() => startLive(), 1500);
     // Meldingen: programma bij de Worker actueel houden (stuurt alleen bij wijzigingen).
     import('./meldingen.js').then((m) => m.pushSupported() && m.pushSchedule()).catch(() => {});
     // Clubsite: nieuwe wijziging op de selectiepagina → inboxmelding.

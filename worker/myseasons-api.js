@@ -23,6 +23,7 @@ import { backupApi } from './backup.js';
 import { followUp } from './followup.js';
 import { squadApi, squadScheduled } from './squadpage.js';
 import { imgApi } from './imgproxy.js';
+import { liveScheduled, liveApi } from './live.js';
 
 const PROJECT_ID = 'myseasons-c1dd9';
 const HIGHLIGHTLY_BASE = 'https://soccer.highlightly.net';
@@ -361,6 +362,11 @@ export default {
       nsScheduled(env, event.scheduledTime),
       pushScheduled(env, event.scheduledTime).catch(() => {}),
       squadScheduled(env, event.scheduledTime).catch(() => {}),
+      liveScheduled(env, event.scheduledTime, {
+        base: HIGHLIGHTLY_BASE, remainingOf,
+        state: () => nsGet(env, NS_STATE, {}),
+        saveRemaining: async (n) => { const s = await nsGet(env, NS_STATE, {}); await env.MS_KV.put(NS_STATE, JSON.stringify({ ...s, remaining: n })); },
+      }).catch(() => {}),
       followUp(env, event.scheduledTime, {
         base: HIGHLIGHTLY_BASE, inboxPrefix: NS_INBOX, remainingOf,
         state: () => nsGet(env, NS_STATE, {}),
@@ -426,6 +432,12 @@ export default {
 
     // Fotogalerij: plaatje van een toegestane site binnenhalen (geen Highlightly-call).
     if (url.pathname === '/img') return imgApi(url, (b, st) => json(b, st, origin), corsHeaders(origin));
+
+    // Live-standen van de Cambuur-wedstrijd (de Worker vraagt ze op; geen Highlightly-call per app-verzoek).
+    if (url.pathname === '/live') {
+      if (!env.MS_KV) return json({ error: 'Live: KV-namespace MS_KV is nog niet gekoppeld' }, 501, origin);
+      return liveApi(env, (b, st) => json(b, st, origin, { 'Cache-Control': 'no-store' }));
+    }
 
     // Gezondheidscheck: geen Highlightly-call, kost geen quotum.
     if (url.pathname === '/health') {

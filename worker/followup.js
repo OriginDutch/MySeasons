@@ -75,7 +75,8 @@ export async function followUp(env, time, deps) {
       }
       await kv.put(`${deps.inboxPrefix}${now}`, JSON.stringify({ at: new Date(now).toISOString(), results }));
       await kv.put(key, JSON.stringify({ ...st, done: true, refreshed: morning || st.refreshed || false, last: now, score: info.score }), { expirationTtl: 3 * 86400 });
-      if (!morning && prefs.resultPush) {
+      const lv = await kv.get(`live:${m.id}`, 'json').catch(() => null);
+      if (!morning && prefs.resultPush && !(lv && lv.ftSent)) { // live heeft "Einde" al gemeld
         const sc = String(info.score || '').replace(/\s*-\s*/, '–');
         const pen = info.pen ? ` (${String(info.pen).replace(/\s*-\s*/, '–')} pen.)` : '';
         await broadcast(kv, { title: `Uitslag: ${m.homeName} ${sc} ${m.awayName}${pen}`, body: 'Opstelling en tijdlijn staan klaar. Tik om toeschouwers en je man van de wedstrijd in te vullen.', url: `#/wedstrijd/${m.id}`, tag: `result-${m.id}` });

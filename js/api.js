@@ -86,6 +86,11 @@ export function rsssf(year) {
 }
 
 // ---------- Nachtploeg (Worker-wachtrij + brievenbus) ----------
+/** Live-standen die de Worker bijhoudt (geen Highlightly-call). */
+export function live() {
+  return call('/live');
+}
+
 export const ns = {
   state: () => call('/ns/state'),
   setQueue: (items) => call('/ns/queue', null, { method: 'POST', body: { items } }),
@@ -103,6 +108,7 @@ export const push = {
   schedule: (matches) => call('/push/schedule', null, { method: 'POST', body: { matches } }),
   test: () => call('/push/test', null, { method: 'POST', body: {} }),
   prefs: (p) => call('/push/prefs', null, { method: 'POST', body: p }),
+  device: (endpoint, patch = {}) => call('/push/device', null, { method: 'POST', body: { endpoint, ...patch } }),
 };
 
 // ---------- Selectiepagina's van de clubsite ----------

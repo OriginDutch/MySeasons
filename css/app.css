@@ -986,3 +986,17 @@ a.po-team:hover span { text-decoration: underline; }
 .mv-cmp__vals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: var(--fs-md); }
 .mv-cmp__vals > div { background: var(--surface-hover); padding: 8px 10px; }
 .match-row--dim { opacity: .5; }
+
+/* ---------- Live (livescore.js) ---------- */
+.live-card { border-left: 3px solid var(--hairline); padding-left: 12px; }
+.live-card.is-live { border-left-color: var(--accent); }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 6px; animation: live-pulse 1.6s infinite; vertical-align: 1px; }
+@keyframes live-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+.live-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; text-decoration: none; color: inherit; font-weight: 600; }
+.live-score > span:last-child { text-align: right; }
+.live-score b { font-size: 32px; letter-spacing: -0.03em; }
+.live-ev { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-md); }
+.live-ev li.is-us { font-weight: 600; }
+.live-ev .mono { display: inline-block; min-width: 40px; color: var(--accent-text); }
+.live-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: var(--fs-sm); flex-wrap: wrap; }

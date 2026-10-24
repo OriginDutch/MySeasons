@@ -6,6 +6,8 @@
 //
 // Versleuteling volgens RFC 8291 (aes128gcm) en VAPID volgens RFC 8292, alles met WebCrypto.
 
+import { deviceApi } from './live.js';
+
 const VAPID = 'push:vapid';
 const SUBS = 'push:subs';
 const SCHEDULE = 'push:schedule';
@@ -146,8 +148,10 @@ export async function pushApi(request, env, url, json) {
   if (path === '/subscribe' && request.method === 'POST') {
     const s = body && body.subscription;
     if (!s || typeof s.endpoint !== 'string' || !/^https:\/\//.test(s.endpoint) || !s.keys || !s.keys.p256dh || !s.keys.auth) return json({ error: 'Ongeldig abonnement' }, 400);
-    const subs = ((await kv.get(SUBS, 'json')) || []).filter((x) => x.endpoint !== s.endpoint);
-    subs.push({ endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth }, label: String(body.label || '').slice(0, 60), at: new Date().toISOString() });
+    const all = (await kv.get(SUBS, 'json')) || [];
+    const old = all.find((x) => x.endpoint === s.endpoint) || {};
+    const subs = all.filter((x) => x.endpoint !== s.endpoint);
+    subs.push({ endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth }, label: String(body.label || '').slice(0, 60), at: new Date().toISOString(), ...(old.live ? { live: old.live } : {}), ...(old.mute ? { mute: old.mute } : {}) });
     await kv.put(SUBS, JSON.stringify(subs.slice(-10)));
     return json({ ok: true, devices: Math.min(subs.length, 10) }, 200);
   }
@@ -175,6 +179,9 @@ export async function pushApi(request, env, url, json) {
     ['results', 'resultPush'].forEach((k) => { if (body && typeof body[k] === 'boolean') next[k] = body[k]; });
     await kv.put('push:prefs', JSON.stringify(next));
     return json({ ok: true, prefs: { results: true, resultPush: true, ...next } }, 200);
+  }
+  if (path === '/device' && request.method === 'POST') {
+    return deviceApi(kv, body || {}, json);
   }
   if (path === '/test' && request.method === 'POST') {
     const r = await broadcast(kv, { title: 'MySeasons', body: 'Testmelding: meldingen op wedstrijddag staan aan.', url: '#/home', tag: 'test' });

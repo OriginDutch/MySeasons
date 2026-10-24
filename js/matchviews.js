@@ -733,6 +733,7 @@ export const matchViews = {
           ${m.manualDetail ? `<p><a class="ptag ptag--o21" href="#/invullen/${m.id}" style="text-decoration:none">handmatig ingevuld · ✎ aanpassen</a>${d.source ? ` <span class="muted" style="font-size:var(--fs-sm)">bron: ${esc(d.source)}</span>` : ''}</p>` : ''}
           ${twin ? `<a class="warn-line" href="#/wedstrijd/${twin.id}" style="display:block;text-decoration:none">Deze wedstrijd staat er dubbel in (${esc(m.stateText || 'niet gespeeld')}). De gespeelde versie: ${esc(twin.homeTeam.name)} – ${esc(twin.awayTeam.name)}, ${esc(dayShort(twin.date))} →</a>` : ''}
           ${m.playedByManual ? '<p class="muted" style="font-size:var(--fs-sm)">Gespeeld volgens jouw invoer. Highlightly: nog niet bekend.</p>' : ''}
+          ${m.status !== 'finished' ? await import('./livescore.js').then((x) => x.bellHtml(m)).catch(() => '') : ''}
           ${m.manualDetail && m.apiDetail ? (() => { const n = openDiffs(notes.manual, m.apiDetail, m, TEAM); return n ? `<a class="warn-line" href="#/vergelijk/${m.id}" style="display:block;text-decoration:none">Highlightly heeft nu ook details: ${n} ${n === 1 ? 'verschil' : 'verschillen'} met jouw invoer. Vergelijken →</a>` : ''; })() : ''}
           ${twin || m.status === 'postponed'
             ? (m.manual ? '<div class="btn-row"><button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button></div>' : `<p class="muted" style="font-size:var(--fs-sm)">${twin ? 'Vul de details in bij de gespeelde versie.' : `Deze wedstrijd is ${esc(word)}: geen details.`}</p>`)

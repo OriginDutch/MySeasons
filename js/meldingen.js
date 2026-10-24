@@ -79,6 +79,21 @@ export async function pushSchedule({ force = false } = {}) {
   return r;
 }
 
+const LIVE_KINDS = [['goalUs', `Goals ${MAIN_CLUB.name}`], ['goalThem', 'Goals tegenstander'], ['red', 'Rode kaarten'], ['status', 'Aftrap, rust en einde']];
+async function liveSection() {
+  const { deviceLive } = await import('./livescore.js');
+  const d = await deviceLive().catch(() => null);
+  if (!d) return '';
+  const L = d.live || {};
+  return `<section class="section">
+    <div class="section__label"><span>Live tijdens de wedstrijd</span><span>dit apparaat</span></div>
+    <p class="muted" style="font-size:var(--fs-md)">Van 10 minuten voor de aftrap tot het eindsignaal volgt de Worker de wedstrijd bij Highlightly, elke minuut als het budget het toelaat (anders zo vaak als het tot het einde reikt). Per wedstrijd uitzetten kan met het belletje op de wedstrijdpagina of de live-kaart.</p>
+    <label class="field field--check"><input type="checkbox" data-live-pref="on" ${L.on === false ? '' : 'checked'}> <span>Live meldingen</span></label>
+    ${LIVE_KINDS.map(([k, l]) => `<label class="field field--check" style="padding-left:24px"><input type="checkbox" data-live-pref="${k}" ${L[k] === false ? '' : 'checked'} ${L.on === false ? 'disabled' : ''}> <span>${esc(l)}</span></label>`).join('')}
+    ${(d.mute || []).length ? `<p class="muted" style="font-size:var(--fs-sm)">${d.mute.length} ${d.mute.length === 1 ? 'wedstrijd' : 'wedstrijden'} stil gezet.</p>` : ''}
+  </section>`;
+}
+
 export const meldingenViews = {
   meldingen: {
     title: 'Meldingen',
@@ -110,6 +125,7 @@ export const meldingenViews = {
           </div>
           <p class="muted" style="font-size:var(--fs-sm)">Het programma wordt bijgewerkt telkens als je het seizoen synchroniseert. Een verplaatste wedstrijd komt dus vanzelf goed na de volgende synchronisatie.</p>
         </section>
+        ${info && on ? await liveSection() : ''}
         ${info ? `<section class="section">
           <div class="section__label"><span>Uitslag automatisch ophalen</span></div>
           <p class="muted" style="font-size:var(--fs-md)">Zo'n 2,5 uur na de aftrap haalt de Worker uitslag, opstelling, tijdlijn en spelersstats op (3 calls, plus 1 voor de stand). Nog niet afgelopen? Elk half uur opnieuw, tot 6 uur na de aftrap. De volgende ochtend om 08:00 nog één controle (3 calls). Open je de app, dan staat alles erin.</p>
@@ -119,6 +135,11 @@ export const meldingenViews = {
     },
     mount(root, ctx) {
       root.addEventListener('change', async (e) => {
+        const lp = e.target.closest('[data-live-pref]');
+        if (lp) {
+          try { const { setDeviceLive } = await import('./livescore.js'); await setDeviceLive({ live: { [lp.dataset.livePref]: lp.checked } }); toast(lp.checked ? 'Staat aan' : 'Staat uit'); ctx.refresh(); } catch (err) { lp.checked = !lp.checked; toast(err.message || explain(err)); }
+          return;
+        }
         const c = e.target.closest('[data-pref]');
         if (!c) return;
         try { await push.prefs({ [c.dataset.pref]: c.checked }); toast(c.checked ? 'Staat aan' : 'Staat uit'); ctx.refresh(); } catch (err) { c.checked = !c.checked; toast(explain(err)); }
