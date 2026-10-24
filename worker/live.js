@@ -97,15 +97,31 @@ export function parseLive(text) {
 
 /**
  * Ankerpunten om zelf de minuut te tellen: aftrap (k1) en start tweede helft (k2), in ms.
- * Elke waarneming "klok c op tijdstip t" zegt: de wedstrijd liep op t minstens c-1 minuten (Highlightly ijlt na).
- * Dus aftrap <= t - (c-1) min. Het vroegste zo'n tijdstip is de beste schatting. Tweede helft pas na rust.
+ * Eerste helft: we tellen vanaf de GEPLANDE aftrap (ko). Elke waarneming "klok c op tijdstip t" van Highlightly geeft
+ * ook een schatting e1 = t - (c-1) min (Highlightly ijlt na, dus e1 is te laat). Lopen we meer dan een minuut voor op
+ * Highlightly (de aftrap liep uit), dan schuiven we 30 s op per waarneming; bij meer dan 3 minuten in één keer
+ * naar Highlightly. Achter Highlightly lopen we nooit.
+ * Tweede helft: geen geplande tijd. Highlightly's schatting e2, min de vertraging die we in de eerste helft maten
+ * (e1 - k1, hooguit een minuut).
  */
-export function anchorsOf(prev, status, clock, t) {
+export function anchorsOf(prev, status, clock, t, ko) {
   const a = { ...(prev || {}) };
   if (status === 'ht' && !a.ht) a.ht = t;
-  if (status === 'live' && clock != null) {
-    if (!a.ht && clock <= 45) { const k = t - (Math.max(1, clock) - 1) * 60e3; if (!a.k1 || k < a.k1) a.k1 = k; }
-    if (a.ht && clock >= 46) { const k = t - (clock - 46) * 60e3; if (!a.k2 || k < a.k2) a.k2 = k; }
+  if (status !== 'live' || clock == null) return a;
+  if (!a.ht && clock <= 45) {
+    const e = t - (Math.max(1, clock) - 1) * 60e3;
+    if (!a.e1 || e < a.e1) a.e1 = e;
+    if (!a.k1) a.k1 = Number.isFinite(ko) ? Math.min(ko, a.e1) : a.e1;
+    if (a.e1 < a.k1) a.k1 = a.e1;
+    const ahead = 1 + Math.floor((t - a.k1) / 60e3) - clock;
+    if (ahead > 3) a.k1 = a.e1;
+    else if (ahead > 1) a.k1 = Math.min(a.k1 + 30e3, a.e1);
+  }
+  if (a.ht && clock >= 46) {
+    const e = t - (clock - 46) * 60e3;
+    if (!a.e2 || e < a.e2) a.e2 = e;
+    const lag = a.e1 && a.k1 ? Math.max(0, Math.min(60e3, a.e1 - a.k1)) : 0;
+    a.k2 = a.e2 - lag;
   }
   return a;
 }
@@ -250,7 +266,7 @@ export async function liveScheduled(env, time, deps) {
       const base = prev || (cur.status === 'pre' ? { status: 'pre', events: [], score: { home: 0, away: 0 } } : { status: cur.status, events: cur.events, score: cur.score });
       const msgs = messagesFor(base, cur, m, t);
       const sentSig = JSON.stringify([prev && prev.sent, prev && prev.anch]);
-      cur.anch = anchorsOf(prev && prev.anch, cur.status, cur.clock, t);
+      cur.anch = anchorsOf(prev && prev.anch, cur.status, cur.clock, t, Date.parse(m.date));
       const changed = !prev || sig !== prevSig || sentSig !== JSON.stringify([cur.sent, cur.anch]) || prev.clock !== cur.clock && minute % 5 === 0 && !k;
       const next = { ...cur, at: new Date(t).toISOString(), every, ko: m.date, comp: m.comp || null, ftSent: cur.status === 'ft' || !!(prev && prev.ftSent) };
       if (changed) await kv.put(LIVE + m.id, JSON.stringify(next), { expirationTtl: 2 * 86400 });
