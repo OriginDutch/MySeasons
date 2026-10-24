@@ -14,6 +14,13 @@ const TEAM = 358204;
 const START = -10 * 60e3;
 const END = 150 * 60e3;
 const SAFETY = 12; // calls die altijd over moeten blijven (uitslag ophalen, de app)
+// Alleen live volgen op een betaald plan: op het gratis plan (100/dag) zijn de calls voor de speelronden.
+export const PAID_MIN = 1000;
+export const liveEnabled = (ns) => !(ns && ns.limit != null && ns.limit < PAID_MIN);
+function limitOf(res) {
+  for (const [name, value] of res.headers) { const n = name.toLowerCase(); if (n.includes('ratelimit') && n.includes('limit') && !n.includes('remaining') && !n.includes('reset')) return Number(value); }
+  return null;
+}
 export const LIVE_DEFAULTS = { on: true, goalUs: true, goalThem: true, red: true, status: true };
 
 const isGoal = (t) => { const x = String(t || ''); return !/missed|var|cancel|disallow/i.test(x) && (/goal/i.test(x) || /^penalty( goal| scored)?$/i.test(x)); };
@@ -123,6 +130,7 @@ export async function liveScheduled(env, time, deps) {
   const active = schedule.filter((m) => { const ko = Date.parse(m.date); return ko && now >= ko + START && now <= ko + END && /^\d+$/.test(String(m.id)); });
   if (!active.length) return;
   const ns = await deps.state();
+  if (!liveEnabled(ns)) return;
   for (const m of active) {
     const ko = Date.parse(m.date);
     const prev = await kv.get(LIVE + m.id, 'json');
@@ -131,8 +139,10 @@ export async function liveScheduled(env, time, deps) {
     const minute = Math.floor((now - ko) / 60e3);
     if (!every || ((minute % every) + every) % every !== 0) continue;
     const res = await fetch(`${deps.base}/matches/${Number(m.id)}`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });
-    const r = deps.remainingOf(res);
+    const r = deps.remainingOf(res); const lim = limitOf(res);
+    if (lim != null && lim !== ns.limit) { ns.limit = lim; if (deps.saveLimit) await deps.saveLimit(lim); }
     if (r != null) { ns.remaining = r; if (minute % 10 === 0 || r < 50) await deps.saveRemaining(r); }
+    if (!liveEnabled(ns)) return; // net ontdekt: gratis plan
     if (!res.ok) continue;
     let cur;
     try { cur = parseLive(await res.text()); } catch { continue; }
@@ -151,6 +161,8 @@ export async function liveScheduled(env, time, deps) {
 export async function liveApi(env, json) {
   const kv = env.MS_KV;
   const now = Date.now();
+  const ns = (await kv.get('ns:state', 'json')) || {};
+  if (!liveEnabled(ns)) return json({ now: new Date(now).toISOString(), enabled: false, limit: ns.limit, matches: [] }, 200);
   const schedule = (await kv.get(SCHEDULE, 'json')) || [];
   const near = schedule.filter((m) => { const ko = Date.parse(m.date); return ko && now >= ko - 15 * 60e3 && now <= ko + 6 * 3600e3; });
   const out = [];
@@ -158,7 +170,7 @@ export async function liveApi(env, json) {
     const s = await kv.get(LIVE + m.id, 'json');
     out.push({ id: String(m.id), ko: m.date, homeName: m.homeName, awayName: m.awayName, comp: m.comp, state: s || null });
   }
-  return json({ now: new Date(now).toISOString(), matches: out }, 200);
+  return json({ now: new Date(now).toISOString(), enabled: true, matches: out }, 200);
 }
 
 /** POST /push/device { endpoint, live?: {...}, mute?: { id: true|false } } → prefs van dit apparaat. */

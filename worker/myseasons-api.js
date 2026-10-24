@@ -264,7 +264,7 @@ async function nsRun(env, why) {
   const mode = state.mode || 'free';
   const results = [];
   const reserve = reserveAt();
-  let calls = 0; let stop = null; let remaining = state.remaining ?? null;
+  let calls = 0; let stop = null; let remaining = state.remaining ?? null; let limit = state.limit ?? null;
   while (queue.length && !stop) {
     const item = queue[0];
     const paths = pathsFor(item);
@@ -276,6 +276,7 @@ async function nsRun(env, why) {
       const res = await fetch(`${HIGHLIGHTLY_BASE}${p}`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });
       calls++;
       const r = remainingOf(res); if (r != null) remaining = r;
+      for (const [hn, hv] of res.headers) { const n = hn.toLowerCase(); if (n.includes('ratelimit') && n.includes('limit') && !n.includes('remaining') && !n.includes('reset')) limit = Number(hv); }
       if (res.status === 429) { status = 429; break; }
       if (!res.ok) { status = res.status; bodies.push(null); continue; }
       bodies.push(await res.text());
@@ -296,7 +297,7 @@ async function nsRun(env, why) {
   const log = [{ at, why, calls, items: results.length, stop, remaining, reserve }, ...(state.log || [])].slice(0, 30);
   await Promise.all([
     env.MS_KV.put(NS_QUEUE, JSON.stringify(queue)),
-    env.MS_KV.put(NS_STATE, JSON.stringify({ ...state, mode, lastRun: at, remaining, exhaustedAt: stop === 'quota' ? at : state.exhaustedAt || null, log })),
+    env.MS_KV.put(NS_STATE, JSON.stringify({ ...state, mode, lastRun: at, remaining, limit, exhaustedAt: stop === 'quota' ? at : state.exhaustedAt || null, log })),
   ]);
   return { calls, items: results.length, stop, remaining, queue: queue.length };
 }
@@ -366,6 +367,7 @@ export default {
         base: HIGHLIGHTLY_BASE, remainingOf,
         state: () => nsGet(env, NS_STATE, {}),
         saveRemaining: async (n) => { const s = await nsGet(env, NS_STATE, {}); await env.MS_KV.put(NS_STATE, JSON.stringify({ ...s, remaining: n })); },
+        saveLimit: async (n) => { const s = await nsGet(env, NS_STATE, {}); await env.MS_KV.put(NS_STATE, JSON.stringify({ ...s, limit: n })); },
       }).catch(() => {}),
       followUp(env, event.scheduledTime, {
         base: HIGHLIGHTLY_BASE, inboxPrefix: NS_INBOX, remainingOf,

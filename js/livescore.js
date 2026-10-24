@@ -107,7 +107,7 @@ export function paint() {
   const id = (location.hash.match(/^#\/wedstrijd\/([^/?]+)/) || [])[1];
   const list = (STATE.matches || []).filter((x) => x.state || inWindow(x));
   if (!list.length) return;
-  const head = view.querySelector('.page-head');
+  const head = view.querySelector('.page-head, .mast');
   const put = (html) => { const t = document.createElement('div'); t.innerHTML = html; const el = t.firstElementChild; if (head) head.after(el); else view.prepend(el); };
   if (key === 'home') list.slice(0, 2).reverse().forEach((x) => put(card(x)));
   else if (key === 'wedstrijd' && id) { const x = list.find((y) => String(y.id) === String(id)); if (x) put(card(x, { full: true })); }
