@@ -10,6 +10,8 @@ import { sendPush } from './push.js';
 const SCHEDULE = 'push:schedule';
 const SUBS = 'push:subs';
 const LIVE = 'live:';
+const LOG = 'livelog:';
+const MEASURE = true; // tijdelijk: meting 30 s vs 1 min (zie liveScheduled)
 const TEAM = 358204;
 const START = -10 * 60e3;
 const END = 150 * 60e3;
@@ -133,27 +135,44 @@ export async function liveScheduled(env, time, deps) {
   if (!liveEnabled(ns)) return;
   for (const m of active) {
     const ko = Date.parse(m.date);
-    const prev = await kv.get(LIVE + m.id, 'json');
+    let prev = await kv.get(LIVE + m.id, 'json');
     if (prev && (prev.status === 'ft' || prev.status === 'off')) continue;
     const every = intervalFor(ns.remaining, now, ko, ns.mode);
     const minute = Math.floor((now - ko) / 60e3);
     if (!every || ((minute % every) + every) % every !== 0) continue;
-    const res = await fetch(`${deps.base}/matches/${Number(m.id)}`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });
-    const r = deps.remainingOf(res); const lim = limitOf(res);
-    if (lim != null && lim !== ns.limit) { ns.limit = lim; if (deps.saveLimit) await deps.saveLimit(lim); }
-    if (r != null) { ns.remaining = r; if (minute % 10 === 0 || r < 50) await deps.saveRemaining(r); }
-    if (!liveEnabled(ns)) return; // net ontdekt: gratis plan
-    if (!res.ok) continue;
-    let cur;
-    try { cur = parseLive(await res.text()); } catch { continue; }
-    if (!cur) continue;
-    // Eerste keer dat we hem zien terwijl hij al bezig is: oude goals niet alsnog melden.
-    const base = prev || (cur.status === 'pre' ? { status: 'pre', events: [] } : { status: cur.status, events: cur.events });
-    const msgs = messagesFor(base, cur, m);
-    const changed = !prev || prev.status !== cur.status || JSON.stringify(prev.score) !== JSON.stringify(cur.score) || prev.events.length !== cur.events.length || minute % 5 === 0;
-    const next = { ...cur, at: new Date(now).toISOString(), every, ko: m.date, comp: m.comp || null, ftSent: cur.status === 'ft' || !!(prev && prev.ftSent) };
-    if (changed) await kv.put(LIVE + m.id, JSON.stringify(next), { expirationTtl: 2 * 86400 });
-    await deliver(kv, msgs, m.id);
+    // Meting (tijdelijk): met ruim budget twee keer per minuut vragen (nu en na 30 s) en per vraag loggen wat er
+    // veranderde. Daarmee zien we hoe vaak Highlightly zelf bijwerkt, en of 30 seconden zin heeft.
+    const measure = MEASURE && every === 1;
+    const log = [];
+    for (let k = 0; k < (measure ? 2 : 1); k++) {
+      if (k) await new Promise((r) => setTimeout(r, 30e3));
+      const t = k ? Date.now() : now;
+      const res = await fetch(`${deps.base}/matches/${Number(m.id)}`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });
+      const r = deps.remainingOf(res); const lim = limitOf(res);
+      if (lim != null && lim !== ns.limit) { ns.limit = lim; if (deps.saveLimit) await deps.saveLimit(lim); }
+      if (r != null) { ns.remaining = r; if ((minute % 10 === 0 && !k) || r < 50) await deps.saveRemaining(r); }
+      if (!liveEnabled(ns)) return; // net ontdekt: gratis plan
+      if (!res.ok) { log.push({ t: new Date(t).toISOString(), http: res.status }); continue; }
+      let cur;
+      try { cur = parseLive(await res.text()); } catch { continue; }
+      if (!cur) continue;
+      const sig = JSON.stringify([cur.status, cur.score, cur.events.map((e) => e.key)]);
+      const prevSig = prev ? JSON.stringify([prev.status, prev.score, (prev.events || []).map((e) => e.key)]) : null;
+      log.push({ t: new Date(t).toISOString(), clock: cur.clock, st: cur.status, sc: cur.score ? `${cur.score.home}-${cur.score.away}` : null, ev: cur.events.length, ch: sig !== prevSig, clk: !prev || prev.clock !== cur.clock, age: res.headers.get('age'), cache: res.headers.get('cf-cache-status') });
+      // Eerste keer dat we hem zien terwijl hij al bezig is: oude goals niet alsnog melden.
+      const base = prev || (cur.status === 'pre' ? { status: 'pre', events: [] } : { status: cur.status, events: cur.events });
+      const msgs = messagesFor(base, cur, m);
+      const changed = !prev || sig !== prevSig || prev.clock !== cur.clock && minute % 5 === 0 && !k;
+      const next = { ...cur, at: new Date(t).toISOString(), every, ko: m.date, comp: m.comp || null, ftSent: cur.status === 'ft' || !!(prev && prev.ftSent) };
+      if (changed || (measure && prev && prev.clock !== cur.clock)) await kv.put(LIVE + m.id, JSON.stringify(next), { expirationTtl: 2 * 86400 });
+      await deliver(kv, msgs, m.id);
+      prev = next;
+      if (cur.status === 'ft' || cur.status === 'off') break;
+    }
+    if (measure && log.length) {
+      const all = (await kv.get(LOG + m.id, 'json')) || [];
+      await kv.put(LOG + m.id, JSON.stringify([...all, ...log].slice(-400)), { expirationTtl: 7 * 86400 });
+    }
   }
 }
 
@@ -168,7 +187,8 @@ export async function liveApi(env, json) {
   const out = [];
   for (const m of near) {
     const s = await kv.get(LIVE + m.id, 'json');
-    out.push({ id: String(m.id), ko: m.date, homeName: m.homeName, awayName: m.awayName, comp: m.comp, state: s || null });
+    const log = MEASURE ? await kv.get(LOG + m.id, 'json') : null;
+    out.push({ id: String(m.id), ko: m.date, homeName: m.homeName, awayName: m.awayName, comp: m.comp, state: s || null, log: log || null });
   }
   return json({ now: new Date(now).toISOString(), enabled: true, matches: out }, 200);
 }

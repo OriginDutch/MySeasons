@@ -9,7 +9,7 @@ import { getAllMatches } from './store.js';
 import { pushSupported } from './meldingen.js';
 
 const TEAM = MAIN_CLUB.id;
-const POLL = 30e3;
+const POLL = 15e3; // de Worker ververst elke 30 s (meting) of elke minuut
 let STATE = { matches: [], at: 0 };
 let timer = null;
 let DEVICE = null; // { endpoint, live, mute } van dit apparaat, of null
@@ -86,6 +86,20 @@ function bell(id) {
   return `<button class="btn btn--sm live-bell" type="button" data-live-mute="${esc(String(id))}" data-muted="${muted ? '1' : ''}" ${off ? 'disabled title="Live meldingen staan uit (Meer → Meldingen)"' : ''}>${muted || off ? '🔕 Meldingen uit' : '🔔 Meldingen aan'}</button>`;
 }
 
+/** Meting (tijdelijk): hoe vaak veranderde er iets bij Highlightly, en kwam dat bij de 30-secondenvraag binnen? */
+function measureHtml(log) {
+  if (!log || !log.length) return '';
+  const polls = log.filter((l) => !l.http);
+  const ch = polls.filter((l) => l.ch);
+  const clk = polls.filter((l) => l.clk);
+  const half = polls.filter((l, i) => i > 0 && Math.abs(Date.parse(l.t) - Date.parse(polls[i - 1].t)) < 45e3);
+  const halfNew = half.filter((l) => l.ch || l.clk).length;
+  const t = (iso) => new Date(iso).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return `<details class="fold" style="margin-top:6px"><summary class="section__label"><span>Meting (tijdelijk)</span><span>${polls.length} vragen</span></summary>
+    <p class="muted" style="font-size:var(--fs-sm);margin:4px 0">${ch.length} keer nieuwe stand of events · klok ${clk.length} keer verder · bij de vraag na 30 s was ${halfNew} van de ${half.length} keer iets nieuws${polls.some((l) => l.age) ? ' · Highlightly stuurt een cache-leeftijd mee' : ''}.</p>
+    <ol class="live-ev" style="max-height:260px;overflow:auto">${polls.slice(-80).reverse().map((l) => `<li class="${l.ch ? 'is-us' : ''}"><span class="mono">${t(l.t)}</span> ${l.st} ${l.clock ?? '–'}' ${esc(l.sc || '')} · ${l.ev} ev${l.ch ? ' · <b>nieuw</b>' : l.clk ? ' · klok' : ''}${l.age ? ` · age ${esc(l.age)}` : ''}</li>`).join('')}</ol></details>`;
+}
+
 function card(x, { full = false } = {}) {
   const s = x.state;
   const sc = s && s.score ? `${s.score.home}<span class="muted">–</span>${s.score.away}` : '<span class="muted">vs</span>';
@@ -94,6 +108,7 @@ function card(x, { full = false } = {}) {
     <div class="section__label"><span>${isLive ? '<span class="live-dot"></span>LIVE' : s && s.status === 'ft' ? 'Afgelopen' : 'Vandaag'} · ${esc(clockOf(s) || `aftrap ${timeOf(x.ko)}`)}</span><span>${esc(x.comp || '')}</span></div>
     <a class="live-score" href="#/wedstrijd/${esc(x.id)}"><span>${esc(x.homeName)}</span><b class="mono">${sc}</b><span>${esc(x.awayName)}</span></a>
     ${s ? eventsHtml(s) : '<p class="muted" style="margin:0;font-size:var(--fs-sm)">De Worker begint 10 minuten voor de aftrap met volgen.</p>'}
+    ${full ? measureHtml(x.log) : ''}
     <div class="live-foot"><span class="muted">${s ? `bijgewerkt ${ago(s.at)}${s.every > 1 ? ` · elke ${s.every} min (zuinig budget)` : ''}` : ''}</span>${full || isLive || (s && s.status === 'pre') || !s ? bell(x.id) : ''}</div>
   </section>`;
 }
