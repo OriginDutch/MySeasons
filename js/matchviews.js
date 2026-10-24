@@ -1,6 +1,9 @@
 // Schermen met wedstrijddata: Home, Wedstrijden en de wedstrijdpagina.
 
 import { tabsHtml } from './liveboard.js';
+import { liveState } from './livescore.js';
+// Live-stand zegt al Einde: details meteen aanbieden, ook als je eigen programma nog 'gepland' zegt.
+const liveEnded = (id) => ((liveState().matches || []).find((x) => String(x.id) === String(id)) || {}).state?.status === 'ft';
 import { shootoutKicks } from './shootout.js';
 import { esc, icons, toast } from './ui.js';
 import { MAIN_CLUB, SYNC_SUGGEST_DAYS } from './config.js';
@@ -740,8 +743,8 @@ export const matchViews = {
           ${m.manualDetail && m.apiDetail ? (() => { const n = openDiffs(notes.manual, m.apiDetail, m, TEAM); return n ? `<a class="warn-line" href="#/vergelijk/${m.id}" style="display:block;text-decoration:none">Highlightly heeft nu ook details: ${n} ${n === 1 ? 'verschil' : 'verschillen'} met jouw invoer. Vergelijken →</a>` : ''; })() : ''}
           ${twin || m.status === 'postponed'
             ? (m.manual ? '<div class="btn-row"><button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button></div>' : `<p class="muted" style="font-size:var(--fs-sm)">${twin ? 'Vul de details in bij de gespeelde versie.' : `Deze wedstrijd is ${esc(word)}: geen details.`}</p>`)
-            : m.status === 'finished' || Date.parse(m.date) < Date.now() - 3 * 3600e3
-            ? `<div class="btn-row">${m.status === 'finished' && !m.manual ? `<button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${m.apiDetail || (d && !m.manualDetail) ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button>` : ''}${!d ? `<a class="btn ${m.status === 'finished' && !m.manual ? '' : 'btn--primary'}" href="#/invullen/${m.id}">Details invullen</a>` : ''}${m.manual && m.status === 'finished' && !(m.hlSearch && m.hlSearch.found === false) ? `<button class="btn" type="button" data-action="hl-search">Zoeken bij Highlightly · 1</button>` : ''}${m.manual ? '<button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button>' : ''}</div>
+            : m.status === 'finished' || liveEnded(m.id) || Date.parse(m.date) < Date.now() - 3 * 3600e3
+            ? `<div class="btn-row">${(m.status === 'finished' || liveEnded(m.id)) && !m.manual ? `<button class="btn ${d ? '' : 'btn--primary'}" type="button" data-action="fetch-match" data-id="${m.id}">${m.apiDetail || (d && !m.manualDetail) ? 'Opnieuw ophalen' : 'Details ophalen'} · ${COST.match} calls</button>` : ''}${!d ? `<a class="btn ${m.status === 'finished' && !m.manual ? '' : 'btn--primary'}" href="#/invullen/${m.id}">Details invullen</a>` : ''}${m.manual && m.status === 'finished' && !(m.hlSearch && m.hlSearch.found === false) ? `<button class="btn" type="button" data-action="hl-search">Zoeken bij Highlightly · 1</button>` : ''}${m.manual ? '<button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button>' : ''}</div>
               ${m.hlSearch && m.hlSearch.found === false ? `<p class="muted" style="font-size:var(--fs-sm)">Gezocht bij Highlightly op ${esc(dayShort(m.hlSearch.at))}: niet gevonden. <button class="link-btn" type="button" data-action="hl-search">Nog eens · 1</button></p>` : ''}`
             : '<p class="muted" style="font-size:var(--fs-sm)">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
         </section>
