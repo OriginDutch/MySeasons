@@ -551,6 +551,15 @@ export const matchViews = {
           <section class="section"><div class="empty"><span class="empty__title">Nog geen competitie</span>
           <p class="muted">Synchroniseer eerst het seizoen op Home.</p><div><a class="btn" href="#/home">Naar Home</a></div></div></section>`;
       }
+      // Tabs Stand · Spelers · Clubs (divisiestatistieken in leaguestats.js). De competitiekiezer blijft op dezelfde tab.
+      const tab = ['spelers', 'clubs'].includes(args[1]) ? args[1] : 'stand';
+      const LS = await import('./leaguestats.js');
+      const tabs = LS.statsTabsHtml(league.id, tab);
+      if (tab !== 'stand') {
+        LEAGUE_SHEET = listHtml.replace(/href="#\/stats\/(\d+)"/g, `href="#/stats/$1/${tab}"`);
+        const tiersT = tiers.replace(/href="#\/stats\/(\d+)"/g, `href="#/stats/$1/${tab}"`);
+        return `${titleBtn}${tabs}${await LS.leagueStatsHtml(league, getSeason(), tab)}${tiersT ? `<section class="section">${tiersT}</section>` : ''}`;
+      }
       const both = await standingsAndMatches(league.id, getSeason());
       const st = both.standings || rsssfStandings(rs, league.id);
       const isMine = mine && league.id === mine.id;
@@ -562,7 +571,7 @@ export const matchViews = {
       const marks = await getClubMarks().catch(() => ({}));
       const refresh = `<button class="btn" type="button" data-action="sync-standings" data-league="${league.id}">${icons.refresh}<span>Stand bijwerken · ${COST.standings} call</span></button>`;
       if (!g) {
-        return `${titleBtn}
+        return `${titleBtn}${tabs}
           <section class="section"><div class="empty"><span class="empty__title">Stand nog niet opgehaald</span>
           <p class="muted">Haal de ${esc(league.name)}-stand van ${esc(seasonLabel())} op.</p><div style="display:flex;gap:8px;flex-wrap:wrap">${refresh}<button class="btn" type="button" data-action="sync-league" data-league="${league.id}">${icons.refresh}<span>Alle wedstrijden · ~${COST.league} calls</span></button></div></div></section>
           ${tiers ? `<section class="section">${tiers}</section>` : ''}`;
@@ -579,6 +588,7 @@ export const matchViews = {
       const pModes = zones && rules.periods && lmUse.length ? zones.periods : [];
       return `
         ${titleBtn}
+        ${tabs}
         ${flag}
         <div class="stats-grid"><div class="stats-main" data-stats-main>
         <section class="section">
@@ -612,6 +622,7 @@ export const matchViews = {
     },
     mount(root, ctx) {
       root.querySelector('[data-league-pick]')?.addEventListener('click', () => openLeagueSheet(LEAGUE_SHEET, seasonLabel()));
+      if (root.querySelector('[name="ls-cat"], [data-ls-lineups]')) import('./leaguestats.js').then((x) => x.mountLeagueStats(root, ctx));
       fitLeagueSide(root);
       root.addEventListener('click', async (e) => {
         const b = e.target.closest('[data-action="sync-league"]');

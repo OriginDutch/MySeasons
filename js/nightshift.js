@@ -8,10 +8,10 @@ import { ensureLeagues, followedIds } from './leagues.js';
 import { ns } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import {
-  getAllMatches, hasDetail, saveMatches, saveMatchDetail, saveLeagueMatches, saveStandings, setMeta, getMeta,
+  getAllMatches, hasDetail, saveMatches, saveMatchDetail, saveLeagueMatches, saveLeagueExtra, saveStandings, setMeta, getMeta,
   countCalls, getLeagueIndexes, addToLeagueIndex, saveSeason, getSeasons, noteRateLimit,
 } from './store.js';
-import { normalizeListMatch, normalizeDetail, normalizeEvents, normalizeStandings } from './normalize.js';
+import { normalizeListMatch, normalizeDetail, normalizeEvents, normalizeStandings, normalizeLineups } from './normalize.js';
 
 // Gevolgde competities: Meer → Competities (followedIds). Niet gevolgd = niet verversen, data blijft.
 export const CUP = 77374; // KNVB Beker: alleen de lijst (voor de bekerwinnaar en Europese tickets), geen events
@@ -67,12 +67,18 @@ export async function buildQueue() {
     const done = new Set(i.withEvents || []);
     (i.finished || []).forEach((id) => { if (!done.has(id) && !ownIds.has(id)) events.push({ type: 'events', id, leagueId: i.leagueId, season: i.season }); });
   });
+  // Andere clubs: de opstelling, alleen voor de keepers (clean sheets per keeper), 1 call per duel. Na de events.
+  const lineups = [];
+  indexes.filter((i) => years.includes(Number(i.season)) && FOLLOWS.includes(Number(i.leagueId))).sort((a, b) => b.season - a.season).forEach((i) => {
+    const done = new Set(i.withLineups || []);
+    (i.finished || []).forEach((id) => { if (!done.has(id) && !ownIds.has(id)) lineups.push({ type: 'lineups', id, leagueId: i.leagueId, season: i.season }); });
+  });
   const cur = (x) => Number(x.season) === CURRENT_SEASON;
   return [
     ...now,
-    ...full.filter(cur), ...events.filter(cur),
+    ...full.filter(cur), ...events.filter(cur), ...lineups.filter(cur),
     ...later,
-    ...full.filter((x) => !cur(x)), ...events.filter((x) => !cur(x)),
+    ...full.filter((x) => !cur(x)), ...events.filter((x) => !cur(x)), ...lineups.filter((x) => !cur(x)),
   ];
 }
 
@@ -109,8 +115,11 @@ async function apply(r) {
       const d = Array.isArray(raw) ? raw[0] : raw;
       if (!d) return 0;
       const base = normalizeListMatch(d);
-      const events = normalizeEvents(d.events).filter((e) => !/subst/i.test(e.type || ''));
-      await saveLeagueMatches([{ ...base, events, eventsAt: new Date().toISOString() }]);
+      const all = normalizeEvents(d.events);
+      const events = all.filter((e) => !/subst/i.test(e.type || ''));
+      // Wie er gewisseld werd (alleen de id's): nodig om te weten of een keeper de hele wedstrijd speelde.
+      const subsOut = all.filter((e) => /subst/i.test(e.type || '') && e.outId != null).map((e) => e.outId);
+      await saveLeagueMatches([{ ...base, events, subsOut, eventsAt: new Date().toISOString() }]);
       await addToLeagueIndex(item.leagueId || base.league.id, item.season || base.league.season, { withEvents: [item.id] });
       return 2;
     }
@@ -122,6 +131,15 @@ async function apply(r) {
       await addToLeagueIndex(item.leagueId, item.season, { ids: list.map((m) => m.id), finished: list.filter((m) => m.status === 'finished').map((m) => m.id) });
       await setMeta(`league_${item.leagueId}_${item.season}`, { fetchedAt: new Date().toISOString(), via: 'nachtploeg' });
       return list.length + 2;
+    }
+    case 'lineups': {
+      // Alleen de basiskeepers bewaren (voor clean sheets per keeper), niet de hele opstelling.
+      const l = normalizeLineups(parse(bodies[0]));
+      const gk = (side) => { const p = side && (side.starters || []).find((x) => /goalkeeper/i.test(x.position || '')) || (side && (side.starters || []).find((x) => x.line === 0)); return p ? { id: p.id, name: p.name, teamId: side.teamId } : null; };
+      const keepers = { home: gk(l.home), away: gk(l.away) };
+      await saveLeagueExtra(item.id, { keepers, lineupsAt: new Date().toISOString() });
+      await addToLeagueIndex(item.leagueId, item.season, { withLineups: [item.id] });
+      return 2;
     }
     case 'program': {
       const raw = parse(bodies[0]);
@@ -144,7 +162,7 @@ async function apply(r) {
   }
 }
 
-const COST_OF = { full: 3, events: 1, league: 1, program: 1, standings: 1 };
+const COST_OF = { full: 3, events: 1, lineups: 1, league: 1, program: 1, standings: 1 };
 
 /** Brievenbus legen (oudste eerst), binnen het dagbudget aan Firestore-writes. */
 // Eén leegloop tegelijk: de automatische (bij openen) en de knop mogen niet dezelfde pakketjes dubbel verwerken.
@@ -181,7 +199,7 @@ async function runEmpty(onProgress) {
   }
   if (summary.chunks) await setMeta('nsLast', { at: new Date().toISOString(), ...summary });
   if (summary.items) {
-    const LABEL = { full: 'Cambuur-details', events: 'doelpuntenmakers', league: 'competitiewedstrijden', program: 'programma', standings: 'standen' };
+    const LABEL = { full: 'Cambuur-details', events: 'doelpuntenmakers', lineups: 'opstellingen (keepers)', league: 'competitiewedstrijden', program: 'programma', standings: 'standen' };
     const parts = Object.entries(summary.byType).map(([k, n]) => `${n}× ${LABEL[k] || k}`).join(', ');
     await addMessage({ id: `ns:${Date.now()}`, kind: 'nightshift', title: `${summary.items} ${summary.items === 1 ? 'pakketje' : 'pakketjes'} verwerkt`, text: `${parts}${summary.left ? `. ${summary.left} wachten op morgen (dagbudget Firestore).` : '.'}`, href: '#/nachtploeg' }).catch(() => {});
   }

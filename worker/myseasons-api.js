@@ -240,6 +240,7 @@ function pathsFor(item) {
   switch (item.type) {
     case 'full': return isId(id) ? [`/matches/${id}`, `/lineups/${id}`, `/box-score/${id}`] : null;
     case 'events': return isId(id) ? [`/matches/${id}`] : null;
+    case 'lineups': return isId(id) ? [`/lineups/${id}`] : null;
     case 'league': return isId(item.leagueId) && isId(item.season) ? [`/matches?leagueId=${Number(item.leagueId)}&season=${Number(item.season)}&limit=100&offset=${Number(item.offset) || 0}`] : null;
     case 'program': return isId(item.teamId) && isId(item.season) && ['home', 'away'].includes(item.side) ? [`/matches?${item.side}TeamId=${Number(item.teamId)}&season=${Number(item.season)}&limit=100`] : null;
     case 'standings': return isId(item.leagueId) && isId(item.season) ? [`/standings?leagueId=${Number(item.leagueId)}&season=${Number(item.season)}`] : null;
