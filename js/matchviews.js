@@ -709,6 +709,64 @@ export const matchViews = {
     },
   },
 
+  // ---------- Pagina van een ander duel (geen Cambuur): alleen lezen ----------
+  duel: {
+    title: 'Wedstrijd',
+    navKey: 'stats',
+    async render(ctx, args) {
+      const id = args[0];
+      const own = await getMatch(id).catch(() => null);
+      if (own) { location.replace(`#/wedstrijd/${id}`); return ''; }
+      const { getLeagueMatch, getLeagueDetail } = await import('./store.js');
+      const [m, d] = await Promise.all([getLeagueMatch(id), getLeagueDetail(id).catch(() => null)]);
+      if (!m) return `${head({ kicker: 'Wedstrijd', title: 'Niet gevonden', back: 'stats' })}<section class="section"><p class="muted">Dit duel staat (nog) niet in je data.</p></section>`;
+      const cup = m.league && Number(m.league.id) === 77374;
+      const roundTxt = cup ? (await import('./cupview.js')).roundOf(m.round).name : m.round ? shortRound(m.round) : '';
+      const played = m.status === 'finished' && m.score;
+      const extra = m.penalties && m.penalties.home != null ? `${m.penalties.home}–${m.penalties.away} na strafschoppen` : /extra time|verlenging/i.test(m.stateText || '') ? 'na verlenging' : '';
+      const kicker = `${compName(m)}${roundTxt ? ' · ' + roundTxt : ''} · ${dayShort(m.date)}`;
+      const card = `<section class="section duel-card"><div class="duel-score">
+          <span class="duel-team">${crest(m.homeTeam, 36)}<span>${esc(m.homeTeam.name)}</span></span>
+          <b class="duel-sc">${played ? `${m.score.home}–${m.score.away}` : esc(timeOf(m.date))}</b>
+          <span class="duel-team duel-team--away"><span>${esc(m.awayTeam.name)}</span>${crest(m.awayTeam, 36)}</span></div>
+          ${extra ? `<p class="muted duel-extra">${esc(extra)}</p>` : ''}</section>`;
+      let body;
+      if (d) {
+        const mm = { ...m, detail: d, manualDetail: false };
+        body = `${timeline(mm, { readOnly: true })}${lineupsBlock(mm)}${statsBlock(mm)}${playersBlock(mm)}
+          <p class="muted" style="font-size:var(--fs-xs)">Van Highlightly, opgehaald ${esc(dayShort(d.fetchedAt))} ${esc(timeOf(d.fetchedAt))}. Alleen lezen: invullen en corrigeren is er voor Cambuur.</p>`;
+      } else if (played) {
+        body = `<section class="section"><p class="muted" style="font-size:var(--fs-md)">Het volledige verloop (opstellingen, wissels, stats) is nog niet opgehaald. De nachtploeg doet het vanzelf, of nu meteen:</p>
+          <div class="btn-row"><button class="btn btn--primary" type="button" data-action="duel-fetch" data-id="${esc(String(m.id))}">Verloop ophalen · 3 calls</button></div></section>
+          ${(m.events || []).length ? timeline({ ...m, detail: { events: m.events, lineups: null, players: {} } }, { readOnly: true }) : ''}`;
+      } else {
+        body = '<section class="section"><p class="muted">Nog niet gespeeld.</p></section>';
+      }
+      return `${head({ kicker, title: played ? 'Einde' : m.status === 'postponed' ? 'Uitgesteld' : timeOf(m.date) })}${card}${body}`;
+    },
+    mount(root, ctx) {
+      mountSwipe(root);
+      root.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-action="duel-fetch"]');
+        if (!b) return;
+        try {
+          await runWithButton(b, 'Ophalen…', async () => {
+            const { hl } = await import('./api.js');
+            const { getLeagueMatch, countCalls } = await import('./store.js');
+            const { apply } = await import('./nightshift.js');
+            const id = Number(b.dataset.id);
+            const m = await getLeagueMatch(id);
+            const bodies = [await hl(`/matches/${id}`), await hl(`/lineups/${id}`), await hl(`/box-score/${id}`)];
+            await countCalls(3).catch(() => {});
+            await apply({ item: { type: 'lfull', id, leagueId: m.league.id, season: m.league.season }, status: 200, bodies });
+          });
+          toast('Verloop opgehaald · 3 calls');
+          ctx.refresh();
+        } catch (err) { toast(explain(err)); }
+      });
+    },
+  },
+
   // ---------- Wedstrijdpagina ----------
 
   wedstrijd: {
@@ -831,7 +889,7 @@ function notesBlock(n, early = false) {
     </section>`;
 }
 
-function timeline(m) {
+function timeline(m, { readOnly = false } = {}) {
   const all = m.detail.events || [];
   const ev = all.filter((e) => !e.shootout);
   if (!ev.length) return '';
@@ -853,7 +911,7 @@ function timeline(m) {
   };
   return `
     <section class="section">
-      <div class="section__label"><span>Tijdlijn</span><span>${m.manualDetail ? 'zelf ingevuld' : 'tik op een moment om te corrigeren'}</span></div>
+      <div class="section__label"><span>Tijdlijn</span><span>${readOnly ? '' : m.manualDetail ? 'zelf ingevuld' : 'tik op een moment om te corrigeren'}</span></div>
       <ol class="timeline">${ev.map((e) => {
         const k = kind(e.type);
         const side = e.teamId === homeId ? 'home' : 'away';

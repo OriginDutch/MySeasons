@@ -8,7 +8,7 @@ import { ensureLeagues, followedIds } from './leagues.js';
 import { ns } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import {
-  getAllMatches, hasDetail, saveMatches, saveMatchDetail, saveLeagueMatches, saveLeagueExtra, saveStandings, setMeta, getMeta,
+  getAllMatches, hasDetail, saveMatches, saveMatchDetail, saveLeagueMatches, saveLeagueExtra, saveLeagueDetail, saveStandings, setMeta, getMeta,
   countCalls, getLeagueIndexes, addToLeagueIndex, saveSeason, getSeasons, noteRateLimit,
 } from './store.js';
 import { normalizeListMatch, normalizeDetail, normalizeEvents, normalizeStandings, normalizeLineups } from './normalize.js';
@@ -22,7 +22,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const quotaDay = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Los_Angeles' }).format(new Date());
 const official = (m) => m.league && !/friendl/i.test(m.league.name);
 const isOwn = (m) => [m.homeTeam, m.awayTeam].some((t) => t && t.id === MAIN_CLUB.id);
-const parse = (t) => { try { return t ? JSON.parse(t) : null; } catch { return null; } };
+const parse = (t) => { try { return t ? (typeof t === 'string' ? JSON.parse(t) : t) : null; } catch { return null; } };
 
 export async function getPrefs() {
   return (await getMeta('nsPrefs').catch(() => null)) || { backfill: false };
@@ -61,25 +61,27 @@ export async function buildQueue() {
   const full = own.filter((m) => m.status === 'finished' && !m.manual && !hasDetail(m) && official(m))
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
     .map((m) => ({ type: 'full', id: m.id, season: seasonOf(m) }));
-  // Andere clubs: alleen de events (schutters, assists, kaarten), 1 call per duel. Ook de beker (Stats → KNVB Beker → Spelers).
-  const events = [];
-  indexes.filter((i) => years.includes(Number(i.season)) && (FOLLOWS.includes(Number(i.leagueId)) || Number(i.leagueId) === CUP)).sort((a, b) => b.season - a.season).forEach((i) => {
-    const done = new Set(i.withEvents || []);
-    (i.finished || []).forEach((id) => { if (!done.has(id) && !ownIds.has(id)) events.push({ type: 'events', id, leagueId: i.leagueId, season: i.season }); });
+  // Andere clubs. Betaald plan: het volledige verloop ('lfull': verloop, opstelling, spelersstats; 3 calls per duel).
+  // Gratis plan (100 per dag): alleen de events (1 call per duel), de calls zijn dan voor de speelronden.
+  // Ook de beker (Stats → KNVB Beker). Opstellingen alleen-voor-keepers ('lineups') vallen onder 'lfull'.
+  const st = await ns.state().catch(() => null);
+  const limit = st && st.state ? st.state.limit : null;
+  const paid = !(limit != null && limit < 1000);
+  const others = [];
+  indexes.filter((i) => years.includes(Number(i.season)) && (FOLLOWS.includes(Number(i.leagueId)) || Number(i.leagueId) === CUP)).forEach((i) => {
+    const full = new Set(i.withFull || []); const ev = new Set(i.withEvents || []);
+    (i.finished || []).forEach((id) => {
+      if (ownIds.has(id)) return;
+      if (paid && !full.has(id)) others.push({ type: 'lfull', id, leagueId: i.leagueId, season: i.season });
+      else if (!paid && !ev.has(id)) others.push({ type: 'events', id, leagueId: i.leagueId, season: i.season });
+    });
   });
-  // Andere clubs: de opstelling, alleen voor de keepers (clean sheets per keeper), 1 call per duel. Na de events.
-  const lineups = [];
-  indexes.filter((i) => years.includes(Number(i.season)) && FOLLOWS.includes(Number(i.leagueId))).sort((a, b) => b.season - a.season).forEach((i) => {
-    const done = new Set(i.withLineups || []);
-    (i.finished || []).forEach((id) => { if (!done.has(id) && !ownIds.has(id)) lineups.push({ type: 'lineups', id, leagueId: i.leagueId, season: i.season }); });
-  });
-  const cur = (x) => Number(x.season) === CURRENT_SEASON;
-  return [
-    ...now,
-    ...full.filter(cur), ...events.filter(cur), ...lineups.filter(cur),
-    ...later,
-    ...full.filter((x) => !cur(x)), ...events.filter((x) => !cur(x)), ...lineups.filter((x) => !cur(x)),
-  ];
+  // Volgorde: per seizoen, nieuwste eerst (dit seizoen, dan 2025-26, 2024-25, ...). Binnen een seizoen eerst de
+  // lijsten en het programma, dan Cambuur, dan de andere duels.
+  const bySeason = (list, y) => list.filter((x) => Number(x.season) === y);
+  const out = [...now, ...bySeason(full, CURRENT_SEASON), ...bySeason(others, CURRENT_SEASON)];
+  years.filter((y) => y !== CURRENT_SEASON).forEach((y) => out.push(...bySeason(later, y), ...bySeason(full, y), ...bySeason(others, y)));
+  return out;
 }
 
 export async function pushQueue() {
@@ -99,7 +101,8 @@ async function spendWrites(n) {
 }
 
 /** Eén resultaat uit de brievenbus naar Firestore. Geeft het aantal writes terug. */
-async function apply(r) {
+/** Ook gebruikt door de knop op de pagina van een ander duel (#/duel/<id>). */
+export async function apply(r) {
   const { item, bodies } = r;
   if (!bodies || bodies.every((b) => b == null)) return 0;
   switch (item.type) {
@@ -132,6 +135,20 @@ async function apply(r) {
       await setMeta(`league_${item.leagueId}_${item.season}`, { fetchedAt: new Date().toISOString(), via: 'nachtploeg' });
       return list.length + 2;
     }
+    case 'lfull': {
+      // Ander duel, volledig verloop: compact naar leagueDetails/{id}; de samenvatting (events, keepers, wie er
+      // gewisseld werd) ook op het duel zelf, zodat de divisiestats er meteen mee werken.
+      const [d, l, b] = bodies.map(parse);
+      if (!d) return 0;
+      const { base, detail } = normalizeDetail(d, l, b);
+      await saveLeagueDetail(item.id, { ...detail, matchId: String(item.id), leagueId: Number(item.leagueId), season: Number(item.season) });
+      const all = detail.events || [];
+      const gk = (side) => { const p = side && (side.starters || []).find((x) => /goalkeeper/i.test(x.position || '')) || (side && (side.starters || []).find((x) => x.line === 0)); return p ? { id: p.id, name: p.name, teamId: side.teamId } : null; };
+      const lu = detail.lineups || {};
+      await saveLeagueMatches([{ ...base, events: all.filter((e) => !/subst/i.test(e.type || '')), subsOut: all.filter((e) => /subst/i.test(e.type || '') && e.outId != null).map((e) => e.outId), keepers: lu.home || lu.away ? { home: gk(lu.home), away: gk(lu.away) } : null, hasDetail: true, eventsAt: detail.fetchedAt, lineupsAt: detail.fetchedAt }]);
+      await addToLeagueIndex(item.leagueId, item.season, { withEvents: [item.id], withLineups: [item.id], withFull: [item.id] });
+      return 4; // leagueDetails + leagueMatches + teamIndex + leagueIndex
+    }
     case 'lineups': {
       // Alleen de basiskeepers bewaren (voor clean sheets per keeper), niet de hele opstelling.
       const l = normalizeLineups(parse(bodies[0]));
@@ -162,7 +179,7 @@ async function apply(r) {
   }
 }
 
-const COST_OF = { full: 3, events: 1, lineups: 1, league: 1, program: 1, standings: 1 };
+const COST_OF = { full: 3, lfull: 3, events: 1, lineups: 1, league: 1, program: 1, standings: 1 };
 
 /** Brievenbus legen (oudste eerst), binnen het dagbudget aan Firestore-writes. */
 // Eén leegloop tegelijk: de automatische (bij openen) en de knop mogen niet dezelfde pakketjes dubbel verwerken.
@@ -199,7 +216,7 @@ async function runEmpty(onProgress) {
   }
   if (summary.chunks) await setMeta('nsLast', { at: new Date().toISOString(), ...summary });
   if (summary.items) {
-    const LABEL = { full: 'Cambuur-details', events: 'doelpuntenmakers', lineups: 'opstellingen (keepers)', league: 'competitiewedstrijden', program: 'programma', standings: 'standen' };
+    const LABEL = { full: 'Cambuur-details', events: 'doelpuntenmakers', lineups: 'opstellingen (keepers)', lfull: 'volledige duels (andere clubs)', league: 'competitiewedstrijden', program: 'programma', standings: 'standen' };
     const parts = Object.entries(summary.byType).map(([k, n]) => `${n}× ${LABEL[k] || k}`).join(', ');
     await addMessage({ id: `ns:${Date.now()}`, kind: 'nightshift', title: `${summary.items} ${summary.items === 1 ? 'pakketje' : 'pakketjes'} verwerkt`, text: `${parts}${summary.left ? `. ${summary.left} wachten op morgen (dagbudget Firestore).` : '.'}`, href: '#/nachtploeg' }).catch(() => {});
   }

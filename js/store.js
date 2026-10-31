@@ -284,6 +284,21 @@ export async function getLeagueMatches(leagueId, season) {
   return (await live.docs(`lm:${Number(leagueId)}:${Number(season)}`, q)).map((d) => nameMatch(d.data()));
 }
 
+// ---------- Volledig verloop van andere duels: leagueDetails/{id} ----------
+// Compact (genormaliseerd, geen ruwe Highlightly-antwoorden), los van leagueMatches: alleen gelezen als je zo'n duel opent.
+export async function getLeagueDetail(id) {
+  const d = await getDoc(doc(db, 'leagueDetails', String(id)));
+  return d.exists() ? d.data() : null;
+}
+export function saveLeagueDetail(id, detail) {
+  return setDoc(doc(db, 'leagueDetails', String(id)), detail);
+}
+/** Eén competitieduel (uit leagueMatches), met je eigen clubnamen. */
+export async function getLeagueMatch(id) {
+  const d = await getDoc(doc(db, 'leagueMatches', String(id)));
+  return d.exists() ? nameMatch(d.data()) : null;
+}
+
 /** Losse velden bij een competitieduel (bijv. keepers uit de opstelling), zonder de rest te raken. */
 export function saveLeagueExtra(id, fields) {
   return setDoc(doc(db, 'leagueMatches', String(id)), fields, { merge: true });
@@ -370,12 +385,13 @@ export async function getLeagueIndexes() {
   return (await coll('leagueIndex')).map((d) => ({ key: d.id, ...d.data() }));
 }
 
-export function addToLeagueIndex(leagueId, season, { ids = [], finished = [], withEvents = [], withLineups = [] }) {
+export function addToLeagueIndex(leagueId, season, { ids = [], finished = [], withEvents = [], withLineups = [], withFull = [] }) {
   const data = { leagueId: Number(leagueId), season: Number(season), updatedAt: new Date().toISOString() };
   if (ids.length) data.ids = arrayUnion(...ids);
   if (finished.length) data.finished = arrayUnion(...finished);
   if (withEvents.length) data.withEvents = arrayUnion(...withEvents);
   if (withLineups.length) data.withLineups = arrayUnion(...withLineups);
+  if (withFull.length) data.withFull = arrayUnion(...withFull);
   return setDoc(doc(db, 'leagueIndex', `${leagueId}_${season}`), data, { merge: true });
 }
 

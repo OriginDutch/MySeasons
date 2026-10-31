@@ -239,6 +239,7 @@ function pathsFor(item) {
   const id = Number(item.id);
   switch (item.type) {
     case 'full': return isId(id) ? [`/matches/${id}`, `/lineups/${id}`, `/box-score/${id}`] : null;
+    case 'lfull': return isId(id) ? [`/matches/${id}`, `/lineups/${id}`, `/box-score/${id}`] : null; // ander duel, compact bewaard
     case 'events': return isId(id) ? [`/matches/${id}`] : null;
     case 'lineups': return isId(id) ? [`/lineups/${id}`] : null;
     case 'league': return isId(item.leagueId) && isId(item.season) ? [`/matches?leagueId=${Number(item.leagueId)}&season=${Number(item.season)}&limit=100&offset=${Number(item.offset) || 0}`] : null;

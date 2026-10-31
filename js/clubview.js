@@ -110,7 +110,7 @@ function matchRow(m, teamKey, ownIds) {
   const opp = home ? m.away : m.home;
   const r = resultOf(m, teamKey);
   const vsMe = String(opp.id) === String(TEAM) || String(teamKey) === String(TEAM);
-  const link = m.id && ownIds.has(m.id) ? `#/wedstrijd/${m.id}` : null;
+  const link = m.id && ownIds.has(m.id) ? `#/wedstrijd/${m.id}` : m.id && /^\d+$/.test(String(m.id)) ? `#/duel/${m.id}` : null;
   const score = m.hs != null ? `${m.hs}–${m.as}${m.pen ? ' <span class="muted">(pen)</span>' : ''}` : m.status === 'finished' ? '' : (m.dateOnly ? '' : esc(timeOf(m.date)));
   const tag = link ? 'a' : 'div';
   return `<${tag} class="list-row club-row ${String(opp.id) === String(TEAM) ? 'is-me' : ''}" ${link ? `href="${link}"` : ''}>

@@ -72,7 +72,7 @@ function matchRow(m) {
   const sc = played(m) ? `${m.score.home}–${m.score.away}` : m.status === 'postponed' ? 'uitg.' : fTime.format(new Date(m.date));
   const team = (t, side) => `<span class="cup-team cup-team--${side}${w && w !== side ? ' is-out' : ''}${isUs(t) ? ' is-us' : ''}">${side === 'home' ? `${crest(t)}<span>${esc(t.name)}</span>` : `<span>${esc(t.name)}</span>${crest(t)}`}</span>`;
   const inner = `${team(m.homeTeam, 'home')}<span class="cup-sc${played(m) ? '' : ' is-pre'}">${sc}<small>${esc(extraOf(m))}</small></span>${team(m.awayTeam, 'away')}`;
-  return us ? `<a class="cup-m is-us" href="#/wedstrijd/${esc(String(m.id))}">${inner}</a>` : `<div class="cup-m">${inner}</div>`;
+  return `<a class="cup-m${us ? ' is-us' : ''}" href="#/${us ? 'wedstrijd' : 'duel'}/${esc(String(m.id))}">${inner}</a>`;
 }
 
 /** De weg van Cambuur door de beker. */

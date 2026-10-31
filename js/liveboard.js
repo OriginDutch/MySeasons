@@ -141,11 +141,11 @@ function eventsLine(x) {
 
 function row(x) {
   const sc = x.score && x.status !== 'pre' ? `${x.score.home}<br>${x.score.away}` : '';
-  const tag = isOwn(x) ? 'a' : 'div';
-  // Bekerduel (niet van Cambuur) dat bezig is: tik om te volgen (elke 30 s, met schutters).
+  // Bekerduel (niet van Cambuur) dat bezig is: tik om te volgen (elke 30 s, met schutters). Andere duels: hun pagina.
   const followable = x.lid === CUP_ID && !isOwn(x) && isLive(x);
+  const tag = followable ? 'div' : 'a';
   const followed = followable && cupFollow() === x.id;
-  return `<${tag} class="lb-row${isOwn(x) ? ' is-us' : ''}${isLive(x) ? ' is-live' : ''}${followable ? ' is-followable' : ''}${followed ? ' is-followed' : ''}"${isOwn(x) ? ` href="#/wedstrijd/${esc(x.id)}"` : ''}${followable ? ` data-cup-follow="${esc(x.id)}" role="button" tabindex="0"` : ''}>
+  return `<${tag} class="lb-row${isOwn(x) ? ' is-us' : ''}${isLive(x) ? ' is-live' : ''}${followable ? ' is-followable' : ''}${followed ? ' is-followed' : ''}"${followable ? '' : ` href="#/${isOwn(x) ? 'wedstrijd' : 'duel'}/${esc(x.id)}"`}${followable ? ` data-cup-follow="${esc(x.id)}" role="button" tabindex="0"` : ''}>
     <span class="lb-min mono">${esc(clockOf(x))}</span>
     <span class="lb-teams"><span>${esc(x.home ? x.home.name : '?')}</span><span>${esc(x.away ? x.away.name : '?')}</span></span>
     <span class="lb-sc">${sc}</span>
