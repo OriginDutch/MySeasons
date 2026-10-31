@@ -7,7 +7,12 @@ import { liveState } from './livescore.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import { getLeagueMatches } from './store.js';
 
-export const BOARD_LEAGUES = [{ id: 75672, short: 'Eredivisie', abbr: 'ED' }, { id: 76523, short: 'KKD', abbr: 'KKD' }];
+export const BOARD_LEAGUES = [{ id: 75672, short: 'Eredivisie', abbr: 'ED' }, { id: 76523, short: 'KKD', abbr: 'KKD' }, { id: 77374, short: 'KNVB Beker', abbr: 'Beker', cup: true }];
+export const CUP_ID = 77374;
+// Beker live gaat op aanvraag (zie livescore.poll): één duel volgen = elke 30 s, anders elke 2 minuten.
+const FOLLOW_KEY = 'ms-cup-follow';
+export function cupFollow() { try { return sessionStorage.getItem(FOLLOW_KEY); } catch { return null; } }
+export function setCupFollow(id) { try { if (id) sessionStorage.setItem(FOLLOW_KEY, String(id)); else sessionStorage.removeItem(FOLLOW_KEY); } catch { /* niet erg */ } }
 const TEAM = MAIN_CLUB.id;
 const TZ = 'Europe/Amsterdam';
 const localDay = (t) => new Intl.DateTimeFormat('sv-SE', { timeZone: TZ }).format(new Date(t));
@@ -59,6 +64,15 @@ export function todayRows(state, now = Date.now()) {
     const ids = new Set(b.matches.map((x) => x.id));
     rows = [...b.matches.filter((x) => localDay(x.ko) === today), ...own.filter((x) => !ids.has(x.id))];
   }
+  // Beker: de daglijst die de Worker op aanvraag ophaalde, en het gevolgde duel met schutters.
+  const c = state && state.cup;
+  if (c && Array.isArray(c.matches)) {
+    const byId = new Map(c.matches.filter((x) => localDay(x.ko) === today).map((x) => [x.id, x]));
+    rows = rows.map((x) => (byId.has(x.id) ? { ...x, ...byId.get(x.id), events: x.events } : x));
+    byId.forEach((x, id) => { if (!rows.some((r) => r.id === id)) rows.push({ ...x, events: [] }); });
+    const d = c.detail;
+    if (d) rows = rows.map((x) => (x.id === String(d.id) ? { ...x, status: d.status, clock: d.clock, clockAt: d.at, score: d.score || x.score, events: d.events || [] } : x));
+  }
   const cam = new Map(((state && state.matches) || []).filter((x) => x.state).map((x) => [String(x.id), x.state]));
   return rows.map((x) => {
     const s = cam.get(String(x.id));
@@ -69,6 +83,11 @@ export function todayRows(state, now = Date.now()) {
 /** Moet de app de Worker nu vragen? (iets van vandaag in het venster: 15 min voor tot 3 uur na de aftrap) */
 export function boardWindow(now = Date.now()) {
   return PROGRAM.rows.some((x) => { const ko = Date.parse(x.ko); return ko && x.status !== 'ft' && now >= ko - 15 * 60e3 && now <= ko + 3 * 3600e3; });
+}
+
+/** Zit er vandaag een bekerduel (niet van Cambuur) in het venster? Dan vraagt de app de Worker om de beker. */
+export function cupWindow(now = Date.now()) {
+  return PROGRAM.rows.some((x) => { const ko = Date.parse(x.ko); return x.lid === CUP_ID && !isOwn(x) && ko && x.status !== 'ft' && now >= ko - 15 * 60e3 && now <= ko + 3 * 3600e3; });
 }
 
 export function liveCount(state) {
@@ -123,11 +142,15 @@ function eventsLine(x) {
 function row(x) {
   const sc = x.score && x.status !== 'pre' ? `${x.score.home}<br>${x.score.away}` : '';
   const tag = isOwn(x) ? 'a' : 'div';
-  return `<${tag} class="lb-row${isOwn(x) ? ' is-us' : ''}${isLive(x) ? ' is-live' : ''}"${isOwn(x) ? ` href="#/wedstrijd/${esc(x.id)}"` : ''}>
+  // Bekerduel (niet van Cambuur) dat bezig is: tik om te volgen (elke 30 s, met schutters).
+  const followable = x.lid === CUP_ID && !isOwn(x) && isLive(x);
+  const followed = followable && cupFollow() === x.id;
+  return `<${tag} class="lb-row${isOwn(x) ? ' is-us' : ''}${isLive(x) ? ' is-live' : ''}${followable ? ' is-followable' : ''}${followed ? ' is-followed' : ''}"${isOwn(x) ? ` href="#/wedstrijd/${esc(x.id)}"` : ''}${followable ? ` data-cup-follow="${esc(x.id)}" role="button" tabindex="0"` : ''}>
     <span class="lb-min mono">${esc(clockOf(x))}</span>
     <span class="lb-teams"><span>${esc(x.home ? x.home.name : '?')}</span><span>${esc(x.away ? x.away.name : '?')}</span></span>
     <span class="lb-sc">${sc}</span>
     ${eventsLine(x)}
+    ${followable ? `<span class="lb-follow muted">${followed ? 'je volgt dit duel · elke 30 s · tik om te stoppen' : 'tik om te volgen (elke 30 s, met schutters)'}</span>` : ''}
   </${tag}>`;
 }
 
@@ -218,6 +241,14 @@ export const boardViews = {
       };
       window.addEventListener('live:update', redraw);
       const tick = setInterval(redraw, 15e3); // de minuut doortellen tussen twee standen
+      box.addEventListener('click', (e) => {
+        const r = e.target.closest('[data-cup-follow]');
+        if (!r) return;
+        const id = r.dataset.cupFollow;
+        setCupFollow(cupFollow() === id ? null : id);
+        redraw();
+        import('./livescore.js').then((x) => x.pollNow());
+      });
     },
   },
 };

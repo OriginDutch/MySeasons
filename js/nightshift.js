@@ -14,7 +14,7 @@ import {
 import { normalizeListMatch, normalizeDetail, normalizeEvents, normalizeStandings, normalizeLineups } from './normalize.js';
 
 // Gevolgde competities: Meer → Competities (followedIds). Niet gevolgd = niet verversen, data blijft.
-export const CUP = 77374; // KNVB Beker: alleen de lijst (voor de bekerwinnaar en Europese tickets), geen events
+export const CUP = 77374; // KNVB Beker: de lijst (bekerwinnaar, Europese tickets, Stats → KNVB Beker) en de events (schutters), geen opstellingen
 export const FIRST_BACKFILL = 2019;
 const DAILY_WRITES = 17500; // gratis Firestore: 20.000 writes per dag; ~2.500 blijven over voor de app zelf
 const today = () => new Date().toISOString().slice(0, 10);
@@ -61,9 +61,9 @@ export async function buildQueue() {
   const full = own.filter((m) => m.status === 'finished' && !m.manual && !hasDetail(m) && official(m))
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
     .map((m) => ({ type: 'full', id: m.id, season: seasonOf(m) }));
-  // Andere clubs: alleen de events (schutters, assists, kaarten), 1 call per duel.
+  // Andere clubs: alleen de events (schutters, assists, kaarten), 1 call per duel. Ook de beker (Stats → KNVB Beker → Spelers).
   const events = [];
-  indexes.filter((i) => years.includes(Number(i.season)) && FOLLOWS.includes(Number(i.leagueId))).sort((a, b) => b.season - a.season).forEach((i) => {
+  indexes.filter((i) => years.includes(Number(i.season)) && (FOLLOWS.includes(Number(i.leagueId)) || Number(i.leagueId) === CUP)).sort((a, b) => b.season - a.season).forEach((i) => {
     const done = new Set(i.withEvents || []);
     (i.finished || []).forEach((id) => { if (!done.has(id) && !ownIds.has(id)) events.push({ type: 'events', id, leagueId: i.leagueId, season: i.season }); });
   });

@@ -149,7 +149,7 @@ function lineupButton(a, label) {
 let CACHE = null; // { key, a } voor de knop
 
 /** Inhoud van de tab Spelers of Clubs. */
-export async function leagueStatsHtml(league, season, tab) {
+export async function leagueStatsHtml(league, season, tab, { keepers: withKeepersTab = true } = {}) {
   const rows = await collect(league.id, season);
   const a = aggregate(rows);
   CACHE = { key: `${league.id}_${season}`, a };
@@ -176,8 +176,8 @@ export async function leagueStatsHtml(league, season, tab) {
     ['keepers', 'Keepers', a.withKeepers
       ? board('Clean sheets · keepers', keepers, { sub: (p) => `${clubOf(p)} · ${p.apps} ${p.apps === 1 ? 'duel' : 'duels'}`, note: `${noteP(`Op basis van ${a.withKeepers} van de ${a.total} wedstrijden met opstelling. Telt voor de basiskeeper, als hij niet gewisseld werd.`)}${lineupButton(a, 'Rest van de opstellingen ophalen')}` })
       : `<section class="section"><div class="section__label"><span>Clean sheets · keepers</span><span></span></div><p class="muted" style="font-size:var(--fs-md)">Hiervoor zijn de opstellingen van de duels nodig: 1 call per wedstrijd. De nachtploeg haalt ze ook vanzelf op.</p>${lineupButton(a, 'Opstellingen ophalen')}</section>`],
-  ];
-  return `<fieldset class="segmented segmented--4 ls-seg"><legend class="visually-hidden">Categorie</legend>
+  ].filter(([k]) => withKeepersTab || k !== 'keepers'); // beker: geen keepers (geen opstellingen van bekerduels)
+  return `<fieldset class="segmented segmented--${panels.length} ls-seg"><legend class="visually-hidden">Categorie</legend>
       ${panels.map(([k, l], i) => `<input type="radio" name="ls-cat" id="ls-${k}" value="${k}" ${i === 0 ? 'checked' : ''}><label for="ls-${k}">${l}</label>`).join('')}</fieldset>
     ${panels.map(([k, , html], i) => `<div data-ls-panel="${k}" ${i === 0 ? '' : 'hidden'}>${html}</div>`).join('')}`;
 }

@@ -8,7 +8,7 @@ import { live, push } from './api.js';
 import { MAIN_CLUB } from './config.js';
 import { getAllMatches } from './store.js';
 import { pushSupported } from './meldingen.js';
-import { loadProgram, boardWindow, todayRows, homeBarHtml, liveCount, liveMinute } from './liveboard.js';
+import { loadProgram, boardWindow, todayRows, homeBarHtml, liveCount, liveMinute, cupWindow, cupFollow } from './liveboard.js';
 
 const TEAM = MAIN_CLUB.id;
 const POLL = 15e3; // de Worker ververst elke 30 s (meting) of elke minuut
@@ -25,6 +25,7 @@ async function candidates() {
 }
 
 export const liveState = () => STATE;
+export const pollNow = () => poll();
 
 async function poll() {
   if (document.hidden) return;
@@ -34,7 +35,10 @@ async function poll() {
   // Alleen de Worker vragen als er iets in het venster zit, of eens per 5 minuten op een speeldag (uitslagen).
   if (!own && !boardWindow() && !(today && Date.now() - STATE.at > 5 * 60e3)) { paint(); return; }
   try {
-    STATE = { ...(await live()), at: Date.now() };
+    // Beker op aanvraag: alleen als er vandaag een bekerduel in het venster zit (de Worker ververst hooguit elke 2 min,
+    // een gevolgd duel elke 30 s).
+    const cup = cupWindow();
+    STATE = { ...(await live(cup ? { cup: 1, match: cupFollow() || undefined } : undefined)), at: Date.now() };
     paint();
     window.dispatchEvent(new CustomEvent('live:update'));
     takeResults();

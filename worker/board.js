@@ -156,3 +156,60 @@ export async function boardScheduled(env, time, deps) {
   if (calls.n && remaining != null && deps.saveRemaining && (Math.floor(now / 60e3) % 10 === 0 || remaining < 500)) await deps.saveRemaining(remaining);
   return { calls: calls.n, dirty, matches: board.matches.length };
 }
+
+// ---------- Beker live, op aanvraag van de app ----------
+// Geen vaste lus: de app vraagt /live?cup=1 zolang hij open is en er vandaag een bekerduel in het venster zit.
+// De daglijst hooguit eens per 2 minuten, een gevolgd duel (match=<id>) hooguit eens per 30 s. Twee apparaten
+// tegelijk vragen dus niet dubbel. (De Cache API werkt niet op workers.dev; daarom geheugen + KV.)
+export const CUP = 77374;
+const CUP_LIST_TTL = 110; // s
+const CUP_MATCH_TTL = 25; // s
+const MEM = new Map(); // k -> { exp, v }: blijft bewaard zolang dezelfde Worker-instantie draait
+let KVREF = null;
+async function cacheGet(k) {
+  const now = Date.now();
+  const m = MEM.get(k);
+  if (m && m.exp > now) return m.v;
+  if (!KVREF) return null;
+  const x = await KVREF.get('lvc:' + k, 'json').catch(() => null);
+  if (x && x.exp > now) { MEM.set(k, x); return x.v; }
+  return null;
+}
+async function cachePut(k, v, ttl) {
+  const x = { exp: Date.now() + ttl * 1000, v };
+  MEM.set(k, x);
+  if (KVREF) await KVREF.put('lvc:' + k, JSON.stringify(x), { expirationTtl: 300 }).catch(() => {});
+}
+
+/** deps: { base, remainingOf, state(), saveRemaining? }. Geeft { day, at, matches, detail } of null. */
+export async function cupLive(env, deps, matchId, now = Date.now()) {
+  if (!env.HIGHLIGHTLY_KEY) return null;
+  KVREF = env.MS_KV || null;
+  const ns = await deps.state();
+  if (!liveEnabled(ns)) return null;
+  const day = dayOf(now);
+  const f = deps.fetch || fetch;
+  const lowBudget = ns.remaining != null && ns.remaining < MIN_REMAINING;
+  let list = await cacheGet(`cup-${day}`);
+  if (!list && !lowBudget) {
+    const res = await f(`${deps.base}/matches?leagueId=${CUP}&date=${day}&limit=50`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });
+    if (res.ok) {
+      list = { day, at: new Date(now).toISOString(), matches: parseList(await res.text(), CUP).map((x) => ({ ...x, clockAt: new Date(now).toISOString(), anch: anchorsOf(null, x.status, x.clock, now, Date.parse(x.ko)) })) };
+      await cachePut(`cup-${day}`, list, CUP_LIST_TTL);
+    }
+  }
+  let detail = null;
+  const id = /^\d+$/.test(String(matchId || '')) ? String(matchId) : null;
+  if (id && list && list.matches.some((x) => x.id === id && (x.status === 'live' || x.status === 'ht'))) {
+    detail = await cacheGet(`cupm-${id}`);
+    if (!detail && !lowBudget) {
+      const res = await f(`${deps.base}/matches/${Number(id)}`, { headers: { 'x-rapidapi-key': env.HIGHLIGHTLY_KEY } });
+      const p = res.ok ? parseLive(await res.text()) : null;
+      if (p) {
+        detail = { id, status: p.status, clock: p.clock, score: p.score, at: new Date(now).toISOString(), events: p.events.filter((e) => e.kind !== 'sub').map((e) => ({ key: e.key, kind: e.kind, type: e.type, minute: e.minute, extra: e.extra, teamId: e.teamId, player: e.player })) };
+        await cachePut(`cupm-${id}`, detail, CUP_MATCH_TTL);
+      }
+    }
+  }
+  return list ? { ...list, detail } : null;
+}

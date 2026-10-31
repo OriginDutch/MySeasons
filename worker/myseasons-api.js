@@ -24,7 +24,7 @@ import { followUp } from './followup.js';
 import { squadApi, squadScheduled } from './squadpage.js';
 import { imgApi } from './imgproxy.js';
 import { liveScheduled, liveApi, askScheduled, optinApi } from './live.js';
-import { boardScheduled, boardBusy, boardActive, BOARD } from './board.js';
+import { boardScheduled, boardBusy, boardActive, BOARD, cupLive } from './board.js';
 
 const PROJECT_ID = 'myseasons-c1dd9';
 const HIGHLIGHTLY_BASE = 'https://soccer.highlightly.net';
@@ -459,7 +459,9 @@ export default {
     // Live-standen van de Cambuur-wedstrijd (de Worker vraagt ze op; geen Highlightly-call per app-verzoek).
     if (url.pathname === '/live') {
       if (!env.MS_KV) return json({ error: 'Live: KV-namespace MS_KV is nog niet gekoppeld' }, 501, origin);
-      return liveApi(env, (b, st) => json(b, st, origin, { 'Cache-Control': 'no-store' }));
+      // Beker op aanvraag: ?cup=1 (en &match=<id> voor een duel dat je volgt).
+      const cup = url.searchParams.get('cup') ? await cupLive(env, { base: HIGHLIGHTLY_BASE, remainingOf, state: () => nsGet(env, NS_STATE, {}) }, url.searchParams.get('match')).catch(() => null) : null;
+      return liveApi(env, (b, st) => json(cup ? { ...b, cup } : b, st, origin, { 'Cache-Control': 'no-store' }));
     }
 
     // Gezondheidscheck: geen Highlightly-call, kost geen quotum.

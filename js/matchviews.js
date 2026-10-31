@@ -534,7 +534,17 @@ export const matchViews = {
         return { ...p, count: ms.length, mine: ms.some((m) => [m.home, m.away].some((t) => t && (t.id === TEAM || /cambuur/i.test(t.name || '')))), label: ms.length ? `${played} ${played === 1 ? 'duel' : 'duels'}` : expected ? 'verwacht' : '' , show: ms.length > 0 || expected };
       }).filter((p) => p.show);
       const poChosen = args[0] && playoffInfo(args[0]);
-      const listHtml = leagueListHtml({ current: poChosen ? poChosen.key : league && league.id, mine: mine && mine.id, avail, clubName: MAIN_CLUB.name, post });
+      const CV = await import('./cupview.js');
+      const isCup = Number(args[0]) === CV.CUP_ID;
+      const cupInfo = await CV.cupSub(getSeason()).catch(() => ({ sub: '', mine: false }));
+      const cups = [{ id: CV.CUP_ID, name: 'KNVB Beker', sub: cupInfo.sub, mine: cupInfo.mine }];
+      const listHtml = leagueListHtml({ current: isCup ? CV.CUP_ID : poChosen ? poChosen.key : league && league.id, mine: mine && mine.id, avail, clubName: MAIN_CLUB.name, post, cups });
+      if (isCup) {
+        LEAGUE_SHEET = listHtml;
+        const cupHead = `<header class="page-head"><div class="page-head__titles"><span class="page-head__kicker">${esc(kicker)}</span>
+          <button class="lg-pick" type="button" data-league-pick aria-label="Andere competitie kiezen"><h1 class="page-head__title">KNVB Beker</h1><span class="lg-chev" aria-hidden="true">▾</span></button></div></header>`;
+        return `${cupHead}${await CV.cupHtml(getSeason(), args[1])}`;
+      }
       if (poChosen) {
         LEAGUE_SHEET = listHtml;
         return playoffsPage(poChosen, po[poChosen.key] || [], { listHtml, kicker, rs });
@@ -622,7 +632,8 @@ export const matchViews = {
     },
     mount(root, ctx) {
       root.querySelector('[data-league-pick]')?.addEventListener('click', () => openLeagueSheet(LEAGUE_SHEET, seasonLabel()));
-      if (root.querySelector('[name="ls-cat"], [data-ls-lineups]')) import('./leaguestats.js').then((x) => x.mountLeagueStats(root, ctx));
+      if (root.querySelector('[data-cup]')) import('./cupview.js').then((x) => x.mountCup(root, ctx));
+      else if (root.querySelector('[name="ls-cat"], [data-ls-lineups]')) import('./leaguestats.js').then((x) => x.mountLeagueStats(root, ctx));
       fitLeagueSide(root);
       root.addEventListener('click', async (e) => {
         const b = e.target.closest('[data-action="sync-league"]');

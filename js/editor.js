@@ -268,6 +268,19 @@ function itemHtml(m, s) {
   </label>`;
 }
 
+/** Logo's: jij koos een eigen logo (club zonder logo bij Highlightly), en nu heeft Highlightly er wél een. */
+async function logoDiffsHtml() {
+  const { getClubMarks, getAllLeagueTeams } = await import('./store.js');
+  const [marks, teams] = await Promise.all([getClubMarks(), getAllLeagueTeams()]);
+  const rows = teams.filter((t) => { const m = marks[t.id]; return m && m.logoOwn && t.apiLogo && t.apiLogo !== m.logoKeep; });
+  if (!rows.length) return '';
+  return `<section class="section"><div class="section__label"><span>Logo's: jouw logo vs Highlightly</span><span>${rows.length}</span></div>
+    <div class="list">${rows.map((t) => `<div class="list-row logo-diff"><span class="list-row__main"><span class="list-row__title">${esc(t.name)}</span>
+      <span class="list-row__sub">Highlightly heeft nu een logo voor deze club.</span></span>
+      <span class="logo-diff__pair"><img src="${esc(marks[t.id].logoOwn)}" alt="jouw logo" width="32" height="32"><span aria-hidden="true">↔</span><img src="${esc(t.apiLogo)}" alt="logo van Highlightly" width="32" height="32"></span>
+      <span class="btn-row"><button class="btn btn--sm" type="button" data-logo-take="${esc(String(t.id))}">Highlightly</button><button class="btn btn--sm" type="button" data-logo-keep="${esc(String(t.id))}" data-api="${esc(t.apiLogo)}">De mijne</button></span></div>`).join('')}</div></section>`;
+}
+
 export const editorViews = {
   afwijkingen: {
     title: 'Afwijkingen',
@@ -287,8 +300,9 @@ export const editorViews = {
         <a class="back-btn" href="#/${esc(back)}" aria-label="Terug">${icons.back}</a>
         <span class="page-head__kicker">${onlyId ? 'Wedstrijd / Afwijkingen' : 'Meer / Afwijkingen'}</span>
         <h1 class="page-head__title">Afwijkingen</h1></div></header>`;
+      const logoBlock = onlyId ? '' : await logoDiffsHtml().catch(() => '');
       if (!all.length) {
-        if (manualBlock) return `${head}${manualBlock}`;
+        if (manualBlock || logoBlock) return `${head}${manualBlock}${logoBlock}`;
         return `${head}<section class="section"><div class="empty"><span class="empty__title">Alles klopt met Highlightly</span>
           <p class="muted">Pas je op een wedstrijdpagina een goal, kaart, wissel of uitslag aan, dan zie je dat hier terug. Bij een sync wordt jouw waarde nooit stil overschreven.</p></div></section>`;
       }
@@ -297,7 +311,7 @@ export const editorViews = {
         const n = v === 'all' ? all.length : all.filter((s) => (name === 'type' ? FILTER_OF[s.kind] : s.status) === v).length;
         return `<label class="chip"><input type="radio" name="f-${name}" value="${v}" ${i === 0 ? 'checked' : ''}><span>${esc(l)} <span class="mono">${n}</span></span></label>`;
       }).join('')}</div>`;
-      return `${head}${manualBlock}
+      return `${head}${manualBlock}${logoBlock}
         <section class="section">
           <p class="muted" style="font-size:var(--fs-md)">${all.length} ${all.length === 1 ? 'veld wijkt' : 'velden wijken'} af van Highlightly${conflicts ? `, waarvan <strong class="accent-text">${conflicts} met een conflict</strong>: Highlightly heeft die waarde sinds jouw aanpassing veranderd` : ''}. Tot je kiest, geldt jouw waarde.</p>
           ${chips('type', TYPE_FILTERS)}
@@ -316,6 +330,19 @@ export const editorViews = {
         </form>`;
     },
     mount(root, ctx) {
+      root.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-logo-take], [data-logo-keep]');
+        if (!b) return;
+        const id = b.dataset.logoTake || b.dataset.logoKeep;
+        const { getClubMarks, saveClubMarksBatch } = await import('./store.js');
+        const { setOne } = await import('./clubnames.js');
+        const marks = await getClubMarks().catch(() => ({}));
+        const patch = b.dataset.logoTake ? { logoOwn: null, logoKeep: null } : { logoKeep: b.dataset.api };
+        await saveClubMarksBatch([[id, patch]]);
+        setOne(id, { ...(marks[id] || {}), ...patch });
+        toast(b.dataset.logoTake ? 'Logo van Highlightly overgenomen' : 'Je eigen logo blijft');
+        ctx.refresh();
+      });
       const form = root.querySelector('[data-dev-form]');
       if (!form) return;
       const items = [...form.querySelectorAll('.dev')];

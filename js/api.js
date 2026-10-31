@@ -87,8 +87,8 @@ export function rsssf(year) {
 
 // ---------- Nachtploeg (Worker-wachtrij + brievenbus) ----------
 /** Live-standen die de Worker bijhoudt (geen Highlightly-call). */
-export function live() {
-  return call('/live');
+export function live(params) {
+  return call('/live', params);
 }
 
 export const ns = {

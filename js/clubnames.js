@@ -18,8 +18,9 @@ export function setClubOverrides(marks) {
 }
 
 export function setOne(id, m) {
-  const o = { name: clean(m && m.nameOverride), short: clean(m && m.shortName), code: clean(m && m.code).toUpperCase().slice(0, 4) };
-  if (o.name || o.short || o.code) overrides.set(String(id), o); else overrides.delete(String(id));
+  const logo = m && typeof m.logoOwn === 'string' && m.logoOwn.startsWith('data:image/') ? m.logoOwn : '';
+  const o = { name: clean(m && m.nameOverride), short: clean(m && m.shortName), code: clean(m && m.code).toUpperCase().slice(0, 4), logo };
+  if (o.name || o.short || o.code || o.logo) overrides.set(String(id), o); else overrides.delete(String(id));
 }
 
 export const overrideOf = (id) => overrides.get(String(id)) || null;
@@ -83,6 +84,9 @@ export function nameTeam(t) {
   t.name = (o && o.name) || api;
   t.short = (o && o.short) || t.name;
   t.code = (o && o.code) || defaultCode(t.name);
+  // Eigen logo (clubs zonder logo bij Highlightly, zoals amateurclubs in de beker). Highlightly's logo in apiLogo.
+  if (!('apiLogo' in t)) t.apiLogo = t.logo || null;
+  t.logo = (o && o.logo) || t.apiLogo;
   return t;
 }
 
@@ -99,9 +103,11 @@ export function nameStandings(st) {
 /** Terug naar Highlightly-naam voor opslag. Geeft een kopie. */
 export function rawTeam(t) {
   if (!t || typeof t !== 'object') return t;
-  const { short, code, apiName, ...rest } = t;
+  const { short, code, apiName, apiLogo, ...rest } = t;
   const api = apiName || t.name;
-  return { ...rest, name: api, apiName: api };
+  const out = { ...rest, name: api, apiName: api };
+  if (apiLogo !== undefined) out.logo = apiLogo; // eigen logo nooit in de wedstrijddata
+  return out;
 }
 
 export function rawMatch(m) {
