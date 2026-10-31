@@ -6,7 +6,8 @@
 
 import { esc, toast } from './ui.js';
 import { MAIN_CLUB } from './config.js';
-import { getLeagueMatches, getSeasonMatches, getClubMarks, saveClubMarksBatch, getMeta } from './store.js';
+import { getLeagueMatches, getSeasonMatches, getClubMarks, saveClubMarksBatch, getMeta, getAllNotes } from './store.js';
+import { applyResultStands } from './corrections.js';
 import { setOne } from './clubnames.js';
 import { prepareImage } from './photos.js';
 
@@ -52,7 +53,7 @@ const extraOf = (m) => {
 
 /** Alle bekerduels van een seizoen: de lijst van de nachtploeg, met de Cambuur-duels uit je eigen data erover. */
 export async function cupMatches(season) {
-  const [lm, own] = await Promise.all([getLeagueMatches(CUP_ID, season).catch(() => []), getSeasonMatches(season).catch(() => [])]);
+  const [lm, own] = await Promise.all([getLeagueMatches(CUP_ID, season).catch(() => []), getSeasonMatches(season).catch(() => []).then((l) => getAllNotes().catch(() => ({})).then((n) => applyResultStands(l, n)))]);
   const map = new Map(lm.map((m) => [String(m.id), m]));
   own.filter((m) => m.league && Number(m.league.id) === CUP_ID).forEach((m) => map.set(String(m.id), { ...(map.get(String(m.id)) || {}), ...m }));
   return [...map.values()].filter((m) => m.homeTeam && m.awayTeam && m.status !== 'cancelled')

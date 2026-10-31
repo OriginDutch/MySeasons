@@ -225,8 +225,8 @@ export async function editNotes(m, notes) {
   };
   const sameMotm = JSON.stringify(next.motm || null) === JSON.stringify(n.motm || null);
   if (next.attendance === (n.attendance ?? null) && next.awayFans === (n.awayFans ?? null) && next.note === (n.note || null) && !!next.neutral === !!n.neutral && sameMotm) { toast('Niets veranderd'); return false; }
-  await saveNotes(m.id, next);
-  toast('Opgeslagen');
+  const { settled } = await import('./store.js');
+  toast(await settled(saveNotes(m.id, next)) ? 'Opgeslagen' : 'Opgeslagen op je telefoon · wordt verstuurd zodra je verbinding hebt');
   return true;
 }
 

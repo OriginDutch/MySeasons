@@ -1137,3 +1137,4 @@ a.po-team:hover span { text-decoration: underline; }
 .pred-tabs button[aria-current="page"] { border-color: var(--ink); font-weight: 600; }
 .section > [data-tabs] .lineup__bench, .section > .lineup__bench, [data-tab-panel] .lineup__bench { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 3px; font-size: var(--fs-md); }
 [data-tab-panel] .lineup__subs { margin-top: 10px; font-size: var(--fs-xs); text-transform: uppercase; }
+.pending-pill { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; transform: translateX(-50%); z-index: 50; background: var(--inverse-bg); color: var(--inverse-ink); border-radius: 999px; padding: 6px 14px; font-size: var(--fs-sm); box-shadow: 0 4px 14px #0004; max-width: calc(100% - 32px); text-align: center; }

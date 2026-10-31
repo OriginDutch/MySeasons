@@ -14,6 +14,9 @@ const OFFLINE_WAIT = 6000;
 export function createLive({ onSnapshot, storage = (typeof localStorage !== 'undefined' ? localStorage : null), wait = OFFLINE_WAIT }) {
   const entries = new Map();
   let handler = null;
+  // Wijzigingen die nog op dit apparaat wachten (geen verbinding): per collectie/query. Voor het teken in de kop.
+  const pendingKeys = new Set(); let pendingFn = null;
+  const setPending = (key, on) => { const had = pendingKeys.has(key); if (on) pendingKeys.add(key); else pendingKeys.delete(key); if (had !== on && pendingFn) pendingFn(pendingKeys.size); };
   let pending = new Set();
   let timer = null;
 
@@ -40,6 +43,7 @@ export function createLive({ onSnapshot, storage = (typeof localStorage !== 'und
       let done = false; let t = null;
       const finish = () => { if (!done) { done = true; clearTimeout(t); resolve(); } };
       e.unsub = onSnapshot(ref, { includeMetadataChanges: true }, (snap) => {
+        setPending(key, !!snap.metadata.hasPendingWrites);
         const fromCache = snap.metadata.fromCache;
         const before = e.sig;
         e.snap = snap;
@@ -65,6 +69,8 @@ export function createLive({ onSnapshot, storage = (typeof localStorage !== 'und
     docs: (key, ref) => listen(key, ref, false).then((s) => s.docs),
     doc: (key, ref) => listen(key, ref, true),
     setHandler: (fn) => { handler = fn; },
+    setPendingHandler: (fn) => { pendingFn = fn; },
+    pendingCount: () => pendingKeys.size,
     stopAll: () => { entries.forEach((e) => e.unsub && e.unsub()); entries.clear(); },
     size: () => entries.size,
   };

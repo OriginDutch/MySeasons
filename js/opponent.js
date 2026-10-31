@@ -6,7 +6,8 @@
 
 import { esc } from './ui.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
-import { getLeagueMatches, getAllMatches, attachDetails } from './store.js';
+import { getLeagueMatches, getAllMatches, attachDetails, getAllNotes } from './store.js';
+import { applyResultStands } from './corrections.js';
 import { discipline, statusFor, disciplineFor } from './discipline.js';
 
 const TEAM = MAIN_CLUB.id;
@@ -29,7 +30,7 @@ function resultFor(m, teamId) {
 async function matchesOf(teamId, season) {
   const [lists, own] = await Promise.all([
     Promise.all(LEAGUES.map((l) => getLeagueMatches(l, season).catch(() => []))),
-    getAllMatches().then((l) => attachDetails(l.filter((m) => m.league && Number(m.league.season) === season && [m.homeTeam, m.awayTeam].some((t) => t && t.id === teamId)))).catch(() => []),
+    getAllMatches().then((l) => attachDetails(l.filter((m) => m.league && Number(m.league.season) === season && [m.homeTeam, m.awayTeam].some((t) => t && t.id === teamId)))).then((l) => getAllNotes().catch(() => ({})).then((n) => applyResultStands(l, n))).catch(() => []),
   ]);
   const map = new Map();
   lists.flat().filter((m) => [m.homeTeam, m.awayTeam].some((t) => t && t.id === teamId)).forEach((m) => map.set(String(m.id), { ...m, detail: m.events ? { events: m.events } : null }));

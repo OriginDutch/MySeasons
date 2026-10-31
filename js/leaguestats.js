@@ -8,7 +8,8 @@
 
 import { esc, toast } from './ui.js';
 import { MAIN_CLUB } from './config.js';
-import { getLeagueMatches, getSeasonMatches, saveLeagueExtra, addToLeagueIndex, countCalls } from './store.js';
+import { getLeagueMatches, getSeasonMatches, saveLeagueExtra, addToLeagueIndex, countCalls, getAllNotes } from './store.js';
+import { applyResultStands } from './corrections.js';
 import { hl } from './api.js';
 import { normalizeLineups } from './normalize.js';
 
@@ -27,7 +28,7 @@ const gkOf = (side) => {
 
 /** Alle gespeelde duels van deze competitie en dit seizoen, met events en keepers waar bekend. */
 async function collect(leagueId, season) {
-  const [lm, own] = await Promise.all([getLeagueMatches(leagueId, season).catch(() => []), getSeasonMatches(season).catch(() => [])]);
+  const [lm, own] = await Promise.all([getLeagueMatches(leagueId, season).catch(() => []), getSeasonMatches(season).catch(() => []).then((l) => getAllNotes().catch(() => ({})).then((n) => applyResultStands(l, n)))]);
   const map = new Map();
   lm.forEach((m) => map.set(String(m.id), m));
   own.filter((m) => m.league && Number(m.league.id) === Number(leagueId)).forEach((m) => map.set(String(m.id), { ...(map.get(String(m.id)) || {}), ...m, own: true }));

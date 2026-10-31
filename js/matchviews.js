@@ -697,7 +697,7 @@ export const matchViews = {
               return `<a class="list-row match-row${twin || m.status === 'postponed' ? ' match-row--dim' : ''}" href="#/wedstrijd/${m.id}">
                 <span class="match-row__date mono">${esc(dayShort(m.date))}</span>
                 <span class="list-row__main"><span class="list-row__title">${matchTitle(m)}</span>
-                  <span class="list-row__sub">${esc(compName(m))}${m.round && !/friendl/i.test(m.round) ? ' · ' + esc(shortRound(m.round)) : ''}${m.detail ? ' · details ✓' : ''}${twin ? ` · dubbel · zie ${esc(dayShort(twin.date))}` : ''}</span></span>
+                  <span class="list-row__sub">${esc(compName(m))}${m.round && !/friendl/i.test(m.round) ? ' · ' + esc(shortRound(m.round)) : ''}${m.detail ? ' · details ✓' : ''}${twin ? ` · dubbel · zie ${esc(dayShort(twin.date))}` : ''}${m.resultStands ? ' · gestaakt, uitslag telt' : ''}</span></span>
                 ${matchMore(m, coaches)}
                 <span class="match-row__end mono">${m.status === 'finished' ? `${scoreText(m)} ${resultChip(m)}` : word ? `<span class="muted">${esc(twin ? 'dubbel' : word)}</span>` : esc(timeOf(m.date))}</span>
               </a>`;
@@ -822,6 +822,8 @@ export const matchViews = {
           ${twin ? `<a class="warn-line" href="#/wedstrijd/${twin.id}" style="display:block;text-decoration:none">Deze wedstrijd staat er dubbel in (${esc(m.stateText || 'niet gespeeld')}). De gespeelde versie: ${esc(twin.homeTeam.name)} – ${esc(twin.awayTeam.name)}, ${esc(dayShort(twin.date))} →</a>` : ''}
           ${m.playedByManual ? '<p class="muted" style="font-size:var(--fs-sm)">Gespeeld volgens jouw invoer. Highlightly: nog niet bekend.</p>' : ''}
           ${m.status !== 'finished' ? await import('./livescore.js').then((x) => x.bellHtml(m)).catch(() => '') : ''}
+          ${m.resultStands ? `<p class="warn-line" style="margin:0">Gestaakt · de uitslag telt (jouw keuze). Highlightly: ${esc(m.stateText || m.apiStatus || 'niet afgelopen')}. <button class="link-btn" type="button" data-action="result-stands-off">Terugdraaien</button></p>` : ''}
+          ${!m.resultStands && m.status !== 'finished' && m.score && !m.manual && (/abandon|suspend|gestaakt|interrupt/i.test(m.stateText || '') || Date.parse(m.date) < Date.now() - 3 * 3600e3) ? `<div class="btn-row"><button class="btn" type="button" data-action="result-stands">Gestaakt · uitslag ${m.score.home}–${m.score.away} blijft staan</button></div><p class="muted" style="font-size:var(--fs-sm);margin:0">Highlightly ziet dit duel niet als afgelopen (${esc(m.stateText || m.status)}). Besliste de KNVB dat de uitslag blijft staan? Dan telt hij met deze knop mee in de stand en de stats.</p>` : ''}
           ${m.manualDetail && m.apiDetail ? (() => { const n = openDiffs(notes.manual, m.apiDetail, m, TEAM); return n ? `<a class="warn-line" href="#/vergelijk/${m.id}" style="display:block;text-decoration:none">Highlightly heeft nu ook details: ${n} ${n === 1 ? 'verschil' : 'verschillen'} met jouw invoer. Vergelijken →</a>` : ''; })() : ''}
           ${twin || m.status === 'postponed'
             ? (m.manual ? '<div class="btn-row"><button class="btn" type="button" data-action="delete-match">Wedstrijd verwijderen</button></div>' : `<p class="muted" style="font-size:var(--fs-sm)">${twin ? 'Vul de details in bij de gespeelde versie.' : `Deze wedstrijd is ${esc(word)}: geen details.`}</p>`)
@@ -858,6 +860,13 @@ export const matchViews = {
           if (a === 'delete-match') { if (await import('./manualview.js').then((x) => x.deleteManualMatch(apiM, notes))) { location.hash = '#/wedstrijden'; return; } }
           if (a === 'edit-event') changed = await editEvent(apiM, notes, btn.dataset.sig, ctx.refresh);
           if (a === 'edit-notes') changed = await editNotes(apiM, notes);
+          if (a === 'result-stands' || a === 'result-stands-off') {
+            const { saveNotes, settled } = await import('./store.js');
+            const on = a === 'result-stands';
+            const ok = await settled(saveNotes(apiM.id, { resultStands: on || null }));
+            toast(`${on ? 'De uitslag telt' : 'Weer zoals Highlightly'}${ok ? '' : ' · wordt verstuurd zodra je verbinding hebt'}`);
+            changed = true;
+          }
         } catch (err) {
           toast(`Opslaan lukte niet: ${err.message || err}`);
         }

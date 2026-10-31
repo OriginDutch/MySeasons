@@ -169,7 +169,20 @@ export function applyCorrections(match, notes) {
       out.status = 'finished'; out.score = out.score || manualScore(notes.manual, out, MAIN_CLUB.id); out.playedByManual = true;
     }
   }
+  // Gestaakt, maar de uitslag blijft staan (KNVB: vroegtijdig beëindigd): telt als gespeeld met de stand van dat moment.
+  if (notes && notes.resultStands && out.score && out.status !== 'finished') {
+    out.apiStatus = out.apiStatus || out.status;
+    out.status = 'finished'; out.resultStands = true;
+  }
   return { match: out, statuses };
+}
+
+/** Lijst zonder het hele correctie-verhaal, alleen "uitslag blijft staan" (voor stats en voorspellingen). */
+export function applyResultStands(list, notesMap) {
+  return (list || []).map((m) => {
+    const n = notesMap && notesMap[String(m.id)];
+    return n && n.resultStands && m.score && m.status !== 'finished' ? { ...m, apiStatus: m.status, status: 'finished', resultStands: true } : m;
+  });
 }
 
 /**

@@ -160,7 +160,7 @@ export function crowdSummary(list, teamId, leagueId) {
 /** Woord voor een wedstrijd die niet gespeeld is (of null). Highlightly zegt Cancelled, Postponed of To be announced. */
 export function stateWord(m, now = Date.now()) {
   if (!m || m.status === 'finished') return null;
-  if (m.status === 'postponed') return /cancel|abandon/i.test(m.stateText || '') ? 'afgelast' : 'uitgesteld';
+  if (m.status === 'postponed') return /abandon|suspend|interrupt/i.test(m.stateText || '') ? 'gestaakt' : /cancel/i.test(m.stateText || '') ? 'afgelast' : 'uitgesteld';
   if (m.status === 'scheduled' && ts(m) < now - 3 * 3600e3) return 'datum onbekend';
   return null;
 }

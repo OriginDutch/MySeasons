@@ -9,7 +9,7 @@ import { setSeason } from './seasonstate.js';
 import { CURRENT_SEASON } from './config.js';
 import { autoSync } from './nightshift.js';
 import { clubNamesLoaded, setClubOverrides, teamAliasesLoaded, setTeamAliases } from './clubnames.js';
-import { getClubMarks, getAllLeagueTeams, setLiveChangeHandler, getAllMatches, migrateDetails } from './store.js';
+import { getClubMarks, getAllLeagueTeams, setLiveChangeHandler, setPendingHandler, getAllMatches, migrateDetails } from './store.js';
 import { ensureLeagues } from './leagues.js';
 import { startLive, paint as paintLive } from './livescore.js';
 
@@ -160,6 +160,19 @@ ctx.refresh = () => route({ keepScroll: true });
 // Live cache: komt er op de achtergrond iets nieuws binnen (andere telefoon/pc, nachtploeg), dan het scherm
 // stil verversen. Niet tijdens een open blad of terwijl je typt; hooguit eens per 5 seconden.
 let lastLive = 0; let liveWaiting = false;
+// "Nog niet verstuurd": wijzigingen die op dit apparaat wachten (geen of slechte verbinding). Pas na 2 s tonen,
+// zodat een gewone opslag met verbinding niet even oplicht.
+let pendingTimer = null;
+setPendingHandler((n) => {
+  let pill = document.getElementById('pending-pill');
+  clearTimeout(pendingTimer);
+  if (!n) { if (pill) pill.remove(); return; }
+  pendingTimer = setTimeout(() => {
+    if (!pill) { pill = document.createElement('div'); pill.id = 'pending-pill'; pill.className = 'pending-pill'; pill.setAttribute('role', 'status'); document.body.append(pill); }
+    pill.textContent = '⟳ Wijziging nog niet verstuurd · gaat vanzelf zodra je verbinding hebt';
+  }, 2000);
+});
+
 setLiveChangeHandler(() => {
   const busy = () => document.querySelector('dialog[open]') || (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
   const go = () => {

@@ -10,7 +10,8 @@
 
 import { esc } from './ui.js';
 import { MAIN_CLUB } from './config.js';
-import { getLeagueMatches, getLeagueDetail, getAllMatches, attachDetails, getPlayers, getPrediction, savePrediction, getAllPredictions } from './store.js';
+import { getLeagueMatches, getLeagueDetail, getAllMatches, attachDetails, getPlayers, getPrediction, savePrediction, getAllPredictions, getAllNotes } from './store.js';
+import { applyResultStands } from './corrections.js';
 import { discipline, statusFor, disciplineFor } from './discipline.js';
 
 const TEAM = MAIN_CLUB.id;
@@ -31,7 +32,7 @@ export function formationCounts(f) {
 async function teamMatches(teamId, season) {
   const [lists, own] = await Promise.all([
     Promise.all([75672, 76523, CUP].map((l) => getLeagueMatches(l, season).catch(() => []))),
-    getAllMatches().then((l) => attachDetails(l.filter((m) => m.league && Number(m.league.season) === season && has(m, teamId)))).catch(() => []),
+    getAllMatches().then((l) => attachDetails(l.filter((m) => m.league && Number(m.league.season) === season && has(m, teamId)))).then((l) => getAllNotes().catch(() => ({})).then((n) => applyResultStands(l, n))).catch(() => []),
   ]);
   const map = new Map();
   lists.flat().filter((m) => has(m, teamId)).forEach((m) => map.set(String(m.id), { ...m }));

@@ -2,7 +2,8 @@
 // competitiewedstrijden (leagueMatches), dan rekenen we de stand zelf uit de uitslagen.
 // Puntenaftrek nemen we over uit de Highlightly-stand: het verschil tussen hun punten en W/G/V.
 
-import { getStandings, getLeagueMatches } from './store.js';
+import { getStandings, getLeagueMatches, getAllNotes } from './store.js';
+import { applyResultStands } from './corrections.js';
 import { rankRows } from './rules.js';
 
 const blank = () => ({ played: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 });
@@ -52,7 +53,8 @@ export function liveStandings(hl, matches) {
 
 /** De meest actuele stand plus alle competitiewedstrijden (voor periodes en onderling resultaat). */
 export async function standingsAndMatches(leagueId, season) {
-  const [hl, all] = await Promise.all([getStandings(leagueId, season), getLeagueMatches(leagueId, season).catch(() => [])]);
+  const [hl, all0, notes] = await Promise.all([getStandings(leagueId, season), getLeagueMatches(leagueId, season).catch(() => []), getAllNotes().catch(() => ({}))]);
+  const all = applyResultStands(all0, notes); // gestaakt maar de uitslag blijft staan (jouw keuze)
   const lm = regularOnly(all);
   if (!lm.length) return { standings: hl, matches: lm };
   const live = liveStandings(hl, lm);

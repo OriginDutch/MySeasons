@@ -20,6 +20,7 @@ import { createLive } from './live.js';
 // Live cache: één listener per collectie/query, daarna alleen wijzigingen (zie live.js).
 const live = createLive({ onSnapshot });
 export const setLiveChangeHandler = (fn) => live.setHandler(fn);
+export const setPendingHandler = (fn) => live.setPendingHandler(fn);
 const coll = (name) => live.docs(name, collection(db, name));
 const one = async (name, id) => { const s = await live.doc(`${name}/${id}`, doc(db, name, String(id))); return s.exists() ? s.data() : null; };
 const byId = async (name, id) => { const d = (await coll(name)).find((x) => x.id === String(id)); return d ? d.data() : null; };
@@ -35,6 +36,17 @@ export async function getAllNotes() {
   const out = {};
   (await coll('matchNotes')).forEach((d) => { out[d.id] = d.data(); });
   return out;
+}
+
+/**
+ * Wachten op de server, maar hooguit even: zonder (goede) verbinding staat de wijziging al op je telefoon en
+ * stuurt Firestore hem later. Geeft true (bevestigd) of false (nog niet verstuurd).
+ */
+export async function settled(promise, ms = 1500) {
+  let ok = false;
+  promise.then(() => { ok = true; }, () => {});
+  await Promise.race([promise.catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
+  return ok;
 }
 
 export function saveNotes(id, partial) {
