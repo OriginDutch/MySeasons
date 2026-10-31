@@ -284,6 +284,20 @@ export async function getLeagueMatches(leagueId, season) {
   return (await live.docs(`lm:${Number(leagueId)}:${Number(season)}`, q)).map((d) => nameMatch(d.data()));
 }
 
+// ---------- Verwachte opstellingen: predictions/{matchId} = { [teamId]: { sig, formation, ids, names, at } } ----------
+export async function getPrediction(matchId) {
+  const d = await getDoc(doc(db, 'predictions', String(matchId)));
+  return d.exists() ? d.data() : null;
+}
+export function savePrediction(matchId, teamId, p) {
+  return setDoc(doc(db, 'predictions', String(matchId)), { [teamId]: p }, { merge: true });
+}
+export async function getAllPredictions() {
+  const out = {};
+  (await getDocs(collection(db, 'predictions'))).forEach((d) => { out[d.id] = d.data(); });
+  return out;
+}
+
 // ---------- Volledig verloop van andere duels: leagueDetails/{id} ----------
 // Compact (genormaliseerd, geen ruwe Highlightly-antwoorden), los van leagueMatches: alleen gelezen als je zo'n duel opent.
 export async function getLeagueDetail(id) {

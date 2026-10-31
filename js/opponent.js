@@ -1,12 +1,12 @@
 // De tegenstander in de voorbeschouwing (Home onder de cover, en de pagina van het komende Cambuur-duel):
-// hun vorm, de waarschijnlijke opstelling (de basis van hun laatste duel), topscorer, assistkoning, en wie er
-// geschorst is of één kaart van een schorsing af zit. Alles uit data die er al is: de competitie- en bekerlijsten
+// hun vorm, topscorer, assistkoning, en wie er geschorst is of één kaart van een schorsing af zit.
+// De verwachte opstellingen (beide clubs) staan in predict.js. Alles uit data die er al is: de competitie- en bekerlijsten
 // (met events) en het volledige verloop van hun laatste duel (leagueDetails, of je eigen details als dat tegen
 // Cambuur was). Geen calls.
 
 import { esc } from './ui.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
-import { getLeagueMatches, getLeagueDetail, getAllMatches, attachDetails } from './store.js';
+import { getLeagueMatches, getAllMatches, attachDetails } from './store.js';
 import { discipline, statusFor, disciplineFor } from './discipline.js';
 
 const TEAM = MAIN_CLUB.id;
@@ -62,14 +62,6 @@ export async function opponentHtml(next) {
   const top = (map) => [...map.entries()].sort((a, b) => b[1] - a[1])[0] || null;
   const ts = top(goals); const ta = top(assists);
 
-  // Waarschijnlijke opstelling: de basis van hun laatste duel met opstelling.
-  let lineup = null; let from = null;
-  for (const m of played.slice().reverse().slice(0, 4)) {
-    const d = m.own ? m.detail : await getLeagueDetail(m.id).catch(() => null);
-    const side = d && d.lineups ? ['home', 'away'].map((k) => d.lineups[k]).find((l) => l && l.teamId === opp.id) : null;
-    if (side && side.starters && side.starters.length) { lineup = side; from = m; break; }
-  }
-
   // Schorsingen: dezelfde KNVB-regels als bij Cambuur, uit hun kaarten.
   const pills = [];
   if (ts) pills.push(`⚽ ${esc(names.get(ts[0]) || '?')} · ${ts[1]} ${ts[1] === 1 ? 'goal' : 'goals'}`);
@@ -83,18 +75,8 @@ export async function opponentHtml(next) {
     });
   }
 
-  const lineHtml = lineup ? (() => {
-    const lines = new Map();
-    lineup.starters.forEach((p) => { const k = p.line ?? 0; lines.set(k, [...(lines.get(k) || []), p]); });
-    const scorer = ts ? ts[0] : null;
-    return [...lines.keys()].sort((a, b) => a - b).map((k) => lines.get(k).map((p) => (p.id === scorer ? `<b>${esc(p.name)}</b>` : esc(p.name))).join(', ')).join(' · ');
-  })() : '';
-  const fromTxt = from ? `De basis van hun laatste duel (${esc(from.homeTeam.name)} – ${esc(from.awayTeam.name)})${ts && lineup.starters.some((p) => p.id === ts[0]) ? '; vetgedrukt hun topscorer' : ''}.` : '';
-
   return `<section class="section opp-block">
     <div class="section__label"><span>${esc(opp.name)} · laatste ${form.length}</span><span class="opp-form">${form.map(({ r, m }) => `<span class="opp-r opp-r--${r}" title="${esc(m.homeTeam.name)} ${m.score.home}–${m.score.away} ${esc(m.awayTeam.name)}">${r}</span>`).join('')}</span></div>
-    ${lineup ? `<div class="section__label" style="border:0;padding-top:4px"><span>Waarschijnlijke opstelling</span><span class="mono">${esc(lineup.formation || '')}</span></div>
-      <p class="opp-lineup">${lineHtml}</p><p class="muted opp-note">${fromTxt}</p>` : ''}
     ${pills.length ? `<div class="opp-pills">${pills.map((p) => `<span class="opp-pill">${p}</span>`).join('')}</div>` : ''}
   </section>`;
 }

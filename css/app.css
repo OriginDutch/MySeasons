@@ -1102,3 +1102,13 @@ a.po-team:hover span { text-decoration: underline; }
 .opp-note { font-size: var(--fs-xs); margin: 4px 0 0; }
 .opp-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .opp-pill { border: 1px solid var(--hairline); border-radius: 999px; padding: 3px 9px; font-size: var(--fs-sm); }
+
+/* ---------- Verwachte opstellingen ---------- */
+.pred + .pred { border-top: 1px solid var(--hairline); margin-top: 8px; }
+.pred-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pred-lines li { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: var(--fs-md); }
+.pred-p--twijfel { color: var(--muted); }
+.pred-note { font-size: var(--fs-xs); margin: 6px 0 0; }
+.pred-check + .pred-check { border-top: 1px solid var(--hairline); margin-top: 8px; padding-top: 8px; }
+.pred-check__head { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-md); }
+.pred-swap { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-sm); margin: 6px 0 0; }

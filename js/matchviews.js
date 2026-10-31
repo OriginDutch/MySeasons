@@ -828,9 +828,10 @@ export const matchViews = {
               ${m.hlSearch && m.hlSearch.found === false ? `<p class="muted" style="font-size:var(--fs-sm)">Gezocht bij Highlightly op ${esc(dayShort(m.hlSearch.at))}: niet gevonden. <button class="link-btn" type="button" data-action="hl-search">Nog eens · 1</button></p>` : ''}`
             : '<p class="muted" style="font-size:var(--fs-sm)">Details zijn op te halen zodra de wedstrijd gespeeld is.</p>'}
         </section>
-        ${m.status !== 'finished' && !twin && m.status !== 'postponed' && Date.parse(m.date) > Date.now() - 3 * 3600e3 ? await import('./opponent.js').then((x) => x.opponentHtml(m)).catch(() => '') : ''}
+        ${m.status !== 'finished' && !twin && m.status !== 'postponed' && Date.parse(m.date) > Date.now() - 3 * 3600e3 ? await import('./opponent.js').then((x) => x.opponentHtml(m)).catch(() => '') + await import('./predict.js').then((x) => x.previewPredictionsHtml(m)).catch(() => '') : ''}
         ${m.status === 'finished' || (Date.parse(m.date) - Date.now() < 12 * 3600e3 && m.status !== 'postponed' && !twin && !word) ? notesBlock(n, m.status !== 'finished') : ''}
-        ${d ? timeline(m) + statsBlock(m) + lineupsBlock(m) + playersBlock(m) : ''}`;
+        ${d ? timeline(m) + statsBlock(m) + lineupsBlock(m) + playersBlock(m) : ''}
+        ${d && m.status === 'finished' && !m.manualDetail ? await import('./predict.js').then((x) => x.predictionCheckHtml(m)).catch(() => '') : ''}`;
     },
     mount(root, ctx, args) {
       const id = args[0];
