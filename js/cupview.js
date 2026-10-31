@@ -6,7 +6,7 @@
 
 import { esc, toast } from './ui.js';
 import { MAIN_CLUB } from './config.js';
-import { getLeagueMatches, getSeasonMatches, getClubMarks, saveClubMarksBatch } from './store.js';
+import { getLeagueMatches, getSeasonMatches, getClubMarks, saveClubMarksBatch, getMeta } from './store.js';
 import { setOne } from './clubnames.js';
 import { prepareImage } from './photos.js';
 
@@ -99,7 +99,7 @@ function pathHtml(all) {
 }
 
 function roundsHtml(all) {
-  if (!all.length) return '<section class="section"><div class="empty"><span class="empty__title">Nog geen bekerduels</span><p class="muted">De nachtploeg haalt de bekerlijst op. Of tik op Stand → Alle wedstrijden bij een competitie.</p></div></section>';
+  if (!all.length) return '<section class="section"><div class="empty"><span class="empty__title">Nog geen bekerduels</span><p class="muted">De nachtploeg haalt de bekerlijst op, of tik hieronder op Bekerlijst verversen.</p></div></section>';
   const rounds = [...new Map(all.map((m) => [m.r.n, m.r])).values()].sort((a, b) => a.n - b.n);
   // Standaard: de ronde van het eerstvolgende of laatst gespeelde duel van Cambuur, anders de laatste ronde.
   const ours = all.filter((m) => isUs(m.homeTeam) || isUs(m.awayTeam));
@@ -150,7 +150,11 @@ export async function cupHtml(season, tabArg) {
   if (tab === 'spelers') body = await import('./leaguestats.js').then((x) => x.leagueStatsHtml({ id: CUP_ID, name: 'KNVB Beker' }, season, 'spelers', { keepers: false }));
   else if (tab === 'schema') body = schemaHtml(all);
   else body = roundsHtml(all);
-  return `<div data-cup>${tabsHtml(tab)}${tab === 'rondes' ? pathHtml(all) : ''}${body}</div>`;
+  const meta = tab === 'rondes' ? await getMeta(`league_${CUP_ID}_${season}`).catch(() => null) : null;
+  const when = meta && meta.fetchedAt ? `${fDay.format(new Date(meta.fetchedAt)).replace(/\./g, '')} ${fTime.format(new Date(meta.fetchedAt))}` : null;
+  const refresh = tab === 'rondes' ? `<section class="section"><div class="btn-row"><button class="btn" type="button" data-cup-refresh data-season="${season}">Bekerlijst verversen · 1–2 calls</button></div>
+    <p class="muted cup-note">${when ? `Zelf opgehaald: ${esc(when)}. ` : ''}Staat een gespeeld duel na verversen nog zonder uitslag, dan heeft Highlightly hem nog niet (bij amateurclubs duurt dat soms dagen).</p></section>` : '';
+  return `<div data-cup>${tabsHtml(tab)}${tab === 'rondes' ? pathHtml(all) : ''}${body}${refresh}</div>`;
 }
 
 /** Korte stand voor de competitiekiezer: "nog in de beker", "uitgeschakeld", ... */
@@ -172,7 +176,18 @@ export function mountCup(root, ctx) {
     box.querySelectorAll('[data-cup-round]').forEach((el) => { el.hidden = el.dataset.cupRound !== r.value; });
   }));
   if (box.querySelector('[name="ls-cat"], [data-ls-lineups]')) import('./leaguestats.js').then((x) => x.mountLeagueStats(root, ctx));
-  box.addEventListener('click', (e) => {
+  box.addEventListener('click', async (e) => {
+    const rf = e.target.closest('[data-cup-refresh]');
+    if (rf) {
+      rf.disabled = true; const label = rf.textContent; rf.textContent = 'Ophalen…';
+      try {
+        const { syncLeague } = await import('./sync.js');
+        const r = await syncLeague(CUP_ID, Number(rf.dataset.season));
+        toast(`${r.count} bekerduels opgehaald · ${r.calls} ${r.calls === 1 ? 'call' : 'calls'}`);
+        ctx.refresh();
+      } catch (err) { toast(err.message || String(err)); rf.disabled = false; rf.textContent = label; }
+      return;
+    }
     const b = e.target.closest('[data-logo-pick]');
     if (!b) return;
     e.preventDefault(); e.stopPropagation();
