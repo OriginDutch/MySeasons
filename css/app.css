@@ -1093,3 +1093,12 @@ a.po-team:hover span { text-decoration: underline; }
 .duel-extra { text-align: center; font-size: var(--fs-sm); margin: 4px 0 0; }
 .segmented--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .ls-seg label { padding-left: 2px; padding-right: 2px; font-size: var(--fs-sm); }
+
+/* ---------- De tegenstander (voorbeschouwing) ---------- */
+.opp-form { display: inline-flex; gap: 3px; }
+.opp-r { display: inline-block; width: 18px; height: 18px; border-radius: 3px; font: 700 10px var(--font-sans); line-height: 18px; text-align: center; color: #fff; }
+.opp-r--W { background: #2e7d32; } .opp-r--G { background: #6b727d; } .opp-r--V { background: #c62828; }
+.opp-lineup { font-size: var(--fs-md); line-height: 1.6; margin: 0; }
+.opp-note { font-size: var(--fs-xs); margin: 4px 0 0; }
+.opp-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.opp-pill { border: 1px solid var(--hairline); border-radius: 999px; padding: 3px 9px; font-size: var(--fs-sm); }

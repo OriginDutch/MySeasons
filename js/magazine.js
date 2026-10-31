@@ -347,6 +347,7 @@ export const magazineViews = {
           <div class="mag-main">
           ${todoCard(last)}
           ${isCurrentSeason() ? cover(next, pv) : seasonCover(list, league, standings, team)}
+          ${isCurrentSeason() && next && pv && !pv.friendly ? `<div class="mag-pad">${await import('./opponent.js').then((x) => x.opponentHtml(next)).catch(() => '')}</div>` : ''}
           ${isCurrentSeason() && next && countdown(next.date).state === 'done' ? `<div class="mag-pad"><p class="muted" style="font-size:var(--fs-md);margin:0 0 8px">${matchTitle(next)} is afgelopen. Haal de uitslag op:</p><button class="btn btn--primary" type="button" data-action="sync-season">${icons.refresh}<span>Uitslag ophalen · ${COST.season} calls</span></button></div>` : ''}
           ${storiesRow(stories)}
           ${lastWeek(recentMatches(list, isCurrentSeason()), { current: isCurrentSeason(), next })}

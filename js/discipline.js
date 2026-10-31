@@ -84,7 +84,7 @@ export const redKey = (matchId, playerId) => `${matchId}:${playerId}`;
  * decisions: { 'matchId:playerId': { kind: 'direct'|'second', ban: n } } uit meta/discipline.
  * Geeft { players: Map(id → info), reds: [...], coverage: Map(leagueId → { counted, total }) }.
  */
-export function discipline(list, decisions = {}) {
+export function discipline(list, decisions = {}, teamId = TEAM) {
   const games = sortByDate((list || []).filter((m) => m.status === 'finished' && m.league && disciplineFor(m.league.id, seasonOf(m))));
   const players = new Map();
   const reds = [];
@@ -108,7 +108,7 @@ export function discipline(list, decisions = {}) {
 
     if (!m.detail || !Array.isArray(m.detail.events)) return;
     cov.counted++;
-    const evs = m.detail.events.filter((e) => e.teamId === TEAM && e.playerId != null && cardKind(e.type));
+    const evs = m.detail.events.filter((e) => e.teamId === teamId && e.playerId != null && cardKind(e.type));
     const byPlayer = new Map();
     evs.forEach((e) => byPlayer.set(e.playerId, [...(byPlayer.get(e.playerId) || []), e]));
 
