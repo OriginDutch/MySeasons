@@ -145,7 +145,10 @@ export async function apply(r) {
       const all = detail.events || [];
       const gk = (side) => { const p = side && (side.starters || []).find((x) => /goalkeeper/i.test(x.position || '')) || (side && (side.starters || []).find((x) => x.line === 0)); return p ? { id: p.id, name: p.name, teamId: side.teamId } : null; };
       const lu = detail.lineups || {};
-      await saveLeagueMatches([{ ...base, events: all.filter((e) => !/subst/i.test(e.type || '')), subsOut: all.filter((e) => /subst/i.test(e.type || '') && e.outId != null).map((e) => e.outId), keepers: lu.home || lu.away ? { home: gk(lu.home), away: gk(lu.away) } : null, hasDetail: true, eventsAt: detail.fetchedAt, lineupsAt: detail.fetchedAt }]);
+      // Speelminuten compact op het duel (voor de divisiestats): [spelerId, clubId, minuten, basis 1/0, naam].
+      const starters = new Set([...(lu.home ? lu.home.starters : []), ...(lu.away ? lu.away.starters : [])].map((x) => x.id));
+      const mins = Object.entries(detail.players || {}).flatMap(([teamId, list]) => (list || []).filter((x) => x.minutes > 0).map((x) => [x.id, Number(teamId), x.minutes, starters.has(x.id) || !x.sub ? 1 : 0, x.name]));
+      await saveLeagueMatches([{ ...base, mins, events: all.filter((e) => !/subst/i.test(e.type || '')), subsOut: all.filter((e) => /subst/i.test(e.type || '') && e.outId != null).map((e) => e.outId), keepers: lu.home || lu.away ? { home: gk(lu.home), away: gk(lu.away) } : null, hasDetail: true, eventsAt: detail.fetchedAt, lineupsAt: detail.fetchedAt }]);
       await addToLeagueIndex(item.leagueId, item.season, { withEvents: [item.id], withLineups: [item.id], withFull: [item.id] });
       return 4; // leagueDetails + leagueMatches + teamIndex + leagueIndex
     }

@@ -42,7 +42,13 @@ async function collect(leagueId, season) {
       keepers = m.keepers || { home: null, away: null };
       subsOut = m.subsOut || [];
     }
-    return { m, events, keepers, subsOut, missingLineup: !m.own && m.keepers === undefined };
+    // Speelminuten: Cambuur uit de details, andere duels uit het compacte 'mins' (nachtploeg, volledig verloop).
+    let mins = null;
+    if (d && d.players && Object.keys(d.players).length) {
+      const st = new Set(['home', 'away'].flatMap((k) => (d.lineups && d.lineups[k] ? d.lineups[k].starters : []).map((x) => x.id)));
+      mins = Object.entries(d.players).flatMap(([tid, list]) => (list || []).filter((x) => x.minutes > 0).map((x) => [x.id, Number(tid), x.minutes, st.has(x.id) || !x.sub ? 1 : 0, x.name]));
+    } else if (!m.own && Array.isArray(m.mins)) mins = m.mins;
+    return { m, events, keepers, subsOut, mins, missingLineup: !m.own && m.keepers === undefined };
   });
 }
 
@@ -50,14 +56,14 @@ function aggregate(rows) {
   const players = new Map(); const clubs = new Map();
   const club = (t) => { if (!clubs.has(t.id)) clubs.set(t.id, { id: t.id, name: t.name, played: 0, cs: 0, yellow: 0, red: 0, withEvents: 0 }); return clubs.get(t.id); };
   const player = (id, name, teamId, date) => {
-    if (!players.has(id)) players.set(id, { id, name: name || '?', teamId, date: 0, goals: 0, pens: 0, assists: 0, yellow: 0, red: 0, apps: 0, cs: 0 });
+    if (!players.has(id)) players.set(id, { id, name: name || '?', teamId, date: 0, goals: 0, pens: 0, assists: 0, yellow: 0, red: 0, apps: 0, cs: 0, minutes: 0, played: 0, starts: 0 });
     const p = players.get(id);
     if (name && name.length > (p.name || '').length) p.name = name; // voluit wint van "S. Haugen"
     if (teamId && date >= p.date) { p.teamId = teamId; p.date = date; }
     return p;
   };
-  let withEvents = 0; let goals = 0; let withAssist = 0; let withKeepers = 0;
-  rows.forEach(({ m, events, keepers, subsOut }) => {
+  let withEvents = 0; let goals = 0; let withAssist = 0; let withKeepers = 0; let withMins = 0;
+  rows.forEach(({ m, events, keepers, subsOut, mins }) => {
     const date = Date.parse(m.date) || 0;
     const h = club(m.homeTeam); const a = club(m.awayTeam);
     h.played++; a.played++;
@@ -82,6 +88,10 @@ function aggregate(rows) {
         }
       });
     }
+    if (mins) {
+      withMins++;
+      mins.forEach(([id, teamId, min, start, name]) => { const p = player(id, name, teamId, date); p.minutes += min; p.played++; if (start) p.starts++; });
+    }
     if (keepers) {
       withKeepers++;
       [['home', m.homeTeam, m.score.away], ['away', m.awayTeam, m.score.home]].forEach(([side, team, against]) => {
@@ -102,11 +112,11 @@ function aggregate(rows) {
     const k = `${p.teamId}|${norm(p.name)}`;
     const q = merged.get(k);
     if (!q) { merged.set(k, p); return; }
-    ['goals', 'pens', 'assists', 'yellow', 'red', 'apps', 'cs'].forEach((f) => { q[f] += p[f]; });
+    ['goals', 'pens', 'assists', 'yellow', 'red', 'apps', 'cs', 'minutes', 'played', 'starts'].forEach((f) => { q[f] += p[f]; });
   });
   const list = [...merged.values()];
   list.forEach((p) => { p.club = teamName.get(p.teamId) || ''; });
-  return { players: list, clubs: [...clubs.values()], total: rows.length, withEvents, goals, withAssist, withKeepers, missing: rows.filter((r) => r.missingLineup).map((r) => r.m) };
+  return { players: list, clubs: [...clubs.values()], total: rows.length, withEvents, goals, withAssist, withKeepers, withMins, missing: rows.filter((r) => r.missingLineup).map((r) => r.m) };
 }
 
 /** Gedeelde rang: 1 + het aantal met een hogere waarde. */
@@ -115,13 +125,13 @@ function ranked(list, val, tie = (a, b) => (a.name || '').localeCompare(b.name |
   return s.map((x) => ({ x, v: val(x), rank: 1 + s.filter((y) => val(y) > val(x)).length }));
 }
 
-function rowHtml({ x, v, rank }, sub, unit) {
+function rowHtml({ x, v, rank }, sub, unit, fmt = (n) => n) {
   const us = x.teamId === TEAM || x.id === TEAM;
-  return `<div class="ls-row${us ? ' is-us' : ''}"><span class="ls-rank mono">${rank}</span><span class="ls-name">${esc(x.name || '?')}${sub ? `<small>${sub}</small>` : ''}</span><b class="ls-val">${v}${unit || ''}</b></div>`;
+  return `<div class="ls-row${us ? ' is-us' : ''}"><span class="ls-rank mono">${rank}</span><span class="ls-name">${esc(x.name || '?')}${sub ? `<small>${sub}</small>` : ''}</span><b class="ls-val">${fmt(v)}${unit || ''}</b></div>`;
 }
 
 /** Top 10 met gedeelde rang; "+n anderen met x" als de grens midden in een gelijke stand valt; de rest uitklapbaar. */
-function board(label, list, { sub = () => '', note = '', unit = '' } = {}) {
+function board(label, list, { sub = () => '', note = '', unit = '', fmt = (n) => n } = {}) {
   if (!list.length) return `<section class="section"><div class="section__label"><span>${label}</span><span></span></div><p class="muted" style="margin:0;font-size:var(--fs-sm)">Nog niets.</p>${note}</section>`;
   let shown = list.filter((r) => r.rank <= TOP);
   let extra = '';
@@ -129,13 +139,13 @@ function board(label, list, { sub = () => '', note = '', unit = '' } = {}) {
     const cutV = list[TOP - 1].v; // waarde op plek 10
     const keep = shown.filter((r) => r.v > cutV);
     const group = list.filter((r) => r.v === cutV);
-    if (keep.length) { shown = keep; extra = `<p class="ls-plus muted">+${group.length} ${group.length === 1 ? 'ander' : 'anderen'} met ${cutV}${unit}</p>`; }
-    else { shown = group.slice(0, TOP); extra = `<p class="ls-plus muted">+${group.length - TOP} anderen met ${cutV}${unit}</p>`; }
+    if (keep.length) { shown = keep; extra = `<p class="ls-plus muted">+${group.length} ${group.length === 1 ? 'ander' : 'anderen'} met ${fmt(cutV)}${unit}</p>`; }
+    else { shown = group.slice(0, TOP); extra = `<p class="ls-plus muted">+${group.length - TOP} anderen met ${fmt(cutV)}${unit}</p>`; }
   }
   const rest = list.slice(shown.length);
   return `<section class="section"><div class="section__label"><span>${label}</span><span>top ${TOP}</span></div>
-    <div class="ls-list">${shown.map((r) => rowHtml(r, sub(r.x), unit)).join('')}</div>${extra}
-    ${rest.length ? `<details class="ls-more"><summary>Toon alles (${list.length})</summary><div class="ls-list">${rest.map((r) => rowHtml(r, sub(r.x), unit)).join('')}</div></details>` : ''}
+    <div class="ls-list">${shown.map((r) => rowHtml(r, sub(r.x), unit, fmt)).join('')}</div>${extra}
+    ${rest.length ? `<details class="ls-more"><summary>Toon alles (${list.length})</summary><div class="ls-list">${rest.map((r) => rowHtml(r, sub(r.x), unit, fmt)).join('')}</div></details>` : ''}
     ${note}</section>`;
 }
 
@@ -163,19 +173,29 @@ export async function leagueStatsHtml(league, season, tab, { keepers: withKeeper
       ${board('Gele kaarten', y, { sub: (c) => `${c.withEvents} duels met events` })}
       ${board('Rode kaarten', r, { sub: (c) => `${c.withEvents} duels met events`, note: evNote })}`;
   }
-  const goals = ranked(a.players, (p) => p.goals, (x, z) => x.pens - z.pens || (x.name || '').localeCompare(z.name || '', 'nl'));
+  // Gelijke stand bij goals: minder minuten eerst als die bekend zijn, anders minder penalty's.
+  const goals = ranked(a.players, (p) => p.goals, (x, z) => (x.minutes && z.minutes ? x.minutes - z.minutes : 0) || x.pens - z.pens || (x.name || '').localeCompare(z.name || '', 'nl'));
+  const minutes = ranked(a.players, (p) => p.minutes, (x, z) => z.starts - x.starts || (x.name || '').localeCompare(z.name || '', 'nl'));
+  const starts = ranked(a.players, (p) => p.starts, (x, z) => z.minutes - x.minutes || (x.name || '').localeCompare(z.name || '', 'nl'));
+  const per90 = ranked(a.players.filter((p) => p.minutes >= 450), (p) => Math.round((p.goals / p.minutes) * 90 * 100) / 100, (x, z) => z.goals - x.goals);
+  const nl2 = (n) => n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const minsNote = noteP(`Minuten bekend van ${a.withMins} van de ${a.total} wedstrijden (volledig verloop; de nachtploeg vult aan).`);
+  const usage = (p) => (p.minutes ? ` · ${p.played} ${p.played === 1 ? 'duel' : 'duels'} · ${p.minutes} min` : '');
   const assists = ranked(a.players, (p) => p.assists);
   const yellow = ranked(a.players, (p) => p.yellow);
   const red = ranked(a.players, (p) => p.red);
   const keepers = ranked(a.players.filter((p) => p.apps), (p) => p.cs, (x, z) => x.apps - z.apps || (x.name || '').localeCompare(z.name || '', 'nl'));
   const pct = a.goals ? Math.round((a.withAssist / a.goals) * 100) : 0;
   const panels = [
-    ['goals', 'Goals', board('Topscorers', goals, { sub: (p) => `${clubOf(p)}${p.pens ? ` · ${p.pens} pen.` : ''}`, note: evNote })],
+    ['goals', 'Goals', board('Topscorers', goals, { sub: (p) => `${clubOf(p)}${usage(p)}${p.pens ? ` · ${p.pens} pen.` : ''}`, note: evNote })],
     ['assists', 'Assists', board('Assists', assists, { sub: clubOf, note: noteP(`Assists bij ${pct}% van de goals bekend. ${a.withEvents} van de ${a.total} wedstrijden met events.`) })],
     ['cards', 'Kaarten', `${board('Gele kaarten', yellow, { sub: clubOf })}${board('Rode kaarten', red, { sub: clubOf, note: evNote })}`],
     ['keepers', 'Keepers', a.withKeepers
       ? board('Clean sheets · keepers', keepers, { sub: (p) => `${clubOf(p)} · ${p.apps} ${p.apps === 1 ? 'duel' : 'duels'}`, note: `${noteP(`Op basis van ${a.withKeepers} van de ${a.total} wedstrijden met opstelling. Telt voor de basiskeeper, als hij niet gewisseld werd.`)}${lineupButton(a, 'Rest van de opstellingen ophalen')}` })
       : `<section class="section"><div class="section__label"><span>Clean sheets · keepers</span><span></span></div><p class="muted" style="font-size:var(--fs-md)">Hiervoor zijn de opstellingen van de duels nodig: 1 call per wedstrijd. De nachtploeg haalt ze ook vanzelf op.</p>${lineupButton(a, 'Opstellingen ophalen')}</section>`],
+    ['minutes', 'Minuten', a.withMins
+      ? `${board('Meeste minuten', minutes, { sub: (p) => `${clubOf(p)} · ${p.starts}× basis` })}${board('Meeste basisplaatsen', starts, { sub: (p) => `${clubOf(p)} · ${p.minutes} min` })}${board('Goals per 90 minuten', per90, { sub: (p) => `${clubOf(p)} · ${p.goals} in ${p.minutes} min`, fmt: nl2, note: `${noteP('Vanaf 450 minuten.')}${minsNote}` })}`
+      : `<section class="section"><div class="section__label"><span>Minuten</span><span></span></div><p class="muted" style="font-size:var(--fs-md)">Hiervoor is het volledige verloop van de duels nodig. De nachtploeg haalt het op, dit seizoen eerst.</p></section>`],
   ].filter(([k]) => withKeepersTab || k !== 'keepers'); // beker: geen keepers (geen opstellingen van bekerduels)
   return `<fieldset class="segmented segmented--${panels.length} ls-seg"><legend class="visually-hidden">Categorie</legend>
       ${panels.map(([k, l], i) => `<input type="radio" name="ls-cat" id="ls-${k}" value="${k}" ${i === 0 ? 'checked' : ''}><label for="ls-${k}">${l}</label>`).join('')}</fieldset>

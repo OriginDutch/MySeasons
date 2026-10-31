@@ -1091,3 +1091,5 @@ a.po-team:hover span { text-decoration: underline; }
 .duel-team--away { align-items: flex-end; text-align: right; }
 .duel-sc { font-family: var(--font-sans); font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .duel-extra { text-align: center; font-size: var(--fs-sm); margin: 4px 0 0; }
+.segmented--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.ls-seg label { padding-left: 2px; padding-right: 2px; font-size: var(--fs-sm); }
