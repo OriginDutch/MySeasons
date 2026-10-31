@@ -1,7 +1,7 @@
 // MySeasons service worker: cachet de app-schil zodat de app offline opent.
 // Data komt niet via deze cache maar via de Firestore offline-cache.
 // Ophogen bij elke release, samen met APP_VERSION in js/version.js.
-const CACHE_VERSION = 'ms-shell-v0.58.1';
+const CACHE_VERSION = 'ms-shell-v0.58.2';
 const RUNTIME = 'ms-runtime-v1';
 
 const SHELL = [
@@ -123,14 +123,21 @@ async function staleWhileRevalidate(request) {
   return cached || network;
 }
 
+// Pagina: eerst het netwerk, maar bij een slechte verbinding (vol stadion) niet blijven hangen: na 2 seconden de
+// opgeslagen versie. Het netwerk werkt op de achtergrond de cache bij voor de volgende keer.
 async function networkFirstPage(request) {
-  try {
-    const response = await fetch(request);
-    const cache = await caches.open(CACHE_VERSION);
-    cache.put('index.html', response.clone());
+  const cached = await caches.match('index.html');
+  const network = fetch(request).then(async (response) => {
+    if (response.ok) { const cache = await caches.open(CACHE_VERSION); await cache.put('index.html', response.clone()); }
     return response;
+  });
+  if (!cached) return network.catch(() => Response.error());
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 2000));
+  try {
+    const first = await Promise.race([network, timeout]);
+    return first || cached;
   } catch {
-    return (await caches.match('index.html')) || Response.error();
+    return cached;
   }
 }
 

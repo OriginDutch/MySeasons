@@ -13,7 +13,7 @@ import { reconcileIds } from './reconcile.js';
 // Bij elke gelezen wedstrijd: eigen clubnamen erop en de strafschoppenserie herkennen (telt niet als goals).
 const nameMatch = (m) => markShootout(reconcileIds(nameOnly(m)));
 import {
-  collection, doc, getDoc, getDocs, setDoc, deleteDoc, writeBatch, increment, deleteField, query, where, arrayUnion, onSnapshot,
+  collection, doc, getDoc, getDocFromCache, getDocs, setDoc, deleteDoc, writeBatch, increment, deleteField, query, where, arrayUnion, onSnapshot,
 } from 'https://www.gstatic.com/firebasejs/13.0.0/firebase-firestore.js';
 import { createLive } from './live.js';
 
@@ -284,10 +284,16 @@ export async function getLeagueMatches(leagueId, season) {
   return (await live.docs(`lm:${Number(leagueId)}:${Number(season)}`, q)).map((d) => nameMatch(d.data()));
 }
 
+/** Eén document: eerst de lokale cache, anders de server met een tijdslimiet (slechte verbinding: niet hangen). */
+async function docFast(ref, ms = 4000) {
+  try { const c = await getDocFromCache(ref); if (c.exists()) return c; } catch { /* niet in de cache */ }
+  return Promise.race([getDoc(ref), new Promise((resolve) => setTimeout(() => resolve(null), ms))]).catch(() => null);
+}
+
 // ---------- Verwachte opstellingen: predictions/{matchId} = { [teamId]: { sig, formation, ids, names, at } } ----------
 export async function getPrediction(matchId) {
-  const d = await getDoc(doc(db, 'predictions', String(matchId)));
-  return d.exists() ? d.data() : null;
+  const d = await docFast(doc(db, 'predictions', String(matchId)));
+  return d && d.exists() ? d.data() : null;
 }
 export function savePrediction(matchId, teamId, p) {
   return setDoc(doc(db, 'predictions', String(matchId)), { [teamId]: p }, { merge: true });
@@ -301,16 +307,16 @@ export async function getAllPredictions() {
 // ---------- Volledig verloop van andere duels: leagueDetails/{id} ----------
 // Compact (genormaliseerd, geen ruwe Highlightly-antwoorden), los van leagueMatches: alleen gelezen als je zo'n duel opent.
 export async function getLeagueDetail(id) {
-  const d = await getDoc(doc(db, 'leagueDetails', String(id)));
-  return d.exists() ? d.data() : null;
+  const d = await docFast(doc(db, 'leagueDetails', String(id)));
+  return d && d.exists() ? d.data() : null;
 }
 export function saveLeagueDetail(id, detail) {
   return setDoc(doc(db, 'leagueDetails', String(id)), detail);
 }
 /** Eén competitieduel (uit leagueMatches), met je eigen clubnamen. */
 export async function getLeagueMatch(id) {
-  const d = await getDoc(doc(db, 'leagueMatches', String(id)));
-  return d.exists() ? nameMatch(d.data()) : null;
+  const d = await docFast(doc(db, 'leagueMatches', String(id)));
+  return d && d.exists() ? nameMatch(d.data()) : null;
 }
 
 /** Losse velden bij een competitieduel (bijv. keepers uit de opstelling), zonder de rest te raken. */

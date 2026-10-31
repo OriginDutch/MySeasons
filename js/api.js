@@ -35,9 +35,12 @@ async function call(path, params, { method = 'GET', body, raw = null, binary = f
     const headers = { Authorization: `Bearer ${token}` };
     if (raw) headers['Content-Type'] = 'application/octet-stream';
     else if (body !== undefined) headers['Content-Type'] = 'application/json';
-    res = await fetch(url, { method, headers, body: raw || (body !== undefined ? JSON.stringify(body) : undefined) });
+    // Tijdslimiet: bij een slechte verbinding niet eindeloos hangen (uploads krijgen langer).
+    const ctrl = new AbortController();
+    const limit = setTimeout(() => ctrl.abort(), raw ? 60e3 : 12e3);
+    try { res = await fetch(url, { method, headers, body: raw || (body !== undefined ? JSON.stringify(body) : undefined), signal: ctrl.signal }); } finally { clearTimeout(limit); }
   } catch {
-    throw new ApiError('Geen verbinding met de Worker', 0);
+    throw new ApiError('Geen (goede) verbinding met de Worker', 0);
   }
 
   const remaining = res.headers.get('X-MS-RateLimit-Remaining');

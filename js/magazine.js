@@ -339,6 +339,7 @@ export const magazineViews = {
       const nextOpp = next ? opponentOf(next, TEAM) : null;
       const news = await newsFor([TEAM, ...(nextOpp ? [nextOpp.id] : [])], 3).catch(() => []);
       this._teams = teams;
+      this._next = next;
       this._focus = [TEAM, ...(nextOpp ? [nextOpp.id] : [])];
       return `
         <div class="mag">
@@ -347,7 +348,7 @@ export const magazineViews = {
           <div class="mag-main">
           ${todoCard(last)}
           ${isCurrentSeason() ? cover(next, pv) : seasonCover(list, league, standings, team)}
-          ${isCurrentSeason() && next && pv && !pv.friendly ? `<div class="mag-pad">${await import('./opponent.js').then((x) => x.opponentHtml(next)).catch(() => '')}${await import('./predict.js').then((x) => x.previewPredictionsHtml(next)).catch(() => '')}</div>` : ''}
+          ${isCurrentSeason() && next && pv && !pv.friendly ? `<div class="mag-pad"><details class="fold duel-more" data-duel-more="${esc(String(next.id))}"><summary class="section__label"><span>Meer over dit duel</span><span>tegenstander · verwachte opstellingen ▸</span></summary><div data-duel-more-body><p class="muted" style="font-size:var(--fs-sm)">Laden…</p></div></details></div>` : ''}
           ${isCurrentSeason() && next && countdown(next.date).state === 'done' ? `<div class="mag-pad"><p class="muted" style="font-size:var(--fs-md);margin:0 0 8px">${matchTitle(next)} is afgelopen. Haal de uitslag op:</p><button class="btn btn--primary" type="button" data-action="sync-season">${icons.refresh}<span>Uitslag ophalen · ${COST.season} calls</span></button></div>` : ''}
           ${storiesRow(stories)}
           ${lastWeek(recentMatches(list, isCurrentSeason()), { current: isCurrentSeason(), next })}
@@ -363,6 +364,23 @@ export const magazineViews = {
         </div>`;
     },
     mount(root, ctx) {
+      // "Meer over dit duel": pas laden bij uitklappen (Home blijft snel), en onthouden of hij open stond.
+      const more = root.querySelector('[data-duel-more]');
+      if (more) {
+        const next = this._next;
+        let loaded = false;
+        const load = async () => {
+          if (loaded || !next) return; loaded = true;
+          const [a, b] = await Promise.all([
+            import('./opponent.js').then((x) => x.opponentHtml(next)).catch(() => ''),
+            import('./predict.js').then((x) => x.previewPredictionsHtml(next)).catch(() => ''),
+          ]);
+          const body = more.querySelector('[data-duel-more-body]');
+          if (body) body.innerHTML = a + b || '<p class="muted" style="font-size:var(--fs-sm)">Nog niets bekend over dit duel.</p>';
+        };
+        try { if (localStorage.getItem('ms-duel-more') === '1') { more.open = true; load(); } } catch { /* niet erg */ }
+        more.addEventListener('toggle', () => { try { localStorage.setItem('ms-duel-more', more.open ? '1' : '0'); } catch { /* niet erg */ } if (more.open) load(); });
+      }
       root.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
