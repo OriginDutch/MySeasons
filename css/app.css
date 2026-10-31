@@ -1112,3 +1112,28 @@ a.po-team:hover span { text-decoration: underline; }
 .pred-check + .pred-check { border-top: 1px solid var(--hairline); margin-top: 8px; padding-top: 8px; }
 .pred-check__head { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-md); }
 .pred-swap { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-sm); margin: 6px 0 0; }
+
+/* ---------- Opstelling: veld of lijst (pitch.js) ---------- */
+.lv-toggle { display: inline-flex; border: 1px solid var(--hairline); border-radius: 999px; overflow: hidden; margin: 0 0 8px; }
+.lv-toggle button { border: 0; background: transparent; color: var(--muted); padding: 4px 12px; font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.lv-toggle button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 600; }
+.lv[data-lv="veld"] .lv-lijst, .lv[data-lv="lijst"] .lv-veld { display: none; }
+.lv-pitch { background: linear-gradient(#1f5a33, #1a4d2c); border-radius: 10px; padding: 12px 4px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+.lv-pitch::before { content: ''; position: absolute; left: 8%; right: 8%; top: 50%; border-top: 1px solid #ffffff2e; }
+.lv-row { display: flex; justify-content: space-around; position: relative; }
+.lv-p { display: flex; flex-direction: column; align-items: center; width: 66px; border: 0; background: transparent; color: #fff; padding: 0; cursor: pointer; font: inherit; }
+.lv-dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 700 11px var(--font-sans); background: var(--lv-dot); color: #111; border: 2px solid #ffffff40; }
+.lv-p.is-likely .lv-dot { opacity: .75; }
+.lv-p.is-doubt .lv-dot { background: transparent; color: #fff; border: 2px dashed #ffffffb0; }
+.lv-p.is-on .lv-dot { outline: 2px solid #fff; outline-offset: 2px; }
+.lv-nm { font-size: 11px; margin-top: 3px; line-height: 1.1; max-width: 66px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-p small { font-size: 9.5px; color: #d6eedc; }
+.lv-info { font-size: var(--fs-sm); margin: 6px 0 0; min-height: 1.2em; }
+.lv-line { font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; margin: 10px 0 2px; }
+.lv-li { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--hairline); font-size: var(--fs-md); }
+.lv-n { color: var(--muted); font-size: var(--fs-sm); }
+.lv-full small { display: block; font-size: var(--fs-xs); color: var(--muted); }
+.pred-tabs button { background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 5px 12px; border: 1px solid var(--hairline); border-radius: 999px; }
+.pred-tabs button[aria-current="page"] { border-color: var(--ink); font-weight: 600; }
+.section > [data-tabs] .lineup__bench, .section > .lineup__bench, [data-tab-panel] .lineup__bench { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 3px; font-size: var(--fs-md); }
+[data-tab-panel] .lineup__subs { margin-top: 10px; font-size: var(--fs-xs); text-transform: uppercase; }

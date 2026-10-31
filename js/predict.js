@@ -44,9 +44,18 @@ async function lineupOf(m, teamId) {
   if (!d || !d.lineups) return null;
   const side = ['home', 'away'].map((k) => d.lineups[k]).find((l) => l && l.teamId === teamId);
   if (!side || !(side.starters || []).length) return null;
-  const mins = new Map(((d.players && d.players[teamId]) || []).map((p) => [p.id, p.minutes || 0]));
+  const box = (d.players && d.players[teamId]) || [];
+  const mins = new Map(box.map((p) => [p.id, p.minutes || 0]));
+  const full = new Map(box.map((p) => [p.id, p.name]));
   const subsIn = new Set((d.events || []).filter((e) => /subst/i.test(e.type || '') && e.teamId === teamId && e.inId != null).map((e) => e.inId));
-  return { formation: side.formation, starters: side.starters, subs: side.subs || [], mins, subsIn };
+  return { formation: side.formation, starters: side.starters, subs: side.subs || [], mins, subsIn, full };
+}
+
+/** Namen van de linies: 4-2-3-1 → Keeper, Verdediging, Middenveld, Aanvallend middenveld, Spits. */
+export function lineNames(count, lastSize) {
+  const mid = count - 3;
+  const middle = mid <= 0 ? [] : mid === 1 ? ['Middenveld'] : mid === 2 ? ['Middenveld', 'Aanvallend middenveld'] : ['Verdedigend middenveld', 'Middenveld', 'Aanvallend middenveld'].slice(0, mid);
+  return ['Keeper', 'Verdediging', ...middle, lastSize === 1 ? 'Spits' : 'Aanval'];
 }
 
 /** De voorspelling (zonder opslaan). next = het duel; teamId = Cambuur of de tegenstander. */
@@ -59,16 +68,33 @@ export async function predictLineup(teamId, next, { before = Date.parse(next.dat
   for (const m of recent) { if (used.length >= 5) break; const l = await lineupOf(m, teamId); if (l) used.push({ m, l }); }
   if (used.length < 2) return null;
 
-  const players = new Map();
-  const get = (p) => { if (!players.has(p.id)) players.set(p.id, { id: p.id, name: p.name, score: 0, starts: [], pos: {} }); const x = players.get(p.id); if ((p.name || '').length > (x.name || '').length) x.name = p.name; return x; };
-  used.forEach(({ l }, i) => {
-    l.starters.forEach((p) => { const x = get(p); x.score += W[i]; x.starts[i] = true; const g = GROUP(p.position); if (g) x.pos[g] = (x.pos[g] || 0) + 1; });
-    l.subs.filter((p) => l.subsIn.has(p.id) || (l.mins.get(p.id) || 0) > 0).forEach((p) => { const x = get(p); x.score += 0.3 * W[i]; const g = GROUP(p.position); if (g) x.pos[g] = (x.pos[g] || 0) + 0.5; });
-  });
-
-  // Formatie: de meest gespeelde.
+  // Formatie: de meest gespeelde; de linies en volgorde uit de recentste opstelling met die formatie.
   const fc = new Map(); used.forEach(({ l }) => fc.set(l.formation, (fc.get(l.formation) || 0) + 1));
   const formation = [...fc.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  const template = used.find(({ l }) => l.formation === formation).l;
+  const tLines = [];
+  template.starters.forEach((p) => { const k = p.line ?? 0; (tLines[k] = tLines[k] || []).push(p); });
+  const lineIdx = tLines.map((x, k) => k).filter((k) => tLines[k] && tLines[k].length);
+
+  const players = new Map();
+  const get = (p) => {
+    if (!players.has(p.id)) players.set(p.id, { id: p.id, name: p.name, full: null, number: null, score: 0, starts: [], pos: {}, lines: {}, slot: [] });
+    const x = players.get(p.id); if ((p.name || '').length > (x.name || '').length) x.name = p.name; return x;
+  };
+  used.forEach(({ l }, i) => {
+    const byLine = {};
+    l.starters.forEach((p) => {
+      const x = get(p); x.score += W[i]; x.starts[i] = true;
+      if (x.number == null && p.number != null) x.number = p.number;
+      if (!x.full && l.full.get(p.id)) x.full = l.full.get(p.id);
+      const g = GROUP(p.position); if (g) x.pos[g] = (x.pos[g] || 0) + 1;
+      if (l.formation === formation) { const k = p.line ?? 0; x.lines[k] = (x.lines[k] || 0) + 1; byLine[k] = (byLine[k] || 0) + 1; x.slot.push(byLine[k] - 1); }
+    });
+    l.subs.filter((p) => l.subsIn.has(p.id) || (l.mins.get(p.id) || 0) > 0).forEach((p) => {
+      const x = get(p); x.score += 0.3 * W[i]; if (!x.full && l.full.get(p.id)) x.full = l.full.get(p.id); if (x.number == null && p.number != null) x.number = p.number;
+      const g = GROUP(p.position); if (g) x.pos[g] = (x.pos[g] || 0) + 0.5;
+    });
+  });
 
   // Context: beker met snel daarna een competitieduel → kans op rotatie; vorige bekeropstelling telt mee.
   const notes = [];
@@ -85,11 +111,11 @@ export async function predictLineup(teamId, next, { before = Date.parse(next.dat
     } else if (pl) pl.starters.forEach((p) => { get(p).score += 0.3; });
   }
 
-  // Eruit: geschorst, en bij Cambuur geblesseerd.
-  const out = new Map();
+  // Eruit: geschorst, en bij Cambuur geblesseerd. Op scherp (één kaart van schorsing) als info.
+  const out = new Map(); const edge = new Set();
   if (disciplineFor(Number(next.league.id), season)) {
     const st = discipline(all.map((m) => (m.own ? m : { ...m, detail: m.events ? { events: m.events } : null })), {}, teamId);
-    st.players.forEach((info, id) => { if (statusFor(info, next).banned) out.set(id, 'geschorst'); });
+    st.players.forEach((info, id) => { const s = statusFor(info, next); if (s.banned) out.set(id, 'geschorst'); else if (s.edge.length) edge.add(id); });
   }
   if (teamId === TEAM) {
     const { injuredOn } = await import('./playerextra.js');
@@ -98,23 +124,41 @@ export async function predictLineup(teamId, next, { before = Date.parse(next.dat
     Object.entries(profiles).forEach(([id, pr]) => { if (injuredOn(pr, ref)) out.set(Number(id), 'geblesseerd'); });
   }
 
+  // Goals en assists dit seizoen (alle duels van de club), voor de regel onder de naam.
+  const goals = new Map(); const assists = new Map();
+  all.forEach((m) => ((m.own && m.detail ? m.detail.events : m.events) || []).forEach((e) => {
+    if (e.teamId !== teamId || e.shootout || !/^(goal|penalty)$/i.test(e.type || '')) return;
+    if (e.playerId != null) goals.set(e.playerId, (goals.get(e.playerId) || 0) + 1);
+    if (e.assistId != null) assists.set(e.assistId, (assists.get(e.assistId) || 0) + 1);
+  }));
+
   const pool = [...players.values()].filter((x) => !out.has(x.id)).sort((a, b) => b.score - a.score);
   const groupOf = (x) => Object.entries(x.pos).sort((a, b) => b[1] - a[1])[0]?.[0] || 'M';
-  const need = formationCounts(formation);
-  const picked = []; const taken = new Set();
-  ['K', 'V', 'M', 'A'].forEach((g) => {
-    pool.filter((x) => groupOf(x) === g && !taken.has(x.id)).slice(0, need[g]).forEach((x) => { picked.push({ ...x, g }); taken.add(x.id); });
+  const modalLine = (x) => { const e = Object.entries(x.lines).sort((a, b) => b[1] - a[1])[0]; return e ? Number(e[0]) : null; };
+  const lineGroup = (k) => { const c = {}; (tLines[k] || []).forEach((p) => { const g = GROUP(p.position); if (g) c[g] = (c[g] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] || 'M'; };
+  const prefers = (x, k) => (modalLine(x) != null ? modalLine(x) === k : groupOf(x) === lineGroup(k));
+  const taken = new Set(); const rows = [];
+  lineIdx.forEach((k) => {
+    const n = tLines[k].length;
+    let pick = pool.filter((x) => !taken.has(x.id) && prefers(x, k)).slice(0, n);
+    if (pick.length < n) pick = [...pick, ...pool.filter((x) => !taken.has(x.id) && !pick.includes(x) && groupOf(x) === lineGroup(k)).slice(0, n - pick.length)];
+    pick.forEach((x) => taken.add(x.id));
+    rows.push({ k, pick });
   });
-  pool.filter((x) => !taken.has(x.id)).slice(0, 11 - picked.length).forEach((x) => { picked.push({ ...x, g: groupOf(x) }); taken.add(x.id); });
+  // Nog plekken over (te weinig spelers per linie): de beste overgebleven.
+  rows.forEach((r) => { const n = tLines[r.k].length; while (r.pick.length < n) { const x = pool.find((y) => !taken.has(y.id)); if (!x) break; r.pick.push(x); taken.add(x.id); } });
   const max = pool[0] ? pool[0].score : 1;
-  const lines = ['K', 'V', 'M', 'A'].map((g) => picked.filter((x) => x.g === g).map((x) => {
+  const avg = (a) => (a.length ? a.reduce((s2, v) => s2 + v, 0) / a.length : 9);
+  const lines = rows.map((r) => r.pick.slice().sort((a, b) => avg(a.slot) - avg(b.slot)).map((x) => {
     const sure = x.starts[0] && x.starts[1] && x.starts[2];
     const conf = sure ? 'zeker' : x.score >= 0.5 * max ? 'waarschijnlijk' : 'twijfel';
-    const alt = conf === 'twijfel' ? pool.find((y) => !taken.has(y.id) && groupOf(y) === g) : null;
-    return { id: x.id, name: x.name, conf, alt: alt ? alt.name : null };
+    const alt = conf === 'twijfel' ? pool.find((y) => !taken.has(y.id) && groupOf(y) === groupOf(x)) : null;
+    const nStarts = x.starts.filter(Boolean).length;
+    const info = [`${nStarts}× basis van ${used.length}`, goals.get(x.id) ? `${goals.get(x.id)} ${goals.get(x.id) === 1 ? 'goal' : 'goals'}` : '', assists.get(x.id) ? `${assists.get(x.id)} ${assists.get(x.id) === 1 ? 'assist' : 'assists'}` : '', edge.has(x.id) ? '🟨 1 van schorsing' : ''].filter(Boolean).join(' · ');
+    return { id: x.id, name: x.name, full: x.full || x.name, number: x.number, group: groupOf(x), conf, alt: alt ? (alt.full || alt.name) : null, info, goals: goals.get(x.id) || 0, assists: assists.get(x.id) || 0 };
   }));
-  const missing = [...out.entries()].filter(([id]) => players.has(id) && players.get(id).score >= 0.5 * max).map(([id, why]) => `${players.get(id).name} (${why})`);
-  return { teamId, formation, lines, notes, missing, basedOn: used.length };
+  const missing = [...out.entries()].filter(([id]) => players.has(id) && players.get(id).score >= 0.5 * max).map(([id, why]) => `${players.get(id).full || players.get(id).name} (${why})`);
+  return { teamId, formation, lines, lineNames: lineNames(lines.length, (lines[lines.length - 1] || []).length), notes, missing, basedOn: used.length };
 }
 
 // ---------- Opslaan en vergelijken ----------
@@ -142,28 +186,38 @@ async function predictionFor(m, teamId) {
 }
 
 // ---------- Weergave ----------
-const DOT = { zeker: '🟢', waarschijnlijk: '🟡', twijfel: '⚪' };
+const GROUP_NAME = { K: 'keeper', V: 'verdediger', M: 'middenvelder', A: 'aanvaller' };
 
-export function predictionHtml(p, teamName) {
+export async function predictionHtml(p, teamName, { color } = {}) {
   if (!p) return '';
+  const { lineupHtml, shortName } = await import('./pitch.js');
+  const rows = p.lines.map((l) => l.map((x) => ({
+    id: x.id, number: x.number, full: x.full, short: shortName(x.full), conf: x.conf, alt: x.alt,
+    pos: GROUP_NAME[x.group] || '', info: x.info,
+    tag: x.goals >= 2 ? `${x.goals} goals` : x.assists >= 2 ? `${x.assists} ass.` : x.info.includes('schorsing') ? '🟨 op scherp' : '',
+  })));
   return `<div class="pred">
-    <div class="section__label" style="border:0;padding-top:6px"><span>Verwacht · ${esc(teamName)}</span><span class="mono">${esc(p.formation || '')}</span></div>
     ${p.notes.length ? `<p class="warn-line" style="margin:0 0 6px">${esc(p.notes.join(' · '))}</p>` : ''}
-    <ol class="pred-lines">${p.lines.filter((l) => l.length).map((l) => `<li>${l.map((x) => `<span class="pred-p pred-p--${x.conf}" title="${esc(x.conf)}">${DOT[x.conf]} ${esc(x.name)}${x.alt ? ` <small class="muted">of ${esc(x.alt)}</small>` : ''}</span>`).join('')}</li>`).join('')}</ol>
+    <div class="section__label" style="border:0;padding:2px 0 6px"><span>Verwacht · ${esc(teamName)}</span><span class="mono">${esc(p.formation || '')}</span></div>
+    ${lineupHtml(rows, { names: p.lineNames, color })}
     ${p.missing.length ? `<p class="muted pred-note">Ontbreekt: ${esc(p.missing.join(', '))}.</p>` : ''}
-    <p class="muted pred-note">Inschatting uit de laatste ${p.basedOn} competitieduels. 🟢 zeker · 🟡 waarschijnlijk · ⚪ twijfel.</p>
+    <p class="muted pred-note">Inschatting uit de laatste ${p.basedOn} competitieduels. Zekerheid: fel = zeker, lichter = waarschijnlijk, open = twijfel.</p>
   </div>`;
 }
 
-/** Verwachte opstellingen van beide clubs voor een komend Cambuur-duel (en bewaren). */
+/** Verwachte opstellingen van beide clubs voor een komend Cambuur-duel (en bewaren). Een tabje per club. */
 export async function previewPredictionsHtml(next) {
   if (!next || !next.league || /friendl/i.test(next.league.name || '')) return '';
   const opp = next.homeTeam.id === TEAM ? next.awayTeam : next.homeTeam;
   const [us, them] = await Promise.all([predictLineup(TEAM, next).catch(() => null), opp ? predictLineup(opp.id, next).catch(() => null) : null]);
   if (Date.now() < Date.parse(next.date)) { rememberPrediction(next.id, us); rememberPrediction(next.id, them); }
   if (!us && !them) return '';
+  const tabs = [[us, MAIN_CLUB.name, null], [them, opp ? opp.name : '', '#d7dbe0']].filter(([p]) => p);
+  const panels = await Promise.all(tabs.map(([p, n, c]) => predictionHtml(p, n, { color: c })));
+  const { teamTabsHtml } = await import('./pitch.js');
   return `<section class="section"><div class="section__label"><span>Verwachte opstellingen</span><span>inschatting</span></div>
-    ${predictionHtml(us, MAIN_CLUB.name)}${predictionHtml(them, opp ? opp.name : '')}</section>`;
+    ${teamTabsHtml(tabs.map(([, n], i) => [n, panels[i]]))}
+    ${!them && opp ? `<p class="muted pred-note">${esc(opp.name)}: nog te weinig opstellingen binnen (de nachtploeg haalt ze op).</p>` : ''}</section>`;
 }
 
 /** Na de wedstrijd: voorspeld tegen werkelijk, voor beide clubs (Cambuur-wedstrijdpagina). */

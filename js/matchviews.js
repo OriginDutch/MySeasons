@@ -1,6 +1,8 @@
 // Schermen met wedstrijddata: Home, Wedstrijden en de wedstrijdpagina.
 
 import { tabsHtml } from './liveboard.js';
+import { lineupHtml, shortName, posName, teamTabsHtml } from './pitch.js';
+import { lineNames } from './predict.js';
 import { liveState } from './livescore.js';
 // Live-stand zegt al Einde: details meteen aanbieden, ook als je eigen programma nog 'gepland' zegt.
 const liveEnded = (id) => ((liveState().matches || []).find((x) => String(x.id) === String(id)) || {}).state?.status === 'ft';
@@ -968,26 +970,46 @@ function statsBlock(m) {
     </section>`;
 }
 
-function lineupList(l, title) {
-  if (!l) return '';
-  const POS_ABBR = { Goalkeeper: 'K', Defender: 'V', Midfielder: 'M', Forward: 'A' };
-  const row = (p) => `<li><span class="mono muted">${p.number ?? ''}</span> ${esc(p.name)} <span class="muted">${esc(POS_ABBR[p.position] || (p.position || '').slice(0, 3))}</span></li>`;
-  return `
-    <div class="lineup">
-      <div class="lineup__head"><span>${esc(title)}</span><span class="mono muted">${esc(l.formation || '')}</span></div>
-      <ul>${l.starters.map(row).join('')}</ul>
-      <div class="lineup__subs muted">${l.manual ? 'Ingevallen' : 'Bank'}</div>
-      <ul class="lineup__bench">${l.subs.map(row).join('')}</ul>
-    </div>`;
+/** Echte opstelling als veld of lijst (pitch.js), met de bank eronder. Info per speler uit de spelersstats. */
+function lineupSide(m, side) {
+  const l = m.detail.lineups[side];
+  if (!l || !(l.starters || []).length) return null;
+  const team = side === 'home' ? m.homeTeam : m.awayTeam;
+  const box = new Map(((m.detail.players || {})[team.id] || []).map((p) => [p.id, p]));
+  const ev = (m.detail.events || []).filter((e) => e.teamId === team.id);
+  const off = new Map(ev.filter((e) => /subst/i.test(e.type || '') && e.outId != null).map((e) => [e.outId, e.minute]));
+  // Linies uit Highlightly (line 0 = keeper); zonder linies (zelf ingevuld) op positie: K, V, M, A.
+  const rowsByLine = [];
+  const hasLines = l.starters.some((p) => p.line != null && p.line > 0);
+  const G = { Goalkeeper: 0, Defender: 1, Midfielder: 2, Forward: 3 };
+  l.starters.forEach((p) => { const k = hasLines ? (p.line ?? 0) : (G[p.position] ?? 2); (rowsByLine[k] = rowsByLine[k] || []).push(p); });
+  const rows = rowsByLine.filter(Boolean).map((row) => row.map((p) => {
+    const b = box.get(p.id) || {};
+    const full = b.name || p.name;
+    const goals = ev.filter((e) => e.playerId === p.id && /^(goal|penalty)$/i.test(e.type || '') && !e.shootout).length;
+    const yellow = ev.some((e) => e.playerId === p.id && /yellow/i.test(e.type || '') && !/red/i.test(e.type || ''));
+    const red = ev.some((e) => e.playerId === p.id && /red/i.test(e.type || ''));
+    const info = [b.minutes ? `${b.minutes} min` : '', goals ? `${goals} ${goals === 1 ? 'goal' : 'goals'}` : '', b.assists ? `${b.assists} ${b.assists === 1 ? 'assist' : 'assists'}` : '', off.has(p.id) ? `eruit ${off.get(p.id)}'` : '', b.rating != null ? `cijfer ${Number(b.rating).toFixed(1)}` : ''].filter(Boolean).join(' · ');
+    return { id: p.id, number: p.number, full, short: shortName(full), pos: posName(p.position), info, tag: red ? '🟥' : goals ? '⚽'.repeat(Math.min(goals, 3)) : yellow ? '🟨' : off.has(p.id) ? `↓ ${off.get(p.id)}'` : '' };
+  }));
+  const k = rows.length;
+  const names = lineNames(k, (rows[k - 1] || []).length);
+  const subsIn = new Map(ev.filter((e) => /subst/i.test(e.type || '') && e.inId != null).map((e) => [e.inId, e.minute]));
+  const bench = (l.subs || []).map((p) => `<li${subsIn.has(p.id) ? ' class="is-in"' : ''}><span class="mono muted">${p.number ?? ''}</span> ${esc((box.get(p.id) || {}).name || p.name)}${subsIn.has(p.id) ? ` <span class="muted">· erin ${subsIn.get(p.id)}'</span>` : ''}</li>`).join('');
+  return [team.name, `<div class="section__label" style="border:0;padding:2px 0 6px"><span>${esc(team.name)}</span><span class="mono">${esc(l.formation || '')}</span></div>
+    ${lineupHtml(rows, { names, color: team.id === TEAM ? null : '#d7dbe0' })}
+    ${bench ? `<div class="lineup__subs muted">${l.manual ? 'Ingevallen' : 'Bank'}</div><ul class="lineup__bench">${bench}</ul>` : ''}`];
 }
 
 function lineupsBlock(m) {
   const l = m.detail.lineups;
   if (!l || (!l.home && !l.away)) return '';
+  const sides = ['home', 'away'].map((s) => lineupSide(m, s)).filter(Boolean).sort((a, b) => (b[0] === MAIN_CLUB.name || /cambuur/i.test(b[0])) - (a[0] === MAIN_CLUB.name || /cambuur/i.test(a[0])));
+  if (!sides.length) return '';
   return `
     <section class="section">
       <div class="section__label"><span>Opstellingen</span></div>
-      <div class="lineups">${lineupList(l.home, m.homeTeam.name)}${lineupList(l.away, m.awayTeam.name)}</div>
+      ${teamTabsHtml(sides)}
     </section>`;
 }
 
