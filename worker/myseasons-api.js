@@ -24,6 +24,7 @@ import { followUp } from './followup.js';
 import { squadApi, squadScheduled } from './squadpage.js';
 import { imgApi } from './imgproxy.js';
 import { liveScheduled, liveApi, askScheduled, optinApi } from './live.js';
+import { hybrid, maintain } from './hybrid.js';
 import { boardScheduled, boardBusy, boardActive, BOARD, cupLive } from './board.js';
 
 const PROJECT_ID = 'myseasons-c1dd9';
@@ -267,7 +268,9 @@ function remainingOf(res) {
 // KV-zuinig (gratis Cloudflare: 1.000 writes per dag). De wachtrij wordt alleen geschreven als de app een nieuwe
 // klaarzet ({ qid, items }); de nachtploeg onthoudt in ns:state tot waar hij is (cursor). Per run dus 2 writes:
 // ns:state en het pakketje in de brievenbus. Daarbovenop een dagbudget, gespreid over de dag.
-const NS_KV_BUDGET = 800; // writes per UTC-dag voor de nachtploeg (de rest blijft voor live, het bord en meldingen)
+const NS_KV_BUDGET = 800; // writes per UTC-dag voor de nachtploeg als alles nog in KV staat (1.000 per dag)
+const NS_D1_BUDGET = 20000; // met D1 (100.000 rijen per dag): ruim; Highlightly is dan de rem
+const budgetOf = (env) => (env.DB ? NS_D1_BUDGET : NS_KV_BUDGET);
 const utcDay = (t) => new Date(t).toISOString().slice(0, 10);
 /** Hoeveel writes mogen er op dit moment van de dag al op zijn: gespreid, met een uur voorsprong. */
 export function kvAllowed(t, budget = NS_KV_BUDGET) {
@@ -298,7 +301,7 @@ async function nsRun(env, why) {
   const now = Date.now();
   // KV-budget: een run kost 2 writes (state + brievenbus). Op = overslaan, zonder iets te schrijven.
   const used = kvUsed(state, now);
-  if (used + 2 > kvAllowed(now)) return { calls: 0, items: 0, stop: 'kv-budget', remaining: state.remaining ?? null, queue: left.count, kv: used };
+  if (used + 2 > kvAllowed(now, budgetOf(env))) return { calls: 0, items: 0, stop: 'kv-budget', remaining: state.remaining ?? null, queue: left.count, kv: used };
   // Wedstrijddag: turbo laat genoeg over voor het live-bord, en houdt de runs klein tijdens de duels
   // (subrequests per run worden gedeeld met live, het bord en de meldingen).
   const reserveTurbo = boardBusy(board, now) ? RESERVE_MATCHDAY : RESERVE_TURBO;
@@ -353,7 +356,7 @@ async function nsScheduled(env, time) {
   if (mode === 'free' && !(d.getUTCHours() >= 21 && d.getUTCMinutes() % 10 === 0)) return;
   const q = queueOf(await nsGet(env, NS_QUEUE, []));
   if (!leftOf(q, state).count) return;
-  if (kvUsed(state, time) + 2 > kvAllowed(time)) return; // KV-budget voor nu op: niets lezen of schrijven
+  if (kvUsed(state, time) + 2 > kvAllowed(time, budgetOf(env))) return; // budget voor nu op: niets lezen of schrijven
   await nsRun(env, 'wekker');
 }
 
@@ -367,7 +370,7 @@ async function nsApi(request, env, url, origin) {
     const byType = {};
     rest.forEach((x) => { byType[x.type] = (byType[x.type] || 0) + 1; });
     const now = Date.now();
-    return json({ state: { mode: 'free', ...state, cursor: undefined }, queue: rest.length, byType, inbox: list.keys.map((k) => k.name), kv: { used: kvUsed(state, now), allowedNow: kvAllowed(now), budget: NS_KV_BUDGET } }, 200, origin);
+    return json({ state: { mode: 'free', ...state, cursor: undefined }, queue: rest.length, byType, inbox: list.keys.map((k) => k.name), kv: { used: kvUsed(state, now), allowedNow: kvAllowed(now, budgetOf(env)), budget: budgetOf(env), store: env.DB ? 'D1' : 'KV' } }, 200, origin);
   }
   if (path === '/queue' && request.method === 'POST') {
     const body = await request.json().catch(() => null);
@@ -408,7 +411,10 @@ async function nsApi(request, env, url, origin) {
 // ---------- Worker ----------
 
 export default {
-  async scheduled(event, env, ctx) {
+  async scheduled(event, rawEnv, ctx) {
+    // Opslag: vaak veranderende sleutels in D1, de rest in KV (hybrid.js). Eerst de eenmalige overstap.
+    await maintain(rawEnv, event.scheduledTime).catch(() => {});
+    const env = { ...rawEnv, MS_KV: hybrid(rawEnv) };
     // De nachtploeg pas ná de rest: ns:state wordt ook door live/bord/uitslag bijgewerkt (remaining), en tegelijk
     // schrijven kan de cursor van de nachtploeg terugzetten (dan dubbel werk en extra writes).
     ctx.waitUntil(Promise.all([
@@ -434,7 +440,8 @@ export default {
     ]).then(() => nsScheduled(env, event.scheduledTime)).catch(() => {}));
   },
 
-  async fetch(request, env) {
+  async fetch(request, rawEnv) {
+    const env = { ...rawEnv, MS_KV: hybrid(rawEnv) };
     const origin = request.headers.get('Origin') || '';
     const url = new URL(request.url);
 
