@@ -264,21 +264,52 @@ function remainingOf(res) {
 }
 
 /** Eén run: werk de wachtrij af tot het budget op is. Geeft een samenvatting terug. */
+// KV-zuinig (gratis Cloudflare: 1.000 writes per dag). De wachtrij wordt alleen geschreven als de app een nieuwe
+// klaarzet ({ qid, items }); de nachtploeg onthoudt in ns:state tot waar hij is (cursor). Per run dus 2 writes:
+// ns:state en het pakketje in de brievenbus. Daarbovenop een dagbudget, gespreid over de dag.
+const NS_KV_BUDGET = 800; // writes per UTC-dag voor de nachtploeg (de rest blijft voor live, het bord en meldingen)
+const utcDay = (t) => new Date(t).toISOString().slice(0, 10);
+/** Hoeveel writes mogen er op dit moment van de dag al op zijn: gespreid, met een uur voorsprong. */
+export function kvAllowed(t, budget = NS_KV_BUDGET) {
+  const d = new Date(t);
+  const secs = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+  return Math.min(budget, Math.floor(budget * Math.min(1, (secs + 3600) / 86400)));
+}
+const kvUsed = (state, t) => (state.kv && state.kv.day === utcDay(t) ? state.kv.w || 0 : 0);
+/** Wachtrij in beide vormen (oud: een array). */
+function queueOf(raw) {
+  if (Array.isArray(raw)) return { qid: 'legacy', items: raw };
+  return raw && Array.isArray(raw.items) ? raw : { qid: 'leeg', items: [] };
+}
+/** Wat er nog over is van de wachtrij: [extra (volgende pagina's), ...items vanaf de cursor]. */
+function leftOf(q, state) {
+  const c = state.cursor && state.cursor.qid === q.qid ? state.cursor : { pos: 0, extra: [] };
+  return { pos: c.pos || 0, extra: c.extra || [], count: Math.max(0, q.items.length - (c.pos || 0)) + (c.extra || []).length };
+}
+
 async function nsRun(env, why) {
-  const [queue, state, board] = await Promise.all([nsGet(env, NS_QUEUE, []), nsGet(env, NS_STATE, {}), nsGet(env, BOARD, null)]);
+  const [rawQueue, state, board] = await Promise.all([nsGet(env, NS_QUEUE, []), nsGet(env, NS_STATE, {}), nsGet(env, BOARD, null)]);
+  const q = queueOf(rawQueue);
+  const left = leftOf(q, state);
+  let pos = left.pos; const extra = left.extra.slice();
   const mode = state.mode || 'free';
   const results = [];
   const reserve = reserveAt();
+  const now = Date.now();
+  // KV-budget: een run kost 2 writes (state + brievenbus). Op = overslaan, zonder iets te schrijven.
+  const used = kvUsed(state, now);
+  if (used + 2 > kvAllowed(now)) return { calls: 0, items: 0, stop: 'kv-budget', remaining: state.remaining ?? null, queue: left.count, kv: used };
   // Wedstrijddag: turbo laat genoeg over voor het live-bord, en houdt de runs klein tijdens de duels
   // (subrequests per run worden gedeeld met live, het bord en de meldingen).
-  const now = Date.now();
   const reserveTurbo = boardBusy(board, now) ? RESERVE_MATCHDAY : RESERVE_TURBO;
   const maxCalls = boardActive(board, now) ? MAX_CALLS_LIVE : MAX_CALLS;
   let calls = 0; let stop = null; let remaining = state.remaining ?? null; let limit = state.limit ?? null;
-  while (queue.length && !stop) {
-    const item = queue[0];
+  const next = () => (extra.length ? extra[0] : q.items[pos]);
+  const done = () => { if (extra.length) extra.shift(); else pos++; };
+  while (next() && !stop) {
+    const item = next();
     const paths = pathsFor(item);
-    if (!paths) { queue.shift(); continue; }
+    if (!paths) { done(); continue; }
     if (calls + paths.length > maxCalls) break;
     if (remaining != null && remaining - paths.length < (mode === 'turbo' ? reserveTurbo : reserve)) { stop = 'reserve'; break; }
     const bodies = []; let status = 200;
@@ -292,24 +323,23 @@ async function nsRun(env, why) {
       bodies.push(await res.text());
     }
     if (status === 429) { stop = 'quota'; break; } // item blijft in de wachtrij
-    queue.shift();
+    done();
     results.push({ item, status, bodies });
-    // Competitie: volgende pagina van 100 erachteraan zetten (pagination uit het antwoord).
+    // Competitie: volgende pagina van 100 vooraan (pagination uit het antwoord).
     if (item.type === 'league' && bodies[0]) {
       const m = bodies[0].match(/"totalCount"\s*:\s*(\d+)/);
       const total = m ? Number(m[1]) : 0;
-      const next = (Number(item.offset) || 0) + 100;
-      if (next < total) queue.unshift({ ...item, offset: next });
+      const nxt = (Number(item.offset) || 0) + 100;
+      if (nxt < total) extra.unshift({ ...item, offset: nxt });
     }
   }
   const at = new Date().toISOString();
-  if (results.length) await env.MS_KV.put(`${NS_INBOX}${Date.now()}`, JSON.stringify({ at, results }));
+  let w = 1; // ns:state
+  if (results.length) { await env.MS_KV.put(`${NS_INBOX}${Date.now()}`, JSON.stringify({ at, results })); w++; }
+  const kv = { day: utcDay(now), w: used + w };
   const log = [{ at, why, calls, items: results.length, stop, remaining, reserve }, ...(state.log || [])].slice(0, 30);
-  await Promise.all([
-    env.MS_KV.put(NS_QUEUE, JSON.stringify(queue)),
-    env.MS_KV.put(NS_STATE, JSON.stringify({ ...state, mode, lastRun: at, remaining, limit, exhaustedAt: stop === 'quota' ? at : state.exhaustedAt || null, log })),
-  ]);
-  return { calls, items: results.length, stop, remaining, queue: queue.length };
+  await env.MS_KV.put(NS_STATE, JSON.stringify({ ...state, mode, lastRun: at, remaining, limit, exhaustedAt: stop === 'quota' ? at : state.exhaustedAt || null, log, cursor: { qid: q.qid, pos, extra }, kv }));
+  return { calls, items: results.length, stop, remaining, queue: Math.max(0, q.items.length - pos) + extra.length, kv: kv.w };
 }
 
 /** De wekker loopt elke minuut; hier beslissen we of er echt gedraaid wordt. */
@@ -321,8 +351,9 @@ async function nsScheduled(env, time) {
   const d = new Date(time);
   // Gratis: 's avonds laat (UTC 21-23 = 23-01 uur NL-zomertijd), elke 10 minuten, met reserve.
   if (mode === 'free' && !(d.getUTCHours() >= 21 && d.getUTCMinutes() % 10 === 0)) return;
-  const queue = await env.MS_KV.get(NS_QUEUE);
-  if (!queue || queue === '[]') return;
+  const q = queueOf(await nsGet(env, NS_QUEUE, []));
+  if (!leftOf(q, state).count) return;
+  if (kvUsed(state, time) + 2 > kvAllowed(time)) return; // KV-budget voor nu op: niets lezen of schrijven
   await nsRun(env, 'wekker');
 }
 
@@ -330,17 +361,26 @@ async function nsApi(request, env, url, origin) {
   if (!env.MS_KV) return json({ error: 'Nachtploeg: KV-namespace MS_KV is nog niet gekoppeld aan de Worker' }, 501, origin);
   const path = url.pathname.slice(3); // na /ns
   if (path === '/state' && request.method === 'GET') {
-    const [state, queue, list] = await Promise.all([nsGet(env, NS_STATE, {}), nsGet(env, NS_QUEUE, []), env.MS_KV.list({ prefix: NS_INBOX })]);
+    const [state, raw, list] = await Promise.all([nsGet(env, NS_STATE, {}), nsGet(env, NS_QUEUE, []), env.MS_KV.list({ prefix: NS_INBOX })]);
+    const q = queueOf(raw); const left = leftOf(q, state);
+    const rest = [...left.extra, ...q.items.slice(left.pos)];
     const byType = {};
-    queue.forEach((q) => { byType[q.type] = (byType[q.type] || 0) + 1; });
-    return json({ state: { mode: 'free', ...state }, queue: queue.length, byType, inbox: list.keys.map((k) => k.name) }, 200, origin);
+    rest.forEach((x) => { byType[x.type] = (byType[x.type] || 0) + 1; });
+    const now = Date.now();
+    return json({ state: { mode: 'free', ...state, cursor: undefined }, queue: rest.length, byType, inbox: list.keys.map((k) => k.name), kv: { used: kvUsed(state, now), allowedNow: kvAllowed(now), budget: NS_KV_BUDGET } }, 200, origin);
   }
   if (path === '/queue' && request.method === 'POST') {
     const body = await request.json().catch(() => null);
     const items = Array.isArray(body && body.items) ? body.items.filter((i) => pathsFor(i)) : null;
     if (!items) return json({ error: 'Geen geldige wachtrij' }, 400, origin);
     if (items.length > 20000) return json({ error: 'Wachtrij te groot' }, 400, origin);
-    await env.MS_KV.put(NS_QUEUE, JSON.stringify(items));
+    // Alleen schrijven als er echt iets veranderd is (elke write telt); nieuwe qid = cursor begint opnieuw.
+    const cur = queueOf(await nsGet(env, NS_QUEUE, []));
+    const state = await nsGet(env, NS_STATE, {});
+    const left = leftOf(cur, state);
+    const rest = [...left.extra, ...cur.items.slice(left.pos)];
+    if (JSON.stringify(rest) === JSON.stringify(items)) return json({ ok: true, queue: items.length, unchanged: true }, 200, origin);
+    await env.MS_KV.put(NS_QUEUE, JSON.stringify({ qid: String(Date.now()), items }));
     return json({ ok: true, queue: items.length }, 200, origin);
   }
   if (path === '/mode' && request.method === 'POST') {
@@ -369,8 +409,9 @@ async function nsApi(request, env, url, origin) {
 
 export default {
   async scheduled(event, env, ctx) {
+    // De nachtploeg pas ná de rest: ns:state wordt ook door live/bord/uitslag bijgewerkt (remaining), en tegelijk
+    // schrijven kan de cursor van de nachtploeg terugzetten (dan dubbel werk en extra writes).
     ctx.waitUntil(Promise.all([
-      nsScheduled(env, event.scheduledTime),
       pushScheduled(env, event.scheduledTime).catch(() => {}),
       squadScheduled(env, event.scheduledTime).catch(() => {}),
       liveScheduled(env, event.scheduledTime, {
@@ -390,7 +431,7 @@ export default {
         state: () => nsGet(env, NS_STATE, {}),
         saveRemaining: async (n) => { const s = await nsGet(env, NS_STATE, {}); await env.MS_KV.put(NS_STATE, JSON.stringify({ ...s, remaining: n })); },
       }).catch(() => {}),
-    ]));
+    ]).then(() => nsScheduled(env, event.scheduledTime)).catch(() => {}));
   },
 
   async fetch(request, env) {

@@ -12,7 +12,7 @@ const MODE_LABEL = {
   free: ['Gratis', "Elke avond vanaf 23:00 (in de winter 22:00) elke 10 minuten een ronde van max. 40 calls, tot er nog 15 over zijn. In het laatste half uur voor de reset (01:30, in de winter 00:30) gaat hij door tot er 3 over zijn: die zouden anders ongebruikt verlopen."],
   turbo: ['Turbo', 'Elke minuut een ronde van 40 calls, zonder reserve. Alleen voor een betaald Highlightly-abonnement.'],
 };
-const TYPE_LABEL = { full: 'Cambuur-details', events: 'schutters andere duels', league: 'competitielijsten', program: 'programma', standings: 'standen' };
+const TYPE_LABEL = { full: 'Cambuur-details', lfull: 'volledige duels andere clubs', lineups: 'opstellingen (keepers)', events: 'schutters andere duels', league: 'competitielijsten', program: 'programma', standings: 'standen' };
 const when = (iso) => (iso ? `${dayShort(iso)} ${timeOf(iso)}` : '—');
 
 export const nightViews = {
@@ -44,6 +44,7 @@ export const nightViews = {
           <div class="section__label"><span>Wachtrij</span><span>${st.queue}</span></div>
           ${st.queue ? `<div class="list">${Object.entries(st.byType || {}).map(([t, n]) => `<div class="kv-line"><span>${esc(TYPE_LABEL[t] || t)}</span><span class="mono">${n}</span></div>`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Leeg. Alles wat we kennen is binnen.</p>'}
           <p class="muted" style="font-size:var(--fs-sm)">Opgebouwd ${esc(when(q && q.at))}. Highlightly-calls over volgens de laatste ronde: <span class="mono">${st.state.remaining ?? '?'}</span>.</p>
+          ${st.kv ? `<p class="muted" style="font-size:var(--fs-sm)">Cloudflare-opslag (KV) vandaag: <span class="mono">${st.kv.used} van ${st.kv.budget}</span> schrijfacties voor de nachtploeg${st.kv.used + 2 > st.kv.allowedNow ? ` · nu even op (gespreid over de dag; om dit uur mogen er ${st.kv.allowedNow})` : ''}. Gratis Cloudflare geeft 1.000 per dag; de rest blijft voor live en meldingen. Nieuwe dag om 01:00.</p>` : ''}
           <label class="field field--check"><input type="checkbox" data-backfill ${prefs.backfill ? 'checked' : ''}> <span>Ook oude seizoenen ophalen (vanaf ${FIRST_BACKFILL}–${String(FIRST_BACKFILL + 1).slice(2)})</span></label>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn" type="button" data-ns="queue">${icons.refresh}<span>Wachtrij opbouwen</span></button>
