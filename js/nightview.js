@@ -29,7 +29,7 @@ export const nightViews = {
         return `${head}<section class="section"><div class="empty"><span class="empty__title">Worker nog niet klaar</span>
           <p class="muted">${esc(err.status === 501 ? 'De KV-opslag (MS_KV) is nog niet gekoppeld aan de Worker.' : err.status === 404 || err.status === 405 ? 'De Worker kent de nachtploeg nog niet: de nieuwe code is nog niet gedeployd.' : explain(err))}</p></div></section>`;
       }
-      const [prefs, last, q] = await Promise.all([getPrefs(), getMeta('nsLast').catch(() => null), getMeta('nsQueue').catch(() => null)]);
+      const [prefs, last, q, nsErr] = await Promise.all([getPrefs(), getMeta('nsLast').catch(() => null), getMeta('nsQueue').catch(() => null), getMeta('nsError').catch(() => null)]);
       if (st.state.lastRun) noteRateLimit({ remaining: st.state.remaining, at: st.state.lastRun }).catch(() => {});
       const mode = st.state.mode || 'free';
       const log = st.state.log || [];
@@ -60,6 +60,7 @@ export const nightViews = {
         <section class="section">
           <div class="section__label"><span>Brievenbus</span><span>${(st.inbox || []).length}</span></div>
           <p class="muted" style="font-size:var(--fs-md)">${(st.inbox || []).length ? `${st.inbox.length} ${st.inbox.length === 1 ? 'pakketje wacht' : 'pakketjes wachten'} op verwerking.` : 'Leeg.'}${last ? ` Laatst verwerkt ${esc(when(last.at))}: ${last.items} items.` : ''}</p>
+          ${nsErr && Date.now() - Date.parse(nsErr.at) < 7 * 864e5 ? `<p class="warn-line" style="font-size:var(--fs-sm)">Laatste fout bij verwerken (${esc(when(nsErr.at))}, ${esc(TYPE_LABEL[nsErr.type] || nsErr.type)}${nsErr.id ? ` ${esc(nsErr.id)}` : ''}): ${esc(nsErr.message)}</p>` : ''}
           <div><button class="btn btn--primary" type="button" data-ns="empty" ${(st.inbox || []).length ? '' : 'disabled'}>Brievenbus legen</button></div>
         </section>
         <section class="section">
@@ -81,7 +82,7 @@ export const nightViews = {
         try {
           if (b.dataset.ns === 'queue') { const n = await runWithButton(b, 'Opbouwen…', () => pushQueue()); toast(`Wachtrij: ${n} items`); }
           if (b.dataset.ns === 'run') { const r = await runWithButton(b, 'Bezig…', () => ns.runNow()); toast(r.error ? `Ronde: ${r.calls} calls, opslaan mislukt: ${r.error}` : `Ronde: ${r.calls} calls, ${r.items} items${r.stop ? ` (${r.stop === 'reserve' ? 'reserve bereikt' : r.stop === 'kv-budget' ? 'opslagbudget op' : 'quotum op'})` : ''}`, r.error ? { duration: 8000 } : undefined); }
-          if (b.dataset.ns === 'empty') { const s = await runWithButton(b, 'Verwerken…', () => emptyInbox()); toast(s.items ? `${s.items} items verwerkt${s.left ? ` · ${s.left} pakketjes morgen (dagbudget Firestore)` : ''}` : 'De brievenbus was al leeg: de app had hem bij het openen al verwerkt.'); ctx.refresh(); }
+          if (b.dataset.ns === 'empty') { const s = await runWithButton(b, 'Verwerken… laat dit scherm open', () => emptyInbox((sum, total) => { b.innerHTML = `<span>Verwerken… ${sum.chunks} van ${total} · laat dit scherm open</span>`; })); toast(s.items ? `${s.items} items verwerkt${s.repaired ? ` · ${s.repaired} duels gerepareerd` : ''}${s.errors ? ` · ${s.errors} mislukt` : ''}${s.left ? ` · ${s.left} pakketjes morgen (dagbudget Firestore)` : ''}` : s.repaired ? `${s.repaired} duels gerepareerd` : 'De brievenbus was al leeg: de app had hem bij het openen al verwerkt.', { duration: 6000 }); ctx.refresh(); }
           ctx.refresh();
         } catch (err) { toast(explain(err)); }
       });

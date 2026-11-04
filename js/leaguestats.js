@@ -48,7 +48,10 @@ async function collect(leagueId, season) {
     if (d && d.players && Object.keys(d.players).length) {
       const st = new Set(['home', 'away'].flatMap((k) => (d.lineups && d.lineups[k] ? d.lineups[k].starters : []).map((x) => x.id)));
       mins = Object.entries(d.players).flatMap(([tid, list]) => (list || []).filter((x) => x.minutes > 0).map((x) => [x.id, Number(tid), x.minutes, st.has(x.id) || !x.sub ? 1 : 0, x.name]));
-    } else if (!m.own && Array.isArray(m.mins)) mins = m.mins;
+    } else if (!m.own && Array.isArray(m.mins)) {
+      // Sinds v0.60.2 tekst "speler|club|min|basis|naam" (Firestore kent geen lijsten in lijsten).
+      mins = m.mins.map((x) => { if (Array.isArray(x)) return x; const [id, t, min, st, ...name] = String(x).split('|'); return [Number(id), Number(t), Number(min), Number(st), name.join('|')]; });
+    }
     return { m, events, keepers, subsOut, mins, missingLineup: !m.own && m.keepers === undefined };
   });
 }

@@ -9,7 +9,7 @@ import { ns } from './api.js';
 import { MAIN_CLUB, CURRENT_SEASON } from './config.js';
 import {
   getAllMatches, hasDetail, saveMatches, saveMatchDetail, saveLeagueMatches, saveLeagueExtra, saveLeagueDetail, saveStandings, setMeta, getMeta,
-  countCalls, getLeagueIndexes, addToLeagueIndex, saveSeason, getSeasons, noteRateLimit,
+  countCalls, getLeagueIndexes, addToLeagueIndex, saveSeason, getSeasons, noteRateLimit, getAllLeagueDetails, saveLeagueExtras,
 } from './store.js';
 import { normalizeListMatch, normalizeDetail, normalizeEvents, normalizeStandings, normalizeLineups } from './normalize.js';
 
@@ -102,6 +102,42 @@ async function spendWrites(n) {
 
 /** Eén resultaat uit de brievenbus naar Firestore. Geeft het aantal writes terug. */
 /** Ook gebruikt door de knop op de pagina van een ander duel (#/duel/<id>). */
+/**
+ * De samenvatting van een volledig duel die op leagueMatches/{id} komt (voor de divisiestats): events zonder
+ * wissels, wie er gewisseld werd, de keepers en de speelminuten. Speelminuten als tekst "speler|club|min|basis|naam":
+ * Firestore kan geen lijsten in lijsten bewaren (dat ging tot v0.60.2 mis).
+ */
+export function summaryOf(detail) {
+  const all = detail.events || [];
+  const gk = (side) => { const p = side && (side.starters || []).find((x) => /goalkeeper/i.test(x.position || '')) || (side && (side.starters || []).find((x) => x.line === 0)); return p ? { id: p.id, name: p.name ?? null, teamId: side.teamId ?? null } : null; };
+  const lu = detail.lineups || {};
+  const starters = new Set([...(lu.home ? lu.home.starters || [] : []), ...(lu.away ? lu.away.starters || [] : [])].map((x) => x.id));
+  const mins = Object.entries(detail.players || {}).flatMap(([teamId, list]) => (list || []).filter((x) => x.minutes > 0).map((x) => [x.id, Number(teamId), x.minutes, starters.has(x.id) || !x.sub ? 1 : 0, String(x.name || '').replace(/\|/g, '/')].join('|')));
+  return { mins, events: all.filter((e) => !/subst/i.test(e.type || '')), subsOut: all.filter((e) => /subst/i.test(e.type || '') && e.outId != null).map((e) => e.outId), keepers: lu.home || lu.away ? { home: gk(lu.home), away: gk(lu.away) } : null, hasDetail: true, eventsAt: detail.fetchedAt || null, lineupsAt: detail.fetchedAt || null };
+}
+
+/**
+ * Eenmalig (v0.60.2): duels waarvan het volledige verloop al in leagueDetails staat, maar waarvan de samenvatting
+ * en de index nooit zijn bijgewerkt (zie summaryOf). Geen calls; ~1 read en ~1 write per duel.
+ */
+async function repairFull() {
+  if (await getMeta('repairFull1').catch(() => null)) return 0;
+  const [details, indexes] = await Promise.all([getAllLeagueDetails(), getLeagueIndexes()]);
+  const done = new Set(indexes.flatMap((i) => (i.withFull || []).map(String)));
+  const todo = details.filter((d) => !done.has(String(d.matchId || d.id)) && d.leagueId && d.season);
+  if (todo.length) {
+    await saveLeagueExtras(todo.map((d) => ({ id: d.matchId || d.id, fields: summaryOf(d) })));
+    const by = new Map();
+    todo.forEach((d) => { const k = `${d.leagueId}_${d.season}`; if (!by.has(k)) by.set(k, { l: Number(d.leagueId), y: Number(d.season), ids: [] }); by.get(k).ids.push(Number(d.matchId || d.id)); }); // getallen, net als 'finished' (buildQueue vergelijkt zo)
+    for (const { l, y, ids } of by.values()) {
+      for (let i = 0; i < ids.length; i += 500) { const part = ids.slice(i, i + 500); await addToLeagueIndex(l, y, { withEvents: part, withLineups: part, withFull: part }); }
+    }
+    await spendWrites(todo.length + by.size);
+  }
+  await setMeta('repairFull1', { at: new Date().toISOString(), repaired: todo.length });
+  return todo.length;
+}
+
 export async function apply(r) {
   const { item, bodies } = r;
   if (!bodies || bodies.every((b) => b == null)) return 0;
@@ -142,13 +178,7 @@ export async function apply(r) {
       if (!d) return 0;
       const { base, detail } = normalizeDetail(d, l, b);
       await saveLeagueDetail(item.id, { ...detail, matchId: String(item.id), leagueId: Number(item.leagueId), season: Number(item.season) });
-      const all = detail.events || [];
-      const gk = (side) => { const p = side && (side.starters || []).find((x) => /goalkeeper/i.test(x.position || '')) || (side && (side.starters || []).find((x) => x.line === 0)); return p ? { id: p.id, name: p.name, teamId: side.teamId } : null; };
-      const lu = detail.lineups || {};
-      // Speelminuten compact op het duel (voor de divisiestats): [spelerId, clubId, minuten, basis 1/0, naam].
-      const starters = new Set([...(lu.home ? lu.home.starters : []), ...(lu.away ? lu.away.starters : [])].map((x) => x.id));
-      const mins = Object.entries(detail.players || {}).flatMap(([teamId, list]) => (list || []).filter((x) => x.minutes > 0).map((x) => [x.id, Number(teamId), x.minutes, starters.has(x.id) || !x.sub ? 1 : 0, x.name]));
-      await saveLeagueMatches([{ ...base, mins, events: all.filter((e) => !/subst/i.test(e.type || '')), subsOut: all.filter((e) => /subst/i.test(e.type || '') && e.outId != null).map((e) => e.outId), keepers: lu.home || lu.away ? { home: gk(lu.home), away: gk(lu.away) } : null, hasDetail: true, eventsAt: detail.fetchedAt, lineupsAt: detail.fetchedAt }]);
+      await saveLeagueMatches([{ ...base, ...summaryOf(detail) }]);
       await addToLeagueIndex(item.leagueId, item.season, { withEvents: [item.id], withLineups: [item.id], withFull: [item.id] });
       return 4; // leagueDetails + leagueMatches + teamIndex + leagueIndex
     }
@@ -194,11 +224,12 @@ export function emptyInbox(onProgress) {
 }
 
 async function runEmpty(onProgress) {
+  const repaired = await repairFull().catch((err) => { console.warn('Nachtploeg: reparatie mislukt', err); return 0; });
   const st = await ns.state();
   if (st.state && st.state.lastRun) noteRateLimit({ remaining: st.state.remaining, at: st.state.lastRun }).catch(() => {});
   const keys = (st.inbox || []).slice().sort();
   let budget = await writeBudget();
-  const summary = { chunks: 0, items: 0, writes: 0, byType: {}, left: 0 };
+  const summary = { chunks: 0, items: 0, writes: 0, byType: {}, left: 0, errors: 0, repaired };
   for (const key of keys) {
     if (budget <= 0) { summary.left = keys.length - summary.chunks; break; }
     const chunk = await ns.inbox(key);
@@ -209,7 +240,12 @@ async function runEmpty(onProgress) {
         summary.items++;
         summary.byType[r.item.type] = (summary.byType[r.item.type] || 0) + 1;
         calls += COST_OF[r.item.type] || 1;
-      } catch (err) { console.warn('Nachtploeg: verwerken mislukt', r.item, err); }
+      } catch (err) {
+        console.warn('Nachtploeg: verwerken mislukt', r.item, err);
+        // Niet stil wegslikken: de eerste fout van deze beurt bewaren, zodat hij op het nachtploegscherm staat.
+        if (!summary.errors) await setMeta('nsError', { at: new Date().toISOString(), type: r.item.type, id: r.item.id ?? null, message: String(err && err.message || err).slice(0, 200) }).catch(() => {});
+        summary.errors++;
+      }
     }
     await ns.ack(key);
     await spendWrites(writes);
@@ -221,7 +257,7 @@ async function runEmpty(onProgress) {
   if (summary.items) {
     const LABEL = { full: 'Cambuur-details', events: 'doelpuntenmakers', lineups: 'opstellingen (keepers)', lfull: 'volledige duels (andere clubs)', league: 'competitiewedstrijden', program: 'programma', standings: 'standen' };
     const parts = Object.entries(summary.byType).map(([k, n]) => `${n}× ${LABEL[k] || k}`).join(', ');
-    await addMessage({ id: `ns:${Date.now()}`, kind: 'nightshift', title: `${summary.items} ${summary.items === 1 ? 'pakketje' : 'pakketjes'} verwerkt`, text: `${parts}${summary.left ? `. ${summary.left} wachten op morgen (dagbudget Firestore).` : '.'}`, href: '#/nachtploeg' }).catch(() => {});
+    await addMessage({ id: `ns:${Date.now()}`, kind: 'nightshift', title: `${summary.items} ${summary.items === 1 ? 'pakketje' : 'pakketjes'} verwerkt`, text: `${parts}${summary.left ? `. ${summary.left} wachten op morgen (dagbudget Firestore).` : '.'}${summary.errors ? ` ${summary.errors} mislukt: zie Nachtploeg.` : ''}`, href: '#/nachtploeg' }).catch(() => {});
   }
   return summary;
 }

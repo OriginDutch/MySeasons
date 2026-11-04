@@ -322,6 +322,20 @@ export async function getLeagueDetail(id) {
   const d = await docFast(doc(db, 'leagueDetails', String(id)));
   return d && d.exists() ? d.data() : null;
 }
+/** Alle bewaarde volledige duels (eenmalig, voor de reparatie in nightshift.js). */
+export async function getAllLeagueDetails() {
+  return (await getDocs(collection(db, 'leagueDetails'))).docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/** Velden op meerdere competitieduels tegelijk (samenvoegen), in batches van 400. */
+export async function saveLeagueExtras(list) {
+  for (let i = 0; i < list.length; i += 400) {
+    const batch = writeBatch(db);
+    list.slice(i, i + 400).forEach(({ id, fields }) => batch.set(doc(db, 'leagueMatches', String(id)), fields, { merge: true }));
+    await batch.commit();
+  }
+}
+
 export function saveLeagueDetail(id, detail) {
   return setDoc(doc(db, 'leagueDetails', String(id)), detail);
 }
