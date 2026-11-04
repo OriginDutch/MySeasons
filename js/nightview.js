@@ -44,6 +44,7 @@ export const nightViews = {
         <section class="section">
           <div class="section__label"><span>Wachtrij</span><span>${st.queue}</span></div>
           ${st.queue ? `<div class="list">${Object.entries(st.byType || {}).map(([t, n]) => `<div class="kv-line"><span>${esc(TYPE_LABEL[t] || t)}</span><span class="mono">${n}</span></div>`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Leeg. Alles wat we kennen is binnen.</p>'}
+          ${st.state.pausedUntil && st.state.pausedUntil > Date.now() ? `<p class="warn-line">Opslaan in de brievenbus lukte 3 keer niet. De wekker pauzeert tot ${esc(timeOf(new Date(st.state.pausedUntil).toISOString()))}; zie het logboek. "Nu een ronde" werkt wel.</p>` : ''}
           <p class="muted" style="font-size:var(--fs-sm)">Opgebouwd ${esc(when(q && q.at))}. Highlightly-calls over volgens de laatste ronde: <span class="mono">${st.state.remaining ?? '?'}</span>.</p>
           ${st.kv ? `<p class="muted" style="font-size:var(--fs-sm)">Cloudflare-opslag (${esc(st.kv.store || 'KV')}) vandaag: <span class="mono">${st.kv.used} van ${st.kv.budget}</span> schrijfacties voor de nachtploeg${st.kv.used + 2 > st.kv.allowedNow ? ` · nu even op (gespreid over de dag; om dit uur mogen er ${st.kv.allowedNow})` : ''}. ${st.kv.store === 'D1' ? 'D1 (gratis): 100.000 rijen per dag' : 'Gratis Cloudflare geeft 1.000 per dag; de rest blijft voor live en meldingen'}. Nieuwe dag om 01:00.</p>` : ''}
           <label class="field field--check"><input type="checkbox" data-backfill ${prefs.backfill ? 'checked' : ''}> <span>Ook oude seizoenen ophalen (vanaf ${FIRST_BACKFILL}–${String(FIRST_BACKFILL + 1).slice(2)})</span></label>
@@ -63,7 +64,7 @@ export const nightViews = {
         </section>
         <section class="section">
           <div class="section__label"><span>Logboek</span><span>laatste rondes</span></div>
-          ${log.length ? `<div class="list">${log.slice(0, 12).map((l) => `<div class="kv-line"><span>${esc(when(l.at))} <span class="muted">· ${esc(l.why)}</span></span><span class="mono">${l.calls} calls · ${l.items} items${l.stop === 'reserve' ? ` · reserve${l.reserve ? ` ${l.reserve}` : ''}` : l.stop === 'quota' ? ' · quotum op' : ''}</span></div>`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Nog geen rondes gedraaid.</p>'}
+          ${log.length ? `<div class="list">${log.slice(0, 12).map((l) => `<div class="kv-line"><span>${esc(when(l.at))} <span class="muted">· ${esc(l.why)}</span></span><span class="mono">${l.calls} calls · ${l.items} items${l.stop === 'reserve' ? ` · reserve${l.reserve ? ` ${l.reserve}` : ''}` : l.stop === 'quota' ? ' · quotum op' : l.stop === 'opslag' ? ' · opslaan mislukt' : ''}</span></div>${l.error ? `<p class="warn-line" style="font-size:var(--fs-sm)">${esc(l.error)}</p>` : ''}`).join('')}</div>` : '<p class="muted" style="font-size:var(--fs-md)">Nog geen rondes gedraaid.</p>'}
         </section>`;
     },
     mount(root, ctx) {
@@ -79,7 +80,7 @@ export const nightViews = {
         if (!b) return;
         try {
           if (b.dataset.ns === 'queue') { const n = await runWithButton(b, 'Opbouwen…', () => pushQueue()); toast(`Wachtrij: ${n} items`); }
-          if (b.dataset.ns === 'run') { const r = await runWithButton(b, 'Bezig…', () => ns.runNow()); toast(`Ronde: ${r.calls} calls, ${r.items} items${r.stop ? ` (${r.stop === 'reserve' ? 'reserve bereikt' : 'quotum op'})` : ''}`); }
+          if (b.dataset.ns === 'run') { const r = await runWithButton(b, 'Bezig…', () => ns.runNow()); toast(r.error ? `Ronde: ${r.calls} calls, opslaan mislukt: ${r.error}` : `Ronde: ${r.calls} calls, ${r.items} items${r.stop ? ` (${r.stop === 'reserve' ? 'reserve bereikt' : r.stop === 'kv-budget' ? 'opslagbudget op' : 'quotum op'})` : ''}`, r.error ? { duration: 8000 } : undefined); }
           if (b.dataset.ns === 'empty') { const s = await runWithButton(b, 'Verwerken…', () => emptyInbox()); toast(s.items ? `${s.items} items verwerkt${s.left ? ` · ${s.left} pakketjes morgen (dagbudget Firestore)` : ''}` : 'De brievenbus was al leeg: de app had hem bij het openen al verwerkt.'); ctx.refresh(); }
           ctx.refresh();
         } catch (err) { toast(explain(err)); }

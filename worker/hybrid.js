@@ -13,9 +13,15 @@ const HOT = ['ns:', 'live:', 'livelog:', 'lv:', 'lvc:', 'ask:', 'fu:'];
 const COLD = new Set(['live:secret']);
 const isHot = (k) => !COLD.has(k) && HOT.some((p) => String(k).startsWith(p));
 let ready = null;
+// Gratis Workers: max. 50 D1-queries per aanroep. We tellen ze per aanroep (cron-minuut of verzoek), zodat de
+// nachtploeg kan overslaan als live en de rest er die minuut al veel gebruikt hebben.
+export const D1_MAX = 50;
+// Eén rij in D1 mag max. 2 MB zijn (KV: 25 MB). Daarboven weigeren we zelf, met een duidelijke fout.
+export const D1_ROW_MAX = 1900000;
 
-async function ensure(db) {
+async function ensure(db, tick) {
   if (!ready) {
+    tick();
     ready = db.prepare('CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, exp INTEGER)').run()
       .catch((err) => { ready = null; throw err; });
   }
@@ -25,13 +31,17 @@ async function ensure(db) {
 /** Bovengrens voor een prefix-zoekactie op de primaire sleutel: "ns:inbox:" → "ns:inbox;" */
 const upper = (p) => p.slice(0, -1) + String.fromCharCode(p.charCodeAt(p.length - 1) + 1);
 
-export function hybrid(env) {
+export function hybrid(env, used = 0) {
   const kv = env.MS_KV; const db = env.DB;
   if (!db) return kv; // nog geen D1 gekoppeld: alles zoals voorheen
+  let n = used;
+  const tick = () => { n++; };
   return {
+    /** D1-queries in deze aanroep tot nu toe. */
+    queries: () => n,
     async get(k, type) {
       if (!isHot(k)) return kv.get(k, type);
-      await ensure(db);
+      await ensure(db, tick); tick();
       const row = await db.prepare('SELECT v, exp FROM kv WHERE k = ?').bind(k).first();
       if (!row || (row.exp && row.exp < Date.now())) return null;
       if (type === 'json') { try { return JSON.parse(row.v); } catch { return null; } }
@@ -39,41 +49,45 @@ export function hybrid(env) {
     },
     async put(k, v, opts = {}) {
       if (!isHot(k)) return kv.put(k, v, opts);
-      await ensure(db);
+      const text = String(v);
+      if (text.length > D1_ROW_MAX) throw Object.assign(new Error(`Te groot voor D1 (${Math.round(text.length / 1000)} kB, max. 2 MB per rij): ${k}`), { tooBig: true });
+      await ensure(db, tick); tick();
       const exp = opts.expirationTtl ? Date.now() + opts.expirationTtl * 1000 : null;
-      await db.prepare('INSERT INTO kv (k, v, exp) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp').bind(k, String(v), exp).run();
+      await db.prepare('INSERT INTO kv (k, v, exp) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, exp = excluded.exp').bind(k, text, exp).run();
     },
     async delete(k) {
       if (!isHot(k)) return kv.delete(k);
-      await ensure(db);
+      await ensure(db, tick); tick();
       await db.prepare('DELETE FROM kv WHERE k = ?').bind(k).run();
     },
     async list({ prefix = '' } = {}) {
       if (!isHot(prefix)) return kv.list({ prefix });
-      await ensure(db);
+      await ensure(db, tick); tick();
       const { results } = await db.prepare('SELECT k FROM kv WHERE k >= ? AND k < ? AND (exp IS NULL OR exp > ?) ORDER BY k LIMIT 1000').bind(prefix, upper(prefix), Date.now()).all();
       return { keys: results.map((r) => ({ name: r.k })), list_complete: true };
     },
   };
 }
 
-/** Eén keer: nachtploeg-sleutels uit KV naar D1, en eens per uur verlopen rijen opruimen. */
+/** Eén keer: nachtploeg-sleutels uit KV naar D1, en eens per uur verlopen rijen opruimen. Geeft het aantal D1-queries. */
 export async function maintain(env, time) {
   const db = env.DB; const kv = env.MS_KV;
-  if (!db || !kv) return;
-  await ensure(db);
+  if (!db || !kv) return 0;
+  let n = 0; const tick = () => { n++; };
+  await ensure(db, tick); tick();
   const flag = await db.prepare("SELECT v FROM kv WHERE k = 'meta:migrated'").first();
   if (!flag) {
     const keys = ['ns:state', 'ns:queue', ...((await kv.list({ prefix: 'ns:inbox:' })).keys || []).map((x) => x.name)];
     for (const k of keys) {
       const v = await kv.get(k);
       if (v == null) continue;
-      await db.prepare('INSERT INTO kv (k, v, exp) VALUES (?, ?, NULL) ON CONFLICT(k) DO NOTHING').bind(k, v).run();
+      await db.prepare('INSERT INTO kv (k, v, exp) VALUES (?, ?, NULL) ON CONFLICT(k) DO NOTHING').bind(k, v).run(); tick();
       await kv.delete(k);
     }
-    await db.prepare("INSERT INTO kv (k, v, exp) VALUES ('meta:migrated', ?, NULL) ON CONFLICT(k) DO NOTHING").bind(new Date().toISOString()).run();
+    await db.prepare("INSERT INTO kv (k, v, exp) VALUES ('meta:migrated', ?, NULL) ON CONFLICT(k) DO NOTHING").bind(new Date().toISOString()).run(); tick();
   }
-  if (new Date(Number(time)).getUTCMinutes() === 7) await db.prepare('DELETE FROM kv WHERE exp IS NOT NULL AND exp < ?').bind(Date.now()).run();
+  if (new Date(Number(time)).getUTCMinutes() === 7) { await db.prepare('DELETE FROM kv WHERE exp IS NOT NULL AND exp < ?').bind(Date.now()).run(); tick(); }
+  return n;
 }
 
 /** D1-gebruik vandaag is niet op te vragen vanuit de Worker; we tellen zelf de nachtploeg (zie nsRun). */

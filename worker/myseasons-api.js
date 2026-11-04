@@ -24,7 +24,7 @@ import { followUp } from './followup.js';
 import { squadApi, squadScheduled } from './squadpage.js';
 import { imgApi } from './imgproxy.js';
 import { liveScheduled, liveApi, askScheduled, optinApi } from './live.js';
-import { hybrid, maintain } from './hybrid.js';
+import { hybrid, maintain, D1_MAX, D1_ROW_MAX } from './hybrid.js';
 import { boardScheduled, boardBusy, boardActive, BOARD, cupLive } from './board.js';
 
 const PROJECT_ID = 'myseasons-c1dd9';
@@ -270,6 +270,7 @@ function remainingOf(res) {
 // ns:state en het pakketje in de brievenbus. Daarbovenop een dagbudget, gespreid over de dag.
 const NS_KV_BUDGET = 800; // writes per UTC-dag voor de nachtploeg als alles nog in KV staat (1.000 per dag)
 const NS_D1_BUDGET = 20000; // met D1 (100.000 rijen per dag): ruim; Highlightly is dan de rem
+const NS_D1_NEED = 15; // D1-queries die een ronde hooguit nodig heeft (inclusief een paar stukken brievenbus)
 const budgetOf = (env) => (env.DB ? NS_D1_BUDGET : NS_KV_BUDGET);
 const utcDay = (t) => new Date(t).toISOString().slice(0, 10);
 /** Hoeveel writes mogen er op dit moment van de dag al op zijn: gespreid, met een uur voorsprong. */
@@ -290,13 +291,27 @@ function leftOf(q, state) {
   return { pos: c.pos || 0, extra: c.extra || [], count: Math.max(0, q.items.length - (c.pos || 0)) + (c.extra || []).length };
 }
 
+const CHUNK_BYTES = 800000;
+/** Resultaten in stukken die ruim in één D1-rij passen. */
+export function packChunks(results) {
+  const out = []; let cur = []; let size = 0;
+  for (const r of results) {
+    let x = r; let n = JSON.stringify(r).length;
+    if (n > D1_ROW_MAX - 1000) { x = { item: r.item, status: 413, bodies: r.bodies.map(() => null), tooBig: n }; n = JSON.stringify(x).length; }
+    if (cur.length && size + n > CHUNK_BYTES) { out.push(cur); cur = []; size = 0; }
+    cur.push(x); size += n + 1;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
 async function nsRun(env, why) {
   const [rawQueue, state, board] = await Promise.all([nsGet(env, NS_QUEUE, []), nsGet(env, NS_STATE, {}), nsGet(env, BOARD, null)]);
   const q = queueOf(rawQueue);
   const left = leftOf(q, state);
   let pos = left.pos; const extra = left.extra.slice();
   const mode = state.mode || 'free';
-  const results = [];
+  const results = []; const marks = [];
   const reserve = reserveAt();
   const now = Date.now();
   // KV-budget: een run kost 2 writes (state + brievenbus). Op = overslaan, zonder iets te schrijven.
@@ -335,14 +350,33 @@ async function nsRun(env, why) {
       const nxt = (Number(item.offset) || 0) + 100;
       if (nxt < total) extra.unshift({ ...item, offset: nxt });
     }
+    marks.push({ pos, extra: extra.slice() }); // cursor na dit resultaat (voor als opslaan mislukt)
   }
   const at = new Date().toISOString();
   let w = 1; // ns:state
-  if (results.length) { await env.MS_KV.put(`${NS_INBOX}${Date.now()}`, JSON.stringify({ at, results })); w++; }
+  // Brievenbus: in stukken van max. ~800 kB (D1: max. 2 MB per rij). Eén duel dat in zijn eentje te groot is, gaat
+  // zonder antwoorden mee (de app slaat het over; bij de volgende wachtrij staat het er weer in).
+  let saved = 0; let storeErr = null;
+  try {
+    const chunks = packChunks(results);
+    const base = Date.now();
+    for (let i = 0; i < chunks.length; i++) {
+      await env.MS_KV.put(`${NS_INBOX}${base}${String(i).padStart(2, '0')}`, JSON.stringify({ at, results: chunks[i] }));
+      w++; saved += chunks[i].length;
+    }
+  } catch (err) { storeErr = String(err && err.message || err).slice(0, 160); }
+  // Opslaan mislukt: de cursor alleen opschuiven over wat wél bewaard is, de rest wordt de volgende keer opnieuw
+  // opgehaald. Na 3 keer achter elkaar een half uur pauze, zodat hij niet elke minuut 40 calls verbrandt.
+  if (storeErr) {
+    const back = saved ? marks[saved - 1] : { pos: left.pos, extra: left.extra };
+    pos = back.pos; extra.length = 0; extra.push(...back.extra);
+    stop = 'opslag';
+  }
+  const fails = storeErr ? (state.storeFails || 0) + 1 : 0;
   const kv = { day: utcDay(now), w: used + w };
-  const log = [{ at, why, calls, items: results.length, stop, remaining, reserve }, ...(state.log || [])].slice(0, 30);
-  await env.MS_KV.put(NS_STATE, JSON.stringify({ ...state, mode, lastRun: at, remaining, limit, exhaustedAt: stop === 'quota' ? at : state.exhaustedAt || null, log, cursor: { qid: q.qid, pos, extra }, kv }));
-  return { calls, items: results.length, stop, remaining, queue: Math.max(0, q.items.length - pos) + extra.length, kv: kv.w };
+  const log = [{ at, why, calls, items: saved, stop, remaining, reserve, ...(storeErr ? { error: storeErr } : {}) }, ...(state.log || [])].slice(0, 30);
+  await env.MS_KV.put(NS_STATE, JSON.stringify({ ...state, mode, lastRun: at, remaining, limit, exhaustedAt: stop === 'quota' ? at : state.exhaustedAt || null, log, cursor: { qid: q.qid, pos, extra }, kv, storeFails: fails, pausedUntil: fails >= 3 ? now + 30 * 60e3 : null }));
+  return { calls, items: saved, stop, remaining, queue: Math.max(0, q.items.length - pos) + extra.length, kv: kv.w, ...(storeErr ? { error: storeErr } : {}) };
 }
 
 /** De wekker loopt elke minuut; hier beslissen we of er echt gedraaid wordt. */
@@ -357,6 +391,9 @@ async function nsScheduled(env, time) {
   const q = queueOf(await nsGet(env, NS_QUEUE, []));
   if (!leftOf(q, state).count) return;
   if (kvUsed(state, time) + 2 > kvAllowed(time, budgetOf(env))) return; // budget voor nu op: niets lezen of schrijven
+  if (state.pausedUntil && time < state.pausedUntil) return; // opslaan lukte 3x niet: even pauze
+  // Max. 50 D1-queries per aanroep: live, bord en meldingen gaan voor. Een ronde kost er ~6 plus 1 per pakketje.
+  if (env.MS_KV.queries && env.MS_KV.queries() > D1_MAX - NS_D1_NEED) return;
   await nsRun(env, 'wekker');
 }
 
@@ -383,7 +420,10 @@ async function nsApi(request, env, url, origin) {
     const left = leftOf(cur, state);
     const rest = [...left.extra, ...cur.items.slice(left.pos)];
     if (JSON.stringify(rest) === JSON.stringify(items)) return json({ ok: true, queue: items.length, unchanged: true }, 200, origin);
-    await env.MS_KV.put(NS_QUEUE, JSON.stringify({ qid: String(Date.now()), items }));
+    try { await env.MS_KV.put(NS_QUEUE, JSON.stringify({ qid: String(Date.now()), items })); } catch (err) {
+      if (err && err.tooBig) return json({ error: `Wachtrij te groot voor één D1-rij (${items.length} items). Zet "oude seizoenen" even uit en bouw opnieuw.` }, 413, origin);
+      throw err;
+    }
     return json({ ok: true, queue: items.length }, 200, origin);
   }
   if (path === '/mode' && request.method === 'POST') {
@@ -413,8 +453,8 @@ async function nsApi(request, env, url, origin) {
 export default {
   async scheduled(event, rawEnv, ctx) {
     // Opslag: vaak veranderende sleutels in D1, de rest in KV (hybrid.js). Eerst de eenmalige overstap.
-    await maintain(rawEnv, event.scheduledTime).catch(() => {});
-    const env = { ...rawEnv, MS_KV: hybrid(rawEnv) };
+    const used = await maintain(rawEnv, event.scheduledTime).catch(() => 2);
+    const env = { ...rawEnv, MS_KV: hybrid(rawEnv, used) };
     // De nachtploeg pas ná de rest: ns:state wordt ook door live/bord/uitslag bijgewerkt (remaining), en tegelijk
     // schrijven kan de cursor van de nachtploeg terugzetten (dan dubbel werk en extra writes).
     ctx.waitUntil(Promise.all([
