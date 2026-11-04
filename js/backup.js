@@ -19,6 +19,8 @@ export const COLLECTIONS = [
   ['standings', 'Standen', 'core'],
   ['leagueMatches', 'Competitiewedstrijden', 'core'],
   ['leagueIndex', 'Competitie-index', 'core'],
+  ['leagueDetails', 'Volledig verloop andere duels (groot)', 'core'],
+  ['predictions', 'Voorspelde opstellingen', 'core'],
   ['rsssf', 'RSSSF-seizoenen', 'core'],
   ['news', 'Bewaard nieuws', 'core'],
   ['meta', 'Instellingen en synchronisatie', 'core'],
@@ -26,6 +28,7 @@ export const COLLECTIONS = [
   ['rawMatches', 'Ruwe Highlightly-data (groot)', 'raw'],
 ];
 const LABEL = Object.fromEntries(COLLECTIONS.map(([k, l]) => [k, l]));
+const CLOUD_MAX = 24 * 1024 * 1024; // zelfde grens als de Worker (KV-waarde max. 25 MiB)
 const WRITE_WARN = 15000; // Firestore gratis: 20.000 writes per dag
 // Tellers die bij vandaag horen: nooit terugzetten, anders klopt je quotum niet meer.
 const SKIP_META = new Set(['quota', 'nsWrites', 'backup', 'autoBackup', 'photoExport']);
@@ -73,10 +76,16 @@ async function gunzip(buf) {
 export async function cloudBackup(why = 'manual', onProgress) {
   if (!canZip()) throw new Error('Deze browser kan niet comprimeren');
   const b = await buildBackup({ raw: false }, onProgress);
-  const bytes = await gzip(JSON.stringify(b));
+  let bytes = await gzip(JSON.stringify(b));
+  // Te groot voor de Worker? Dan zonder het volledige verloop van andere duels (dat zit wel in een download).
+  let partial = false;
+  if (bytes.length > CLOUD_MAX && b.collections.leagueDetails) {
+    delete b.collections.leagueDetails; partial = true;
+    bytes = await gzip(JSON.stringify(b));
+  }
   const r = await backups.upload(bytes, { docs: count(b), version: APP_VERSION, why });
-  await setMeta('autoBackup', { at: r.at, size: bytes.length, docs: count(b), why });
-  return { ...r, docs: count(b) };
+  await setMeta('autoBackup', { at: r.at, size: bytes.length, docs: count(b), why, partial });
+  return { ...r, docs: count(b), partial };
 }
 
 let autoRunning = false;
@@ -132,7 +141,7 @@ export const backupViews = {
       return `${head}
         <section class="section">
           <div class="section__label"><span>Automatisch</span><span>${cloud ? `${cloud.items.length} van ${cloud.keep}` : ''}</span></div>
-          <p class="muted" style="font-size:var(--fs-md)">Eens per week maakt de app bij het openen zelf een back-up en bewaart die (gecomprimeerd) bij je Worker. De laatste 4 blijven staan. Zonder de ruwe Highlightly-data en <strong>zonder foto's</strong> (te groot); die zitten alleen in een export met foto's hieronder.</p>
+          <p class="muted" style="font-size:var(--fs-md)">Eens per week maakt de app bij het openen zelf een back-up en bewaart die (gecomprimeerd) bij je Worker. De laatste 4 blijven staan. Zonder de ruwe Highlightly-data en <strong>zonder foto's</strong> (te groot); die zitten alleen in een export met foto's hieronder. Wordt hij groter dan 24 MB, dan gaat het volledige verloop van andere duels er ook uit; download dan af en toe zelf een back-up.</p>
           <label class="field field--check"><input type="checkbox" data-auto ${auto ? 'checked' : ''}> <span>Wekelijks automatisch</span></label>
           ${cloudErr ? `<p class="warn-line">${esc(cloudErr.status === 404 ? 'De Worker kent back-ups nog niet: de nieuwe versie is nog niet gedeployd.' : (cloudErr.message || 'Worker niet bereikbaar'))}</p>` : ''}
           ${cloud && cloud.items.length ? `<div class="list">${cloud.items.map((it) => `
@@ -203,7 +212,7 @@ export const backupViews = {
           b.disabled = true;
           try {
             const r = await cloudBackup('manual', (name) => { b.textContent = `Lezen: ${LABEL[name] || name}…`; });
-            toast(`Opgeslagen: ${r.docs} documenten · ${kb(r.size)}${r.removed ? ` · ${r.removed} oude opgeruimd` : ''}`);
+            toast(`Opgeslagen: ${r.docs} documenten · ${kb(r.size)}${r.removed ? ` · ${r.removed} oude opgeruimd` : ''}${r.partial ? ' · zonder volledig verloop andere duels (te groot)' : ''}`, r.partial ? { duration: 7000 } : undefined);
             ctx.refresh();
           } catch (err) { toast(`Back-up mislukt: ${err.message || err}`); b.disabled = false; b.textContent = 'Nu een back-up opslaan'; }
           return;

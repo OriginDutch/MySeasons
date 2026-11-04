@@ -6,6 +6,7 @@ import { getMeta, noteRateLimit } from './store.js';
 import { pushQueue, emptyInbox, getPrefs, setPrefs, FIRST_BACKFILL } from './nightshift.js';
 import { runWithButton, explain } from './matchviews.js';
 import { dayShort, timeOf } from './season.js';
+import { mountCompleteness } from './completeness.js';
 
 const MODE_LABEL = {
   off: ['Uit', 'De wekker doet niets.'],
@@ -52,6 +53,10 @@ export const nightViews = {
           </div>
         </section>
         <section class="section">
+          <div class="section__label"><span>Compleetheid</span><span>per seizoen</span></div>
+          <div data-complete><p class="muted" style="font-size:var(--fs-sm)">Tellen…</p></div>
+        </section>
+        <section class="section">
           <div class="section__label"><span>Brievenbus</span><span>${(st.inbox || []).length}</span></div>
           <p class="muted" style="font-size:var(--fs-md)">${(st.inbox || []).length ? `${st.inbox.length} ${st.inbox.length === 1 ? 'pakketje wacht' : 'pakketjes wachten'} op verwerking.` : 'Leeg.'}${last ? ` Laatst verwerkt ${esc(when(last.at))}: ${last.items} items.` : ''}</p>
           <div><button class="btn btn--primary" type="button" data-ns="empty" ${(st.inbox || []).length ? '' : 'disabled'}>Brievenbus legen</button></div>
@@ -62,6 +67,7 @@ export const nightViews = {
         </section>`;
     },
     mount(root, ctx) {
+      mountCompleteness(root, ctx);
       root.querySelectorAll('input[name="ns-mode"]').forEach((i) => i.addEventListener('change', async () => {
         if (i.value === 'turbo' && !confirmTurbo()) { ctx.refresh(); return; }
         try { await ns.setMode(i.value); toast(`Nachtploeg: ${MODE_LABEL[i.value][0]}`); ctx.refresh(); } catch (err) { toast(explain(err)); }
