@@ -34,6 +34,7 @@ const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken
 const ALLOWED_ORIGINS = [
   'https://myseasons-c1dd9.firebaseapp.com',
   'https://myseasons-c1dd9.web.app',
+  'https://myseasons.terriblelizard.nl', // eigen domein (Firebase Hosting)
   'http://localhost:5000',
   'http://127.0.0.1:5000',
 ];
