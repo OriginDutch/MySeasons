@@ -1155,3 +1155,14 @@ a.po-team:hover span { text-decoration: underline; }
 .cp-more { padding: 0 0 12px; font-size: var(--fs-sm); }
 .cp-more ul { margin: 0 0 8px; padding-left: 18px; display: grid; gap: 2px; }
 [data-cp-panel] { margin-top: 8px; }
+
+/* Toeschouwers importeren */
+.ai-input { width: 100%; box-sizing: border-box; font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--fs-sm); padding: 10px; border: 1px solid var(--hairline); background: transparent; color: var(--ink); border-radius: 4px; }
+.ai-list { display: grid; }
+.ai-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--hairline); }
+.ai-main { display: flex; flex-direction: column; min-width: 0; }
+.ai-title { font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-sub { font-size: var(--fs-sm); color: var(--muted); }
+.ai-val { font-size: var(--fs-sm); text-align: right; white-space: nowrap; }
+.ai-row--anders .ai-sub { color: var(--accent); }
+.ai-row--gelijk, .ai-row--fout { opacity: .6; }

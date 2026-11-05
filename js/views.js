@@ -21,6 +21,7 @@ import { youthViews } from './youthmigrate.js';
 import { manualViews } from './manualview.js';
 import { squadSiteViews } from './squadsite.js';
 import { boardViews } from './liveboard.js';
+import { attendImportViews } from './attendimport.js';
 import { getCallsToday, getAllMatches, getAllNotes, attachDetails } from './store.js';
 import { applyCorrections, correctionSummary } from './corrections.js';
 import { getThemePref, setThemePref, getClubColors, setClubColors } from './theme.js';
@@ -67,6 +68,7 @@ export const views = {
   ...manualViews,
   ...squadSiteViews,
   ...boardViews,
+  ...attendImportViews,
 
   meer: {
     title: 'Meer',

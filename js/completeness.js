@@ -79,7 +79,7 @@ function ownRows(matches, notes) {
       </ul></div>
     </details>`;
   }).join('');
-  return `<p class="muted" style="font-size:var(--fs-sm)">Officiële duels (geen oefenduels). Toeschouwers vul je zelf in; dat haalt geen API op.</p>
+  return `<p class="muted" style="font-size:var(--fs-sm)">Officiële duels (geen oefenduels). Toeschouwers vul je zelf in; dat haalt geen API op. Een lijst uit bijv. Wikipedia? <a href="#/toeschouwers">Toeschouwers importeren →</a></p>
     <div class="cp-grid cp-grid--3 cp-head"><span>Seizoen</span><span>Duels</span><span>Details</span><span>Publiek</span></div>${html}`;
 }
 
