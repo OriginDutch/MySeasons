@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html>
   <head>
+  <script>
+    // Oude kopie op GitHub Pages: door naar het echte adres (de Worker accepteert alleen dat, zie myseasons-api.js).
+    if (/\.github\.io$/.test(location.hostname)) {
+      try { navigator.serviceWorker && navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); }); } catch (e) {}
+      location.replace('https://myseasons.terriblelizard.nl/' + location.hash);
+    }
+  </script>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Page Not Found</title>
